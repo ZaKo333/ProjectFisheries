@@ -68,7 +68,7 @@ $env:PYTHONPATH = "$PWD\src"
 .\.venv\Scripts\python.exe scripts\train_yolo_fish.py --report   # 先体检，不训练
 .\.venv\Scripts\python.exe scripts\train_yolo_fish.py --epochs 60
 
-# 14) 跑单元测试（939 项）
+# 14) 跑单元测试（940 项）
 .\.venv\Scripts\python.exe -m pytest
 ```
 
@@ -97,7 +97,7 @@ $env:PYTHONPATH = "$PWD\src"
 `degraded_mode=true`，`/api/v1/health` 也会如实申报 `mock`。
 训练与复现步骤见 [`docs/模型训练说明.md`](docs/模型训练说明.md)。
 
-当前状态：`939 passed`（工具层 83 + Agent 层 114 + 回译层 144 + 评测层 181 + RAG 层 100 + 接口层 111 + 演示页 69 + 数据集层 75 + 控制台层 27 + 启动器层 35）。
+当前状态：`940 passed`（工具层 83 + Agent 层 114 + 回译层 144 + 评测层 181 + RAG 层 101 + 接口层 111 + 演示页 69 + 数据集层 75 + 控制台层 27 + 启动器层 35）。
 
 > ⚠ 只跑工具层与 Agent 层、不想装 RAG 依赖时：设 `FISHERIES_DISABLE_KNOWLEDGE=1`，
 > Agent 会跳过检索并降级为「无依据建议」，不会启动失败。
@@ -831,7 +831,7 @@ fish_disease_detect(
 ## 9. 测试
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest                 # 全部 939 项
+.\.venv\Scripts\python.exe -m pytest                 # 全部 940 项
 .\.venv\Scripts\python.exe -m pytest tests/unit/test_agent.py -v
 .\.venv\Scripts\python.exe scripts\demo_rag.py --only e2e   # 端到端含 RAG
 ```
@@ -1033,7 +1033,7 @@ fish_disease_detect(
 | M5 RAG 知识库（混合检索 + 定向检索 + 引证） | ✅ 语料为自编种子语料；标准编号与水质数值已逐条核对现行标准原文 |
 | M6 Agent 调度与函数调用 | ✅ 已接入 RAG |
 | M7 后端 FastAPI（10 个端点） | ✅ 内存态会话缓冲；持久化与鉴权待做 |
-| M8 测试评测文档 | ✅ 两组外部验证 + 939 项单测；集成测试仍缺（见下） |
+| M8 测试评测文档 | ✅ 两组外部验证 + 940 项单测；集成测试仍缺（见下） |
 | M9 Web 演示页（Gradio） | ✅ 表格接入 / 双模态 / 分栏报告；未做多轮对话与历史对比 |
 | M10 中文输出（D12 英文 prompt + 回译） | ✅ 提示词双语 / 四级回译后端（本地离线模型 + 分块 + 术语后订正）/ 语言自动判定；见 [`docs/M10_回译层说明.md`](docs/M10_回译层说明.md) |
 

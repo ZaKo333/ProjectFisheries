@@ -412,13 +412,21 @@ def chunk_document(
 def build_chunk_meta(doc: LoadedDoc, raw: RawChunk, index: int) -> ChunkMeta:
     """把 :class:`RawChunk` 定型为 :class:`ChunkMeta`。
 
-    ``chunk_id`` 由 ``源文件 + 标题路径 + 序号`` 哈希得到，
+    ``chunk_id`` 由 ``doc_id + 标题路径 + 序号`` 哈希得到，
     **与正文内容无关**。这样改了正文措辞后 ID 不变，
     向量库可以按 ID 做覆盖更新而不是全量重建。
+
+    ⚠ 这里**必须**用 ``doc_id`` 而不是文件路径：
+    ``meta.source_path`` 是加载时填进去的**绝对路径**（loader.parse_doc_meta），
+    拿它做哈希会让 chunk_id 随「项目被复制/移动到哪个目录」而整体改变——
+    那样增量更新会误判为「全部新增」，提交进仓库的 knowledge/chroma
+    换个目录 clone 出来就会报「语料已过期」。
+    ``doc_id`` 由语料作者在 front-matter 里写死，且 ``load_corpus``
+    会校验全局唯一（loader.py），所以它才是真正跨机器稳定的身份。
     """
     heading_text = " > ".join(raw.heading_path) if raw.heading_path else doc.meta.title
     chunk_id = stable_hash(
-        doc.meta.source_path or doc.path.name,
+        doc.meta.doc_id,
         " > ".join(raw.heading_path),
         index,
     )

@@ -526,6 +526,35 @@ class TestSplitter:
                  for i, c in enumerate(chunk_document(doc2))]
         assert before != after
 
+    def test_chunk_id_independent_of_project_directory(
+        self, corpus_dir: Path, tmp_path: Path
+    ) -> None:
+        """同一份语料放在**不同的绝对路径**下，chunk_id 必须一模一样。
+
+        回归的是 ``build_chunk_meta`` 曾用 ``meta.source_path``（加载时填入的
+        绝对路径）做哈希：那样项目一被复制/移动到别的目录，全部 chunk_id 都变，
+        向量库的增量更新会误判为"全部新增"，提交进仓库的 knowledge/chroma
+        换个目录 clone 出来也会报「语料已过期」。身份必须来自 front-matter 的
+        ``doc_id``，而不是文件此刻待在哪。
+        """
+        doc = load_document(corpus_dir / "01_阈值.md")
+
+        elsewhere = tmp_path / "另一台机器" / "project" / "knowledge" / "corpus"
+        elsewhere.mkdir(parents=True)
+        copy = elsewhere / "01_阈值.md"
+        copy.write_text(DOC_A, encoding="utf-8")
+        doc2 = load_document(copy)
+
+        # 前提：两次的绝对路径确实不同，否则这个测试什么都没验证
+        assert doc.meta.source_path != doc2.meta.source_path
+
+        ids = [build_chunk_meta(doc, c, i).chunk_id
+               for i, c in enumerate(chunk_document(doc))]
+        ids2 = [build_chunk_meta(doc2, c, i).chunk_id
+                for i, c in enumerate(chunk_document(doc2))]
+        assert ids == ids2
+        assert ids, "语料至少要切出一个块，否则断言是空转"
+
     def test_embedding_text_has_breadcrumb(self, corpus_dir: Path) -> None:
         """向量化文本带标题链，短块（"见上表"）才有机会被召回。"""
         doc = load_document(corpus_dir / "01_阈值.md")

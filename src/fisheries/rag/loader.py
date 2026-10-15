@@ -179,9 +179,12 @@ def load_corpus(corpus_dir: pathlib.Path | str) -> list[LoadedDoc]:
 def stable_hash(*parts: object, length: int = 12) -> str:
     """生成稳定短哈希。
 
-    用途是 chunk_id：由 ``源文件路径 + 标题路径 + 序号`` 决定，
-    **跨运行、跨机器一致**。不用 Python 内置 ``hash()``——
+    用途是 chunk_id：由 ``doc_id + 标题路径 + 序号`` 决定，
+    **跨运行、跨机器、跨目录一致**。不用 Python 内置 ``hash()``——
     它对 str 加了随机盐，进程一重启就变，会让向量库的增量更新彻底失效。
+
+    ⚠ 传进来的第一个参数是 ``doc_id``，**不能**换成 ``meta.source_path``：
+    后者是加载时的绝对路径，会让 chunk_id 随项目所在目录变化。
     """
     joined = "\u0001".join(str(p) for p in parts)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:length]
