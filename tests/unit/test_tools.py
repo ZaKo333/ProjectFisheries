@@ -6,7 +6,7 @@
     3. 异常用例  —— 非法入参、缺失图片、伪图片文件
 
 运行：
-    cd D:\\设置\\项目\\Agent\\project
+    cd <工程>
     .venv\\Scripts\\python.exe -m pytest tests/unit/test_tools.py -v
 """
 

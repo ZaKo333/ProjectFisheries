@@ -5,7 +5,7 @@
     2. 给 README / 文档提供**真实跑出来**的输入输出样例（不是手编的）。
 
 运行：
-    cd D:\\设置\\项目\\Agent\\project
+    cd <工程>
     .venv\\Scripts\\python.exe scripts\\demo_tools.py
 
 注意：图像识别当前默认走 Mock 后端（模型权重尚未训练），

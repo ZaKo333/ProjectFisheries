@@ -20,7 +20,7 @@ LLM 后端：MockLLMClient（确定性，无外部依赖）
   [ 4] tool_result  water_risk_predict 返回 status=ok
         未来 72 小时内水质总体平稳，综合风险分 87.7，判定等级【高危】。主控风险因子为溶氧：当前 2.80 mg/L，已进入危险区间。其中溶氧已达到危险级别。氨氮处于警戒区间。溶氧已偏低且氨氮超标，会从呼吸与解毒两个环节同时加重鱼类负担，应优先处理。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）
   [ 5] tool_call    调用工具 fish_disease_detect
-        {"image_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
+        {"image_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
   [ 6] tool_result  fish_disease_detect 返回 status=ok
         烂鳃
   [ 7] llm          调度 LLM 第 2 轮决策
@@ -117,7 +117,7 @@ LLM 后端：MockLLMClient（确定性，无外部依赖）
   [ 4] tool_result  water_risk_predict 返回 status=ok
         未来 72 小时内水质总体平稳，综合风险分 0.0，判定等级【正常】。各项常规指标均处于适宜区间。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）
   [ 5] tool_call    调用工具 fish_disease_detect
-        {"image_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
+        {"image_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
   [ 6] tool_result  fish_disease_detect 返回 status=ok
         水霉
   [ 7] llm          调度 LLM 第 2 轮决策
@@ -208,7 +208,7 @@ LLM 后端：MockLLMClient（确定性，无外部依赖）
   [ 4] tool_result  water_risk_predict 返回 status=ok
         未来 72 小时内水质总体平稳，综合风险分 100.0，判定等级【高危】。主控风险因子为溶氧：当前 1.90 mg/L，已进入危险区间。其中溶氧、氨氮、亚硝酸盐已达到危险级别。溶氧已偏低且氨氮、亚硝酸盐超标，会从呼吸与解毒两个环节同时加重鱼类负担，应优先处理。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）
   [ 5] tool_call    调用工具 fish_disease_detect
-        {"image_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
+        {"image_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
   [ 6] tool_result  fish_disease_detect 返回 status=ok
         健康
   [ 7] llm          调度 LLM 第 2 轮决策
@@ -297,7 +297,7 @@ LLM 后端：MockLLMClient（确定性，无外部依赖）
   [ 4] tool_result  water_risk_predict 返回 status=ok
         未来 72 小时内水质总体平稳，综合风险分 28.5，判定等级【预警】。主控风险因子为溶氧：当前 4.20 mg/L，处于警戒区间。溶氧处于警戒区间。溶氧当前偏低但未见明显下降趋势，需保持增氧设备待命。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）
   [ 5] tool_call    调用工具 fish_disease_detect
-        {"image_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
+        {"image_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
   [ 6] tool_result  fish_disease_detect 返回 status=ok
         健康
   [ 7] llm          调度 LLM 第 2 轮决策
@@ -383,7 +383,7 @@ LLM 后端：MockLLMClient（确定性，无外部依赖）
   [ 4] tool_result  water_risk_predict 返回 status=ok
         未来 72 小时内水质总体平稳，综合风险分 0.0，判定等级【正常】。各项常规指标均处于适宜区间。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）
   [ 5] tool_call    调用工具 fish_disease_detect
-        {"image_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
+        {"image_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
   [ 6] tool_result  fish_disease_detect 返回 status=ok
         烂鳃
   [ 7] llm          调度 LLM 第 2 轮决策
@@ -473,7 +473,7 @@ LLM 后端：MockLLMClient（确定性，无外部依赖）
   [ 4] tool_result  water_risk_predict 返回 status=ok
         未来 72 小时内水质总体平稳，综合风险分 0.0，判定等级【正常】。各项常规指标均处于适宜区间。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）
   [ 5] tool_call    调用工具 fish_disease_detect
-        {"image_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
+        {"image_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg", "mock_source": "hash"}
   [ 6] tool_result  fish_disease_detect 返回 status=ok
         烂鳃
   [ 7] llm          调度 LLM 第 2 轮决策

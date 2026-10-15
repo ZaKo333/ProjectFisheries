@@ -714,7 +714,7 @@ def render_report(
         "## 7. 复现方式",
         "",
         "```powershell",
-        "cd D:\\设置\\项目\\Agent\\project",
+        "cd <工程>",
         ".\\.venv\\Scripts\\python.exe scripts\\evaluate_water_rules.py",
         "```",
         "",

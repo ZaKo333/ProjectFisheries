@@ -75,7 +75,7 @@ def local_ipv4() -> list[str]:
 
 
 def web_page_url(host: str, port: str) -> str:
-    """演示页地址。监听 0.0.0.0 时给 127.0.0.1，否则原样用。"""
+    """网页界面地址。监听 0.0.0.0 时给 127.0.0.1，否则原样用。"""
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     return f"http://{shown}:{port}{_WEB_PATH}/"
 

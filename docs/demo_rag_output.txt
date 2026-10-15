@@ -165,7 +165,7 @@ ProjectFisheries —— RAG 知识库检索演示
 ==============================================================================
   输入：
     水质 24 条：溶氧 6.20→2.60 mg/L，氨氮 0.15→0.62 mg/L，亚硝酸盐 0.05→0.15 mg/L，水温 28→29.5℃
-    图片：D:\设置\项目\Agent\数据集\Fish Disease Dataset\Test\Bacterial gill disease\Bacterial gill disease (100).jpg
+    图片：<数据集根目录>\Fish Disease Dataset\Test\Bacterial gill disease\Bacterial gill disease (100).jpg
 
   说明：图像模型尚未训练，mock 从文件夹名取标签以稳定触发多源协同规则；
         该参数默认关闭，真实 YOLO 推理成功时代码路径根本不读文件名。

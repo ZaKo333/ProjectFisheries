@@ -2,7 +2,7 @@
 ==============================================================================
   第 1 步｜读取水质表格
 ==============================================================================
-文件：D:\设置\项目\Agent\project\examples\pond_demo_water.csv
+文件：<工程>\examples\pond_demo_water.csv
 可用：是
 读入 24 行，采用 24 行
 列映射：{'timestamp': 'timestamp', 'water_temp': 'water_temp_c', 'ph': 'ph', 'dissolved_oxygen': 'dissolved_oxygen_mg_l', 'ammonia_n': 'ammonia_n_mg_l', 'nitrite_n': 'nitrite_n_mg_l'}
@@ -161,7 +161,7 @@
 　未来 72 小时内水质呈持续恶化趋势，综合风险分 57.1，判定等级【预警】。主控风险因子为溶氧：当前 4.28 mg/L，处于警戒区间。溶氧、氨氮、亚硝酸盐处于警戒区间。按近段回归速率 -0.102 mg/L/小时外推，预计 12.6 小时后溶氧将跌破 3.00 mg/L 危险线。氨氮在 12 小时内预计升至 0.46 mg/L。溶氧持续下降与氨氮、亚硝酸盐超标叠加，会显著削弱鱼类鳃组织的耐受力
 
 **5. 🔧 调用工具 fish_disease_detect**
-　{&quot;image_path&quot;: &quot;D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg&quot;, &quot;mock_source&quot;: &quot;hash&quot;}
+　{&quot;image_path&quot;: &quot;<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg&quot;, &quot;mock_source&quot;: &quot;hash&quot;}
 
 **6. 📥 fish_disease_detect 返回 status=ok**
 　其他

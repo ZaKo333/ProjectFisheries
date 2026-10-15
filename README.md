@@ -631,7 +631,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |
 | `test_web_contract.py` | 26 | 前端静态托管、`dict.js` 枚举码 vs 后端源码、`api.js` 路径 vs OpenAPI |
 | `test_water_templates.py` | 68 | 模板预期等级 vs 规则引擎、CSV 往返、提交物与代码一致 |
-| `test_datasets.py` | 75 | 数据集注册表、解析优先级、绝对路径回归守卫 |
+| `test_datasets.py` | 76 | 数据集注册表、解析优先级、绝对路径回归守卫 |
 | `test_console.py` | 27 | 编码兜底、符号降级、编码锁 |
 | `test_launchers.py` | 30 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
 
@@ -705,7 +705,7 @@ python scripts/fetch_datasets.py --where aquaponics_pond # 只打印路径
 python scripts/fetch_datasets.py --fetch aquaponics_pond # 下载缺的（需联网）
 ```
 
-查找顺序（先命中先赢，每一级都由测试钉住）：
+查找顺序（先命中先赢，每一级都由测试钉住）。下表里 `<工程>` = 本仓库在你机器上的位置，`<工程上级>` = 它的上一级目录：
 
 | # | 位置 | 说明 |
 |---|---|---|

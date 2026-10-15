@@ -534,7 +534,7 @@
 {
   "tool": "fish_disease_detect",
   "status": "ok",
-  "image_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg",
+  "image_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg",
   "disease_type": "其他",
   "disease_group": "其他",
   "confidence": 0.8892,
@@ -553,7 +553,7 @@
   "image_meta": {
     "format": "jpeg",
     "size_bytes": 2508,
-    "resolved_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg",
+    "resolved_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg",
     "is_remote": false
   },
   "note": "⚠ 当前为演示/Mock 结果（model_version=mock-v0.1），非真实模型输出，不可作为诊断依据。",
@@ -567,7 +567,7 @@
 {
   "tool": "fish_disease_detect",
   "status": "ok",
-  "image_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg",
+  "image_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg",
   "disease_type": "烂鳃",
   "disease_group": "细菌性",
   "confidence": 0.8598,
@@ -586,7 +586,7 @@
   "image_meta": {
     "format": "jpeg",
     "size_bytes": 2508,
-    "resolved_path": "D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg",
+    "resolved_path": "<数据集根目录>\\Fish Disease Dataset\\Test\\Bacterial gill disease\\Bacterial gill disease (100).jpg",
     "is_remote": false
   },
   "note": "⚠ 当前为演示/Mock 结果（model_version=mock-v0.1+folder_hint），非真实模型输出，不可作为诊断依据。 本次标签取自文件路径中的类别名提示（Bacterial gill disease），**不是图像推理结果**，仅用于模型训练完成前的链路联调。",

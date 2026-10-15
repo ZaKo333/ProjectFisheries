@@ -63,12 +63,39 @@ _VISION_POINTER = (
     "这里不固化的原因：上传后的落盘路径含随机 id，而 mock 分值由路径派生，每次不同。>"
 )
 
+#: 本机绝对路径 → 稳定占位符。
+#:
+#: 每个根都出**两种写法**：单反斜杠（普通字符串值）与双反斜杠（字符串化的
+#: JSON —— FastAPI 的 ``detail`` 字段里就嵌着这样一层）。只写单反斜杠会漏掉
+#: 后者，数据集路径当初正是从 ``detail`` 里漏进 ``docs/_api_samples.json`` 的。
+#:
+#: 数据集根的两种可能位置（工程外的历史目录、工程内的 ``data/datasets``）都
+#: 收敛到同一个占位符：否则「这台机器的数据放在哪一级」会决定产物内容，同一份
+#: 代码在两台机器上生成出不同的样例文件，可重现性就没了。替换按列表顺序进行，
+#: 数据集根必须排在工程根前面。
+_PATH_REWRITES: tuple[tuple[str, str], ...] = tuple(
+    pair
+    for root, placeholder in (
+        (_datasets.LEGACY_ROOT, "<数据集根目录>"),
+        (_datasets.LOCAL_ROOT, "<数据集根目录>"),
+        (_datasets.PROJECT_ROOT, "<工程>"),
+    )
+    for pair in (
+        (str(root), placeholder),
+        (str(root).replace("\\", "\\\\"), placeholder.replace("\\", "\\\\")),
+    )
+)
+
+
 def _scrub(value: object) -> object:
     """把每次跑都会变的字段换成稳定占位符。
 
     交付给前端的样例文件如果每生成一次就变一次，就没法进版本库做 diff 了。
     这里只处理**明确与时间、耗时、随机 id 有关**的字段；业务字段一个都不动——
     它们的变化说明 API 真的变了，那正是我们想看见的。
+
+    本机绝对路径也在此列，而且要一路扫到**字符串值内部**：错误响应的
+    ``detail`` 是字符串化的 JSON，按 key 替换够不到它。
     """
     if isinstance(value, dict):
         out = {}
@@ -88,6 +115,10 @@ def _scrub(value: object) -> object:
         return out
     if isinstance(value, list):
         return [_scrub(v) for v in value]
+    if isinstance(value, str):
+        for prefix, placeholder in _PATH_REWRITES:
+            value = value.replace(prefix, placeholder)
+        return value
     return value
 
 def main() -> int:

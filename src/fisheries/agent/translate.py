@@ -1188,8 +1188,8 @@ def _loadable_path(path: Path) -> str:
     """给 sentencepiece 一个它**打得开**的路径字符串。
 
     sentencepiece 的 C++ 加载器在 Windows 上走窄字符路径，路径里只要出现
-    非 ASCII 字符就报 ``NOT_FOUND``——本工程恰好就在 ``D:\\设置\\项目\\...``
-    下，实测绝对路径必然失败、相对路径（纯 ASCII）正常。所以非 ASCII 时
+    非 ASCII 字符就报 ``NOT_FOUND``——本工程所在的目录链路上就有中文
+    （仓库名、上层目录都可能是中文），实测绝对路径必然失败、相对路径（纯 ASCII）正常。所以非 ASCII 时
     先退到相对路径；退不了（跨盘符、或 cwd 本身也是中文）就原样返回，
     那种情况下绝对路径在纯 ASCII 的工程目录里本来就能工作。
     """

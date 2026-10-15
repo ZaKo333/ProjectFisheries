@@ -150,7 +150,7 @@ knowledge/
 ## 4. 入库流程
 
 ```powershell
-cd D:\设置\项目\Agent\project
+cd <工程>
 $env:PYTHONPATH = "$PWD\src"
 .\.venv\Scripts\python.exe scripts\build_knowledge_base.py          # 全量重建
 .\.venv\Scripts\python.exe scripts\build_knowledge_base.py --stats  # 只看统计

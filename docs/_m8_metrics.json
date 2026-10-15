@@ -22,7 +22,7 @@
   "data_per_file": [
     {
       "pond_id": "IoTpond1",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTpond1.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTpond1.csv",
       "n_lines": 83126,
       "n_bad_timestamp": 0,
       "n_dropped_missing_required": 22230,
@@ -50,7 +50,7 @@
     },
     {
       "pond_id": "IoTPond2",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond2.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond2.csv",
       "n_lines": 172249,
       "n_bad_timestamp": 0,
       "n_dropped_missing_required": 88133,
@@ -78,7 +78,7 @@
     },
     {
       "pond_id": "IoTPond3",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond3.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond3.csv",
       "n_lines": 169185,
       "n_bad_timestamp": 0,
       "n_dropped_missing_required": 34667,
@@ -106,7 +106,7 @@
     },
     {
       "pond_id": "IoTPond4",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond4.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond4.csv",
       "n_lines": 89844,
       "n_bad_timestamp": 47,
       "n_dropped_missing_required": 12745,
@@ -134,7 +134,7 @@
     },
     {
       "pond_id": "IoTPond6",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond6.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond6.csv",
       "n_lines": 91050,
       "n_bad_timestamp": 35,
       "n_dropped_missing_required": 13399,
@@ -160,7 +160,7 @@
     },
     {
       "pond_id": "IoTPond7",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond7.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond7.csv",
       "n_lines": 279612,
       "n_bad_timestamp": 0,
       "n_dropped_missing_required": 222307,
@@ -187,7 +187,7 @@
     },
     {
       "pond_id": "IoTPond8",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond8.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond8.csv",
       "n_lines": 70744,
       "n_bad_timestamp": 0,
       "n_dropped_missing_required": 30884,
@@ -213,7 +213,7 @@
     },
     {
       "pond_id": "IoTPond9",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond9.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond9.csv",
       "n_lines": 151785,
       "n_bad_timestamp": 0,
       "n_dropped_missing_required": 40201,
@@ -240,7 +240,7 @@
     },
     {
       "pond_id": "IoTPond10",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond10.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond10.csv",
       "n_lines": 620,
       "n_bad_timestamp": 310,
       "n_dropped_missing_required": 27,
@@ -267,7 +267,7 @@
     },
     {
       "pond_id": "IoTPond11",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond11.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond11.csv",
       "n_lines": 3165,
       "n_bad_timestamp": 2538,
       "n_dropped_missing_required": 215,
@@ -293,7 +293,7 @@
     },
     {
       "pond_id": "IoTPond12",
-      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond12.csv",
+      "path": "<数据集根目录>\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond12.csv",
       "n_lines": 3590,
       "n_bad_timestamp": 3564,
       "n_dropped_missing_required": 0,
@@ -1386,7 +1386,7 @@
         "zh": "水霉"
       }
     ],
-    "dataset": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls",
+    "dataset": "<工程>\\data\\derived\\fish_disease_4cls",
     "identity_rule": "文件名主干去重后的 931 张不同照片；自建 60/20/20 分层切分",
     "hyperparams": {
       "epochs": 60,
@@ -1454,79 +1454,79 @@
     },
     "misclassified_samples": [
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\healthy\\Healthy Fish (82).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\healthy\\Healthy Fish (82).jpg",
         "true": "healthy",
         "pred": "gill_rot",
         "conf": 0.963
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\gill_rot\\Bacterial gill disease (12).jpeg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\gill_rot\\Bacterial gill disease (12).jpeg",
         "true": "gill_rot",
         "pred": "saprolegniasis",
         "conf": 0.6893
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\gill_rot\\Bacterial gill disease (14).jpeg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\gill_rot\\Bacterial gill disease (14).jpeg",
         "true": "gill_rot",
         "pred": "healthy",
         "conf": 0.5962
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (126).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (126).jpg",
         "true": "bacterial_hemorrhage",
         "pred": "healthy",
         "conf": 0.8819
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (225).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (225).jpg",
         "true": "bacterial_hemorrhage",
         "pred": "gill_rot",
         "conf": 0.9394
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (28).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (28).jpg",
         "true": "bacterial_hemorrhage",
         "pred": "healthy",
         "conf": 0.6984
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (4).jpeg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (4).jpeg",
         "true": "bacterial_hemorrhage",
         "pred": "healthy",
         "conf": 0.7225
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (8).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (8).jpg",
         "true": "bacterial_hemorrhage",
         "pred": "healthy",
         "conf": 0.949
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (132).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (132).jpg",
         "true": "saprolegniasis",
         "pred": "gill_rot",
         "conf": 0.5002
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (180).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (180).jpg",
         "true": "saprolegniasis",
         "pred": "gill_rot",
         "conf": 0.8974
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (181).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (181).jpg",
         "true": "saprolegniasis",
         "pred": "bacterial_hemorrhage",
         "conf": 0.8729
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (25).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (25).jpg",
         "true": "saprolegniasis",
         "pred": "healthy",
         "conf": 0.5981
       },
       {
-        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (53).jpg",
+        "image": "<工程>\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (53).jpg",
         "true": "saprolegniasis",
         "pred": "healthy",
         "conf": 0.6952

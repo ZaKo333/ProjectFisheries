@@ -4,9 +4,9 @@
 
 在此之前，数据集路径是**硬编码的绝对路径**，散落在至少 13 个文件里：
 
-    D:\\设置\\项目\\Agent\\数据集\\Fish Disease Dataset\\Test
-    D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets
-    D:\\设置\\项目\\Agent\\数据集\\Dissolved oxygen prediction in river water
+    <工程上级>\\数据集\\Fish Disease Dataset\\Test
+    <工程上级>\\数据集\\Sensor Based Aquaponics Fish Pond Datasets
+    <工程上级>\\数据集\\Dissolved oxygen prediction in river water
 
 这带来三个问题：
 

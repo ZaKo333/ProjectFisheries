@@ -6,7 +6,7 @@
 
 所有涉及磁盘的用例都用 ``tmp_path`` + ``monkeypatch`` 把常量改掉，因此：
 
-* 有无本机数据集，测试结果一致（不依赖 ``D:\\设置\\项目\\Agent\\数据集``）；
+* 有无本机数据集，测试结果一致（不依赖某个写死的本机目录）；
 * 不会真的联网下载（``fetch`` 只在「已能找到」或「kagglehub 缺失」两条
   分支上被测，前者不触发下载，后者不触发下载）。
 """
@@ -482,16 +482,41 @@ class TestStatus:
 
 
 class TestNoHardcodedDataPaths:
+    """硬编码绝对路径的回归守卫。
+
+    原实现只拿 ``"Agent" + "\\" + "数据集"``（**单**反斜杠）做子串匹配，而
+    Python 源码里写 Windows 路径几乎总是把那个反斜杠翻倍写成两个，单反斜杠
+    版本不是它的子串 —— 于是守卫长期空转。下面的 ``_normalize`` 先把长短
+    不一的斜杠写法归一，再匹配，洞就堵上了。
+    """
+
     MARKER_DIR = "Agent" + "\\" + "数据集"
-    MARKER_DIR_POSIX = "Agent/" + "数据集"
+    #: 本机路径前缀。仓库里不该出现任何写死的盘符路径，不只是数据集那条。
+    MARKER_MACHINE = "D:" + "\\" + "设置"
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """把连续反斜杠压成一个，并让正斜杠与反斜杠等价。"""
+        return re.sub(r"\\+", lambda _m: "\\", text).replace("/", "\\")
 
     def _offenders(self, root: Path) -> list[str]:
         bad = []
         for path in sorted(root.rglob("*.py")):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            if self.MARKER_DIR in text or self.MARKER_DIR_POSIX in text:
+            text = self._normalize(path.read_text(encoding="utf-8", errors="replace"))
+            if self.MARKER_DIR in text or self.MARKER_MACHINE in text:
                 bad.append(str(path.relative_to(ds.PROJECT_ROOT)))
         return bad
+
+    def test_guard_sees_through_double_backslashes(self):
+        # 守卫自己也要有牙：这条钉住「原来那个洞」不再回来。
+        # 路径在运行时拼出来——源码里不出现完整的本机路径，否则这条测试会被
+        # 上面三条守卫自己抓到（``MARKER_DIR`` 拆开写也是同一个道理）。
+        bs = "\\"
+        single = "D:" + bs + "设置" + bs + "项目" + bs + "Agent" + bs + "数据集"
+        doubled = single.replace(bs, bs + bs)
+        assert self.MARKER_DIR not in doubled, "未归一化时双反斜杠写法能溜过去——原实现就是这样"
+        assert self.MARKER_DIR in self._normalize(doubled)
+        assert self.MARKER_MACHINE in self._normalize(doubled)
 
     def test_src_has_no_hardcoded_dataset_paths(self):
         assert self._offenders(ds.PROJECT_ROOT / "src") == []

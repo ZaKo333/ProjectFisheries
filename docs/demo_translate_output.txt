@@ -334,7 +334,7 @@ ProjectFisheries —— D12 演示：英文提示词 + 结果回译
 
   -- 后端 1：local（本地离线模型，有模型时优先）--
      回译后端：本地离线翻译模型（opus-mt-en-zh）
-     模型目录：D:\设置\项目\Agent\project\models\translate\opus-mt-en-zh
+     模型目录：<工程>\models\translate\opus-mt-en-zh
      输入：dissolved oxygen is low
      结果：[直译] 溶氧低
      输入：Dissolved oxygen is about to crash. Turn on the aerator now.

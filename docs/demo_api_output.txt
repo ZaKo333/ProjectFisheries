@@ -97,16 +97,11 @@ ProjectFisheries —— 后端接口（FastAPI）演示
 [POST /api/v1/ingest/image]  真图（Bacterial gill disease (100).jpg）
   HTTP 200
   upload_id   = 56f122d2cac9433ba30f557580530fc4
-  stored_path = C:\Users\ZAKO3333\AppData\Local\Temp\fisheries_demo_ahucggjs\uploads\56f122d2cac9433ba30f557580530fc4.jpg
+  stored_path = <临时目录>\fisheries_demo_xxx\uploads\56f122d2cac9433ba30f557580530fc4.jpg
   识别结果     = 烂鳃 （置信度 0.8528，degraded=True）
   → 图像模型未训练，此处走 mock（默认 hash 播种，与文件夹名无关），
      所以这张烂鳃图被随机判成了「烂鳃」。
-     模型到位后同一接口返回真实推理结果，接口契约不变。D:\设置\项目\Agent\project\.venv\Lib\site-packages\fastapi\routing.py:360: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
-  return await dependant.call(**values)
-D:\设置\项目\Agent\project\.venv\Lib\site-packages\fastapi\routing.py:360: StarletteDeprecationWarning: 'HTTP_413_REQUEST_ENTITY_TOO_LARGE' is deprecated. Use 'HTTP_413_CONTENT_TOO_LARGE' instead.
-  return await dependant.call(**values)
-D:\设置\项目\Agent\project\.venv\Lib\site-packages\fastapi\telemetry\_api.py:244: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
-  return function(**arguments)
+     模型到位后同一接口返回真实推理结果，接口契约不变。
 
   → 文件名由服务端 uuid 生成，客户端传的 Bacterial gill disease (100).jpg 不落盘，
      路径穿越在源头就不成立。

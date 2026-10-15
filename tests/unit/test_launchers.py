@@ -104,7 +104,7 @@ def _load_launcher():
 
 
 def test_api_banner_points_at_the_web_page_first(capsys: pytest.CaptureFixture[str]) -> None:
-    """前端由接口服务同源托管，横幅必须把演示页地址放在最显眼的位置。
+    """前端由接口服务同源托管，横幅必须把网页界面地址放在最显眼的位置。
 
     用户双击 启动接口服务.bat 之后唯一需要知道的地址就是这一个；
     ``/docs`` 是给调试接口的人看的，不该排在它前面。
@@ -114,7 +114,7 @@ def test_api_banner_points_at_the_web_page_first(capsys: pytest.CaptureFixture[s
     out = capsys.readouterr().out
     assert "http://127.0.0.1:8000/app/" in out
     assert "停止服务" in out
-    assert out.index("/app/") < out.index("/docs"), "演示页地址应排在 /docs 前面"
+    assert out.index("/app/") < out.index("/docs"), "网页界面地址应排在 /docs 前面"
 
 
 def test_api_banner_never_prints_an_unreachable_page_url(
