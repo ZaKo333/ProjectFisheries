@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
 from .. import __version__
@@ -23,11 +23,18 @@ from ..tools.fish_disease import fish_disease_detect
 from ..tools.water_risk import (
     ACTION_THRESHOLDS,
     BASE_WEIGHTS,
+    INDICATOR_META,
     MAX_EXTRAPOLATION_HOURS,
     MIN_RELIABLE_POINTS,
     PERSISTENCE_CAP,
     REDLINE,
     SPECIES_PROFILES,
+)
+from ..water_templates import (
+    TEMPLATE_INTERVAL_MINUTES,
+    catalog_rows,
+    get_template,
+    render_csv,
 )
 from .deps import AppState, get_state
 from .schemas import (
@@ -44,6 +51,8 @@ from .schemas import (
     IngestImageResponse,
     IngestSensorRequest,
     IngestSensorResponse,
+    TemplateCatalogResponse,
+    TemplateInfo,
     ThresholdResponse,
     ToolCallRequest,
     ToolResultResponse,
@@ -602,3 +611,73 @@ def get_thresholds(request: Request) -> ThresholdResponse:
 def get_tools(request: Request) -> ToolSchemasResponse:
     get_state(request)
     return ToolSchemasResponse(tools=get_tool_schemas())
+
+
+# --------------------------------------------------------------------------- #
+# 内置水质模板
+# --------------------------------------------------------------------------- #
+
+_TEMPLATE_USAGE = (
+    "三条路都能用：① 直接用 csv_url 下载 CSV，当输入文件传给评测或演示页；"
+    "② 演示页左栏选好模板点「用该模板填充」，文件与品种会一起切过去；"
+    "③ 只想要一组可复现的测试数据时，照 csv 字段自己存成文件即可。"
+    "每个模板都是 24 个点、间隔 1 小时，正好达到规则引擎的最低可靠点数，"
+    "所以趋势外推不会被判成低置信度。"
+)
+
+_TEMPLATE_DISCLAIMER = (
+    "模板数据是**为演示与自测构造的场景数据**，不是任何池塘的实测记录，"
+    "也不代表标准推荐值；expected_risk 是规则引擎对这些数字的实际判定结果，"
+    "由 tests/unit/test_water_templates.py 钉住。真实生产判断须用实测数据并由"
+    "有资质的水产技术人员复核。"
+)
+
+
+@router.get(
+    "/config/templates",
+    response_model=TemplateCatalogResponse,
+    summary="内置水质模板目录（用户无需自备数据即可跑通）",
+)
+def get_templates(request: Request) -> TemplateCatalogResponse:
+    get_state(request)
+    templates = [
+        TemplateInfo(
+            **row,
+            csv_url=f"{router.prefix}/config/templates/{row['key']}/csv",
+        )
+        for row in catalog_rows()
+    ]
+    return TemplateCatalogResponse(
+        count=len(templates),
+        interval_minutes=TEMPLATE_INTERVAL_MINUTES,
+        columns={key: str(meta["label"]) for key, meta in INDICATOR_META.items()},
+        usage=_TEMPLATE_USAGE,
+        templates=templates,
+        disclaimer=_TEMPLATE_DISCLAIMER,
+    )
+
+
+@router.get(
+    "/config/templates/{key}/csv",
+    summary="下载指定内置模板的 CSV（可直接上传 / 粘贴 / 用 Excel 打开）",
+    response_class=Response,
+    responses={200: {"content": {"text/csv": {}}}},
+)
+def get_template_csv(key: str, request: Request) -> Response:
+    get_state(request)
+    try:
+        template = get_template(key)
+    except KeyError as exc:
+        # KeyError 的 str() 是参数的 repr，会多一层引号；取 args[0] 更干净。
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=exc.args[0] if exc.args else str(exc),
+        ) from exc
+    return Response(
+        content=render_csv(template).encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{template.csv_filename}"',
+            "X-Template-Key": template.key,
+        },
+    )

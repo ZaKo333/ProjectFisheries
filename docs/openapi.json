@@ -349,6 +349,59 @@
           }
         }
       }
+    },
+    "/api/v1/config/templates": {
+      "get": {
+        "summary": "内置水质模板目录（用户无需自备数据即可跑通）",
+        "operationId": "get_templates_api_v1_config_templates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateCatalogResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/templates/{key}/csv": {
+      "get": {
+        "summary": "下载指定内置模板的 CSV（可直接上传 / 粘贴 / 用 Excel 打开）",
+        "operationId": "get_template_csv_api_v1_config_templates__key__csv_get",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/csv": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1299,6 +1352,135 @@
           "buffered_total"
         ],
         "title": "IngestSensorResponse"
+      },
+      "TemplateCatalogResponse": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "interval_minutes": {
+            "type": "integer",
+            "title": "Interval Minutes"
+          },
+          "columns": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Columns"
+          },
+          "usage": {
+            "type": "string",
+            "title": "Usage"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateInfo"
+            },
+            "type": "array",
+            "title": "Templates"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "count",
+          "interval_minutes",
+          "columns",
+          "usage",
+          "templates",
+          "disclaimer"
+        ],
+        "title": "TemplateCatalogResponse",
+        "description": "内置水质模板目录——让前端给出「选一个模板直接试」的入口。"
+      },
+      "TemplateInfo": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "scenario": {
+            "type": "string",
+            "title": "Scenario"
+          },
+          "species": {
+            "type": "string",
+            "title": "Species"
+          },
+          "expected_risk": {
+            "type": "string",
+            "title": "Expected Risk"
+          },
+          "focus": {
+            "type": "string",
+            "title": "Focus"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "header_style": {
+            "type": "string",
+            "title": "Header Style"
+          },
+          "csv_filename": {
+            "type": "string",
+            "title": "Csv Filename"
+          },
+          "csv_url": {
+            "type": "string",
+            "title": "Csv Url"
+          },
+          "n_points": {
+            "type": "integer",
+            "title": "N Points"
+          },
+          "interval_minutes": {
+            "type": "integer",
+            "title": "Interval Minutes"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "scenario",
+          "species",
+          "expected_risk",
+          "focus",
+          "tags",
+          "header_style",
+          "csv_filename",
+          "csv_url",
+          "n_points",
+          "interval_minutes",
+          "start",
+          "end"
+        ],
+        "title": "TemplateInfo",
+        "description": "单个内置水质模板的目录信息（不含数据本体）。"
       },
       "ThresholdResponse": {
         "properties": {

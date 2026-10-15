@@ -322,5 +322,35 @@ class ThresholdResponse(_Strict):
     disclaimer: str
 
 
+class TemplateInfo(_Strict):
+    """单个内置水质模板的目录信息（不含数据本体）。"""
+
+    key: str
+    name: str
+    scenario: str
+    species: str
+    expected_risk: str
+    focus: str
+    tags: list[str]
+    header_style: str
+    csv_filename: str
+    csv_url: str
+    n_points: int
+    interval_minutes: int
+    start: str
+    end: str
+
+
+class TemplateCatalogResponse(_Strict):
+    """内置水质模板目录——让前端给出「选一个模板直接试」的入口。"""
+
+    count: int
+    interval_minutes: int
+    columns: dict[str, str]
+    usage: str
+    templates: list[TemplateInfo]
+    disclaimer: str
+
+
 class ToolSchemasResponse(_Strict):
     tools: list[dict[str, Any]]

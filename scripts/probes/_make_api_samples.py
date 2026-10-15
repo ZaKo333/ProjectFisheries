@@ -3,7 +3,7 @@
 输出两份文件，**它们是「前端拿到的接口长什么样」的唯一真相来源**：
 
 * ``docs/openapi.json``        —— FastAPI 自动生成的机器可读规格（端点、模型、错误码）
-* ``docs/_api_samples.json``   —— 15 个真实响应的样例（含 4xx 错误响应）
+* ``docs/_api_samples.json``   —— 18 个真实响应的样例（含 4xx 错误响应）
 
 两个文件都做了**可重现化**：时间、耗时、随机 id、落盘路径这类每次都会变的字段
 被换成固定占位符，所以重复运行产物逐字节一致，能进版本库、能 diff。业务字段
@@ -106,6 +106,16 @@ def main() -> int:
         samples["GET /api/v1/health"] = client.get("/api/v1/health").json()
         samples["GET /api/v1/config/thresholds"] = client.get("/api/v1/config/thresholds").json()
         samples["GET /api/v1/config/tools"] = client.get("/api/v1/config/tools").json()
+        samples["GET /api/v1/config/templates"] = client.get("/api/v1/config/templates").json()
+
+        # 模板 CSV 不是 JSON，但它就是前端「下载后直接塞进上传框」的那个字节流，
+        # 给原样的文本比给一段描述有用。
+        _template_csv = client.get("/api/v1/config/templates/dawn_hypoxia/csv")
+        samples["GET /api/v1/config/templates/{key}/csv"] = {
+            "content_type": _template_csv.headers["content-type"],
+            "content_disposition": _template_csv.headers["content-disposition"],
+            "body": _template_csv.text,
+        }
 
         body = {
             "pond_id": "POND-03",
@@ -161,6 +171,9 @@ def main() -> int:
         ).json()
         samples["GET /api/v1/ponds/{pond_id}/history (不存在的塘口)"] = client.get(
             "/api/v1/ponds/NOPE/history"
+        ).json()
+        samples["GET /api/v1/config/templates/{key}/csv (不存在的模板，404)"] = client.get(
+            "/api/v1/config/templates/nope/csv"
         ).json()
 
     scrubbed = _scrub(samples)

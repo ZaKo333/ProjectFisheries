@@ -22,6 +22,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import os
 
 import pytest
@@ -143,7 +145,8 @@ class TestAppWiring:
         assert body["health"] == "/api/v1/health"
         assert any("/assess" in e for e in body["endpoints"])
 
-    def test_openapi_has_all_ten_paths(self, client):
+    def test_openapi_paths_are_exactly_the_documented_set(self, client):
+        """路径集合写死：新增接口必须同时更新前端对接说明，不能悄悄多出来。"""
         paths = client.get("/openapi.json").json()["paths"]
         assert set(paths) == {
             "/api/v1/health",
@@ -156,6 +159,8 @@ class TestAppWiring:
             "/api/v1/ponds/{pond_id}/history",
             "/api/v1/config/thresholds",
             "/api/v1/config/tools",
+            "/api/v1/config/templates",
+            "/api/v1/config/templates/{key}/csv",
         }
 
     def test_cors_can_be_disabled(self):
@@ -844,6 +849,55 @@ class TestChatAndConfig:
         from fisheries.tools import get_tool_schemas
 
         assert client.get("/api/v1/config/tools").json()["tools"] == get_tool_schemas()
+
+    def test_template_catalog_lists_every_builtin(self, client):
+        """目录是前端「选一个模板直接试」的唯一数据源，数量与字段都要对得上。"""
+        from fisheries.water_templates import all_templates
+
+        body = client.get("/api/v1/config/templates").json()
+        assert body["count"] == len(all_templates())
+        assert [t["key"] for t in body["templates"]] == [t.key for t in all_templates()]
+        assert body["interval_minutes"] == 60
+        assert body["columns"]["dissolved_oxygen"] == "溶氧"
+        assert "不构成用药指令" in body["disclaimer"] or "复核" in body["disclaimer"]
+
+    def test_every_template_entry_is_self_describing(self, client):
+        body = client.get("/api/v1/config/templates").json()
+        for item in body["templates"]:
+            assert item["name"] and item["scenario"] and item["focus"]
+            assert item["expected_risk"] in {"正常", "预警", "高危"}
+            assert item["n_points"] >= 3
+            assert item["csv_url"].endswith(f"/config/templates/{item['key']}/csv")
+
+    def test_template_csv_downloads_and_reparses(self, client):
+        """下载回来的字节必须能被真实的别名层解析——这是"导入就能用"的最低标准。"""
+        from fisheries.webui.table import ingest_rows
+
+        catalog = client.get("/api/v1/config/templates").json()
+        for item in catalog["templates"]:
+            resp = client.get(item["csv_url"])
+            assert resp.status_code == 200
+            assert resp.headers["content-type"].startswith("text/csv")
+            assert item["csv_filename"] in resp.headers["content-disposition"]
+            rows = list(csv.reader(io.StringIO(resp.text)))
+            ingest = ingest_rows(rows[0], rows[1:], source=item["csv_filename"])
+            assert ingest.errors == []
+            assert ingest.warnings == []
+            assert ingest.n_points == item["n_points"]
+
+    def test_template_csv_uses_lf_without_bom(self, client):
+        catalog = client.get("/api/v1/config/templates").json()
+        for item in catalog["templates"]:
+            raw = client.get(item["csv_url"]).content
+            assert b"\r\n" not in raw
+            assert not raw.startswith(b"\xef\xbb\xbf")
+
+    def test_unknown_template_is_404_with_the_available_keys(self, client):
+        resp = client.get("/api/v1/config/templates/no_such_template/csv")
+        assert resp.status_code == 404
+        detail = resp.json()["detail"]
+        assert "no_such_template" in detail
+        assert "dawn_hypoxia" in detail
 
 
 # --------------------------------------------------------------------------- #

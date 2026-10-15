@@ -595,3 +595,88 @@ class TestApp:
         out = _run(png_file, "", None, "p", "鲤科", "hash", False, 48, session)
         assert len(out) == 8
         assert "鱼体图片" in out[0]
+
+
+# --------------------------------------------------------------------------- #
+# 内置水质模板
+# --------------------------------------------------------------------------- #
+
+class TestTemplates:
+    def test_choices_cover_every_template(self) -> None:
+        pytest.importorskip("gradio")
+        from fisheries.water_templates import all_templates
+        from fisheries.webui.app import _template_choices
+
+        choices = _template_choices()
+        assert [value for _label, value in choices] == [t.key for t in all_templates()]
+        # 下拉框显示名字而不是 key：现场没人想读 normal_summer。
+        assert all(label and value for label, value in choices)
+
+    def test_fill_returns_the_file_the_species_and_a_note(self) -> None:
+        pytest.importorskip("gradio")
+        from fisheries.water_templates import get_template, template_path
+        from fisheries.webui.app import _template_fill
+
+        template = get_template("dawn_hypoxia")
+        path, _pasted, species, note = _template_fill("dawn_hypoxia")
+        assert Path(path) == template_path("dawn_hypoxia")
+        assert Path(path).exists(), "「用该模板填充」不能给出一条不存在的路径"
+        assert species == template.species
+        assert template.name in note
+        assert template.expected_risk in note
+
+    def test_fill_clears_the_paste_box(self) -> None:
+        """粘贴框不清空，用户先粘过一段文本再点模板，跑的还是那段旧文本。
+
+        ``_load_table`` 里粘贴优先于文件，所以这不是"顺手清一下"，
+        而是模板能不能生效的前提。
+        """
+        pytest.importorskip("gradio")
+        from fisheries.webui.app import _template_fill
+
+        _path, pasted, _species, _note = _template_fill("normal_summer")
+        assert pasted == ""
+
+    def test_paste_still_wins_over_the_file(self, session: WebSession) -> None:
+        """反过来钉住上面那条规则本身：粘贴优先是既有行为，不能被模板改掉。"""
+        pytest.importorskip("gradio")
+        from fisheries.water_templates import template_path
+        from fisheries.webui.app import _run
+
+        pasted = "timestamp,water_temp,ph,dissolved_oxygen,ammonia_n\n" + "\n".join(
+            f"2026-10-13 {8 + i:02d}:00:00,27.0,8.10,{4.2 + 0.01 * i:.2f},0.40"
+            for i in range(6)
+        )
+        out = _run(str(template_path("dawn_hypoxia")), pasted, None, "p", "鲤科", "hash", False, 48, session)
+        assert len(out) == 8
+        # 用粘贴的 6 个好点跑，就不该出现模板那份数据才有的高危结论。
+        assert "高危" not in out[0]
+
+    def test_selected_template_reaches_the_report(self, session: WebSession) -> None:
+        """端到端：模板文件 → 规则引擎 → 报告里出现该模板的预期等级。"""
+        pytest.importorskip("gradio")
+        from fisheries.water_templates import get_template, template_path
+        from fisheries.webui.app import _run
+
+        template = get_template("dawn_hypoxia")
+        out = _run(str(template_path("dawn_hypoxia")), "", None, "p", "鲤科", "hash", False, 48, session)
+        assert len(out) == 8
+        assert "风险等级" in out[0]
+        assert template.expected_risk in out[0]
+
+    def test_fill_without_a_selection_asks_for_one(self) -> None:
+        pytest.importorskip("gradio")
+        from fisheries.webui.app import _template_fill
+
+        note = _template_fill(None)[-1]
+        assert "选一个模板" in note
+
+    def test_fill_with_an_unknown_key_explains_why(self) -> None:
+        pytest.importorskip("gradio")
+        from fisheries.webui.app import _template_fill
+
+        note = _template_fill("no_such_template")[-1]
+        assert note.startswith("❌")
+        assert "no_such_template" in note
+        # 错误信息里要列出可用模板，用户才知道下一步点哪个。
+        assert "dawn_hypoxia" in note

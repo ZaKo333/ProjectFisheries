@@ -68,7 +68,7 @@ $env:PYTHONPATH = "$PWD\src"
 .\.venv\Scripts\python.exe scripts\train_yolo_fish.py --report   # 先体检，不训练
 .\.venv\Scripts\python.exe scripts\train_yolo_fish.py --epochs 60
 
-# 14) 跑单元测试（940 项）
+# 14) 跑单元测试（1020 项）
 .\.venv\Scripts\python.exe -m pytest
 ```
 
@@ -97,7 +97,7 @@ $env:PYTHONPATH = "$PWD\src"
 `degraded_mode=true`，`/api/v1/health` 也会如实申报 `mock`。
 训练与复现步骤见 [`docs/模型训练说明.md`](docs/模型训练说明.md)。
 
-当前状态：`940 passed`（工具层 83 + Agent 层 114 + 回译层 144 + 评测层 181 + RAG 层 101 + 接口层 111 + 演示页 69 + 数据集层 75 + 控制台层 27 + 启动器层 35）。
+当前状态：`1020 passed`（工具层 83 + Agent 层 114 + 回译层 144 + 评测层 181 + RAG 层 101 + 接口层 116 + 演示页 76 + 数据集层 75 + 控制台层 27 + 启动器层 35 + 模板层 68）。
 
 > ⚠ 只跑工具层与 Agent 层、不想装 RAG 依赖时：设 `FISHERIES_DISABLE_KNOWLEDGE=1`，
 > Agent 会跳过检索并降级为「无依据建议」，不会启动失败。
@@ -275,6 +275,7 @@ project/
 │   ├── datasets.py          # 「数据集名字 → 磁盘位置」的唯一真相来源（只用标准库，见 §12.1）
 │   ├── console.py           # 控制台编码兜底：只放宽 errors、绝不改编码（见 §9 控制台层）
 │   ├── launcher.py          # 启动器要显示的全部中文（.bat 是纯 ASCII，中文只能从这里出，见 §9）
+│   ├── water_templates.py   #   12 个内置水质场景模板的定义与 CSV 生成（见 templates/）
 │   ├── tools/               # 工具层：给大模型调用的"手"
 │   │   ├── definitions.py   #   function-calling schema（纯契约，无业务逻辑）
 │   │   ├── water_risk.py    #   工具① water_risk_predict
@@ -294,7 +295,7 @@ project/
 │   └── api/                 # M7 后端接口（FastAPI）
 │       ├── schemas.py       #   请求/响应契约（_Strict 基类禁止多余字段）
 │       ├── deps.py          #   应用状态、配置、内存态会话缓冲
-│       ├── routes.py        #   10 个端点
+│       ├── routes.py        #   12 个端点
 │       └── app.py           #   应用装配 + 中文错误页 + OpenAPI 描述
 │   └── webui/               # M9 现场演示页（Gradio，可选依赖）
 │       ├── table.py         #   表格接入：列名识别 / 时间轴 / 缺失与量纲核查
@@ -309,7 +310,12 @@ project/
 │   │   ├── do_trend.py      #   溶氧趋势外推 vs 持久性基线（真值独立的那一组）
 │   │   └── report.py        #   渲染成 Markdown 报告（含第 8 节图像模态）
 ├── examples/
-│   └── pond_demo_water.csv  # 演示用 24 小时水质读数（页面「一键载入示例」用它）
+│   └── pond_demo_water.csv  # 演示用 24 小时水质读数（页面「填入示例数据」用它）
+├── templates/               # 12 个内置水质场景模板（由 scripts/build_water_templates.py 生成，可重建）
+│   ├── README.md            #   模板清单与三种用法（自动生成，勿手改）
+│   ├── normal_summer.csv    #   正常档（鲤科）；另有 normal_shrimp.csv（虾蟹档）
+│   ├── dawn_hypoxia.csv     #   高危档：黎明前缺氧（溶氧外推破红线）
+│   └── ...                  #   共 12 个 CSV，覆盖 5 种表头风格与 正常/预警/高危 三档
 ├── data/                    # 运行期产物；datasets/ 与 dataset_index.json 是可选的数据集落点
 │   ├── datasets/            #   想跟工程放一起就放这（默认空，工程不自带数据集，见 §12.1）
 │   ├── dataset_index.json   #   手工「名字 → 路径」映射（可选）
@@ -337,6 +343,7 @@ project/
 │   ├── demo_webui.py        # Web 演示页离线演示（不开浏览器，把页面上每栏原样打印）
 │   ├── evaluate_water_rules.py  # M8 外部验证 CLI（重跑即重新生成评测报告）
 │   ├── build_knowledge_base.py  # 官方建库 CLI（支持 --check / --dry-run）
+│   ├── build_water_templates.py # 生成 templates/ 的 12 个 CSV 与 README（支持 --check / --list）
 │   ├── fetch_datasets.py    # 数据集 CLI（--list/--status/--where/--fetch，见 §12.1）
 │   ├── fetch_translate_model.py # 下本地翻译模型到 models/translate/（--list/--model/--force，见 §2.5）
 │   ├── build_yolo_dataset.py    # 从三份原始图集去重、切分，产出训练用四分类图集
@@ -348,10 +355,11 @@ project/
     ├── test_agent.py        # 114 项
     ├── test_translate.py    # 144 项（D12 回译层：语言判定 / 词表 / 逐字段回译 / 端到端）
     ├── test_evaluation.py   # 181 项（M8：评测代码自身的正确性）
-    ├── test_rag.py          # 100 项（用 HashEmbeddings，不加载 90 MB 模型）
-    ├── test_api.py          # 79 项（TestClient，不启服务）
-    ├── test_api_rag.py      # 25 项（接口层 × 真实知识库的一致性）
-    ├── test_webui.py        # 69 项（表格接入层；不 import gradio）
+    ├── test_rag.py          # 101 项（用 HashEmbeddings，不加载 90 MB 模型）
+    ├── test_api.py          # 84 项（TestClient，不启服务）
+    ├── test_api_rag.py      # 32 项（接口层 × 真实知识库的一致性）
+    ├── test_webui.py        # 76 项（表格接入层 + 模板填充；不 import gradio）
+    ├── test_water_templates.py # 68 项（模板目录 / 预期等级对得上规则引擎 / CSV 往返 / 提交物与代码一致）
     ├── test_datasets.py     # 75 项（数据集注册表 / 五级解析 / 绝对路径回归守卫）
     ├── test_console.py      # 27 项（编码兜底 / 符号降级 / 编码锁 / 旧写法回归守卫）
     └── test_launchers.py    # 35 项（启动器：.bat 纯 ASCII 守卫 / 转发 / 横幅文案）
@@ -681,6 +689,8 @@ $env:PYTHONPATH = "$PWD\src"
 | GET | `/api/v1/ponds/{pond_id}/history` | 该塘口的历史评估记录 |
 | GET | `/api/v1/config/thresholds` | 当前生效的阈值表与物种档位（前端画仪表盘用） |
 | GET | `/api/v1/config/tools` | 导出 function-calling schema（前端/其他 Agent 复用） |
+| GET | `/api/v1/config/templates` | 12 个内置水质模板目录（前端做「选个模板直接试」） |
+| GET | `/api/v1/config/templates/{key}/csv` | 下载某个模板的 CSV，可直接喂给上传框或粘贴框 |
 
 > 上表由 `scripts/demo_api.py` 逐个跑过，路径以 `src/fisheries/api/routes.py` 的
 > `router` 为准（`python -c "from fisheries.api.routes import router; ..."` 可导出全量路由）。
@@ -761,7 +771,7 @@ $env:PYTHONPATH = "$PWD\src"
 `gradio` 是**可选依赖**（`pyproject.toml` 的 `[project.optional-dependencies] webui`）。
 整个 `webui/` 包里**只有 `app.py` 一个文件 import gradio**，其余三个模块
 （`table.py` / `runner.py` / `render.py`）纯标准库 + pydantic，
-所以 `tests/unit/test_webui.py`（69 项）能在没装 gradio 的机器上跑。
+所以 `tests/unit/test_webui.py`（76 项）能在没装 gradio 的机器上跑。
 
 > Gradio 6 把 `theme` / `css` / `js` / `head` 从 `Blocks()` 挪到了 `launch()`，
 > 且在 `Blocks()` 上传会告警。`pyproject.toml` 里因此钉的是 `gradio>=6.0`。
@@ -831,7 +841,7 @@ fish_disease_detect(
 ## 9. 测试
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest                 # 全部 940 项
+.\.venv\Scripts\python.exe -m pytest                 # 全部 1020 项
 .\.venv\Scripts\python.exe -m pytest tests/unit/test_agent.py -v
 .\.venv\Scripts\python.exe scripts\demo_rag.py --only e2e   # 端到端含 RAG
 ```
@@ -841,7 +851,7 @@ fish_disease_detect(
 
 覆盖重点：
 
-- **工具层**（85 项）：5 个指标每档阈值端点逐一钉死；红线触发；历史尖峰不粘连；
+- **工具层**（83 项）：5 个指标每档阈值端点逐一钉死；红线触发；历史尖峰不粘连；
   分子氨协同；亚硝酸盐缺失权重重归一化；NaN/超量程拒绝；图像确定性；失败路径；
   **真实权重下标签只由模型决定**（同一张图放进不同文件夹名必须得到逐字段一致的输出）；
   **训练脚本的类别与产品代码的类别映射必须对齐**（训练类别 ⊆ `RAW_CLASS_TO_LABEL` 键、
@@ -878,13 +888,13 @@ fish_disease_detect(
   报告在缺检查项时写"（本次未运行）"而不是静默省略（**静默省略会让第 4 节的数字看起来可读**）；
   **第 8 节（图像模态）在场与缺席两种形态都渲染**，mAP 的弱口径 caveat 必须跟着数字一起出现，
   「病害 → 健康」的漏检数要按混淆矩阵算对，指标文件缺字段也不能崩
-- **RAG 层**（100 项，用 `HashEmbeddings` 假向量，不加载 90 MB 模型）：
+- **RAG 层**（101 项，用 `HashEmbeddings` 假向量，不加载 90 MB 模型）：
   front-matter 解析与非法值拒收；标题链构造；表格整体保留不切；列表原子性；
   整节粘合；`section_role=meta` 被谓词排除（且只认"标题主语是本项目"，
   不误伤顺带提到本项目的领域小节）；jieba 领域词不被切碎；
   RRF 融合确定性；软加权；标题去重；轮转预算不让低优先级用途整块消失；
   清单指纹不一致时检出；`store` 拒绝维度/模型不匹配的旧库
-- **接口层**（104 项 = `test_api.py` 79 + `test_api_rag.py` 25，`TestClient` 不启动真实服务）：
+- **接口层**（116 项 = `test_api.py` 84 + `test_api_rag.py` 32，`TestClient` 不启动真实服务）：
   `_Strict` 拒收多余字段返回 422；空 readings；两模态都缺；图片不可达；
   工具名未知；上传图片的扩展名/大小/MIME 校验；
   **带 `timestamp` 的读数不因 datetime 序列化而 500**；
@@ -893,7 +903,7 @@ fish_disease_detect(
   **`/api/v1/health` 申报的工具后端必须同时满足"有权重"与"装了 ultralytics"**，
   两种条件各自缺失时的措辞不同（只查 `find_spec` 会在没权重时谎报 `yolov8-cls`），
   且据此判断的 `degraded` 状态要跟着变
-- **演示页接入层**（69 项，不 import gradio）：
+- **演示页接入层**（76 项，不 import gradio）：
   真实数据集四种列名写法都能认（含 `DISOLVED OXYGEN` 拼写错、`Lenght` 拼写错）；
   **模糊匹配会认错列，所以只做精确别名匹配**；四种时间格式解析；
   `-127`/`-999` 哨兵值按缺失处理并提醒；负值不当真实读数；
@@ -901,7 +911,7 @@ fish_disease_detect(
   丢到不足 3 点必须报错而不是让工具层抛异常；
   超长表格截尾保留最新数据；乱序时间重排；**补插时间戳只动缺失行、真实点的时刻不被推移**；
   量纲超出物理量程时提醒核对列映射
-- **数据集层**（74 项，不依赖本机真的装了数据）：
+- **数据集层**（75 项，不依赖本机真的装了数据）：
   注册表每个键都有非空 `entry`、`label`、`note`；名字不重复；
   解析顺序四级（`FISHERIES_DATA_ROOT` → `data/datasets/` → 历史目录 → kagglehub 缓存）逐级生效且优先级可测；
   **`FISHERIES_DATA_ROOT` 只是优先级提示而不是强制覆盖**（指错时仍能回落到历史目录）；
@@ -910,6 +920,12 @@ fish_disease_detect(
   **回归守卫**：`src/`、`scripts/`、`tests/` 里不得再出现 `Agent\数据集` 或 `Path(r"D:\` 这类绝对路径字面量；
   文档与脚本不得再要求调用方先设 `PYTHONPATH`（探针要自己把 `src` 插进 `sys.path`）；
   `fetch_datasets.py` 的 `--list/--status/--where/--json` 在数据缺失时也不报错
+- **模板层**（68 项，真的调 `water_risk_predict` 把每个模板跑一遍）：
+  12 个模板的预期等级与规则引擎逐一对上；两个正常档必须 `risk_score == 0` 且一条规则都不命中；
+  8 个高危档的规则并集必须覆盖溶氧 / 氨氮 / 亚硝酸盐 / pH / 水温五类失效
+  （只测一条规则等于没测）；虾蟹模板换成鲤科档位后结论必须变；
+  五种表头风格全被别名层识别（零警告零忽略列）；CSV 一律 LF、无 BOM、末尾带换行；
+  提交进仓库的 CSV 与 README 必须与代码逐字节一致（等价于 `--check`）
 - **控制台层**（27 项，用假流模拟 GBK / UTF-8 / 无 `reconfigure` 的控制台）：
   `install()` **只把 `errors` 放宽为 `replace`，绝不动 `encoding`**（单方面改成 UTF-8 会让字节
   与终端对不上、中文变乱码，那正是被替换掉的旧写法）；
@@ -1032,8 +1048,8 @@ fish_disease_detect(
 | M4 多源融合与风险决策 | ✅ |
 | M5 RAG 知识库（混合检索 + 定向检索 + 引证） | ✅ 语料为自编种子语料；标准编号与水质数值已逐条核对现行标准原文 |
 | M6 Agent 调度与函数调用 | ✅ 已接入 RAG |
-| M7 后端 FastAPI（10 个端点） | ✅ 内存态会话缓冲；持久化与鉴权待做 |
-| M8 测试评测文档 | ✅ 两组外部验证 + 940 项单测；集成测试仍缺（见下） |
+| M7 后端 FastAPI（12 个端点） | ✅ 内存态会话缓冲；持久化与鉴权待做 |
+| M8 测试评测文档 | ✅ 两组外部验证 + 1020 项单测；集成测试仍缺（见下） |
 | M9 Web 演示页（Gradio） | ✅ 表格接入 / 双模态 / 分栏报告；未做多轮对话与历史对比 |
 | M10 中文输出（D12 英文 prompt + 回译） | ✅ 提示词双语 / 四级回译后端（本地离线模型 + 分块 + 术语后订正）/ 语言自动判定；见 [`docs/M10_回译层说明.md`](docs/M10_回译层说明.md) |
 

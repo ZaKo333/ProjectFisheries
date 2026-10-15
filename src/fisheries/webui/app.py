@@ -42,6 +42,7 @@ from .runner import (
     session_info,
 )
 from .table import EXAMPLE_TABLE, TableError, TableIngest, ingest_rows, ingest_table
+from ..water_templates import all_templates, get_template, materialize
 
 #: 表格最多读多少行。水质工具只做趋势外推，给几万行既慢又没有额外信息，
 #: 而且真实数据集单个 CSV 就有 8 万行（IoTPond1），不设上限页面会明显卡顿。
@@ -192,6 +193,45 @@ def _backend_info(session: WebSession) -> str:
     return session_info(session)
 
 
+def _template_choices() -> list[tuple[str, str]]:
+    """下拉框选项：``(给用户看的名字, 传给回调的 key)``。"""
+    return [(t.name, t.key) for t in all_templates()]
+
+
+def _template_fill(key: str | None):
+    """「用该模板填充」的回调，返回 ``(表格文件, 粘贴框, 品种, 提示)``。
+
+    两件事必须一起做，否则模板"填了但没生效"：
+
+    1. **清空粘贴框**——``_load_table`` 里粘贴内容优先于文件，
+       用户先粘过一段文本、再点模板，跑的就还是那段旧文本。
+    2. **切换品种**——模板里虾蟹塘的水温和溶氧是按虾蟹档位调的，
+       留在鲤科会拿着对的数字按错的档位判级。
+    """
+    if not key:
+        return (
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            "⚠️ 请先在上面的下拉框里选一个模板。",
+        )
+    try:
+        template = get_template(key)
+        path = materialize(key)
+    except KeyError as exc:
+        # KeyError 的 str() 是参数的 repr，会多出一层引号；取 args[0] 更干净。
+        msg = exc.args[0] if exc.args else str(exc)
+        return gr.update(), gr.update(), gr.update(), f"❌ {msg}"
+    note = (
+        f"✅ 已填入 **{template.name}**（{template.species} · {template.n_points} 点 · "
+        f"预期等级 **{template.expected_risk}**）\n\n"
+        f"> {template.scenario}\n\n"
+        f"数据文件：`{path.name}` —— 在仓库的 `templates/` 目录里，"
+        f"直接上传这个文件也会得到同样的结果。点「▶ 运行 Agent」开始。"
+    )
+    return str(path), "", template.species, note
+
+
 # --------------------------------------------------------------------------- #
 # 组装
 # --------------------------------------------------------------------------- #
@@ -217,6 +257,24 @@ def build_app(session: WebSession | None = None) -> gr.Blocks:
             # ------------------------ 左：输入 ------------------------ #
             with gr.Column(scale=4):
                 gr.Markdown("### 1. 输入数据")
+
+                gr.Markdown(
+                    "**没有现成数据？** 选一个内置场景模板，一键填进去 ——"
+                    "表格和品种会一起切过去，点运行就能看到对应的分级结论。"
+                )
+                with gr.Row():
+                    template_pick = gr.Dropdown(
+                        label="水质模板",
+                        choices=_template_choices(),
+                        value=None,
+                        scale=4,
+                        info="每个模板 24 个点（1 小时 1 点），预期等级已用规则引擎核对过",
+                    )
+                    template_btn = gr.Button("📥 用该模板填充", size="sm", scale=1)
+                template_note = gr.Markdown(
+                    "<div class='fisheries-hint'>模板文件在仓库的 "
+                    "<code>templates/</code> 目录下，直接上传同名文件也能得到一样的结果。</div>"
+                )
 
                 table_file = gr.File(
                     label="水质时序表格（CSV / TSV / XLSX）",
@@ -330,6 +388,11 @@ def build_app(session: WebSession | None = None) -> gr.Blocks:
             fn=lambda: str(EXAMPLE_TABLE),
             inputs=None,
             outputs=table_file,
+        )
+        template_btn.click(
+            fn=_template_fill,
+            inputs=[template_pick],
+            outputs=[table_file, pasted, species, template_note],
         )
         demo.load(fn=lambda: _backend_info(sess), inputs=None, outputs=backend_box)
 
