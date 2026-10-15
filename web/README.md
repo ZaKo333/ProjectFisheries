@@ -119,9 +119,17 @@ web/
 - `RULE_HITS` == 红线码 ∪ `_check_normal_rules` 的全部码；
 - `TRACE_KINDS` == `TraceStep.kind` 的 `Literal`；
 - `DISEASE_GROUPS` == `fish_disease.DISEASE_LABELS`；
-- `TOOL_ERRORS` 覆盖图像工具、水质工具、调度层三层错误码；
+- `TOOL_ERRORS` == 后端源码里全部 `error_code` 字面量（图像 / 水质 / 调度三层，**双向相等**，不是「覆盖」）；
+- 12 个内置水质模板的 CSV 全部真喂给 `parse.js` 跑一遍 —— 用 node 执行真文件，
+  不把列名匹配逻辑移植到 Python（移植错了没人知道，见下）；
 - `api.js` 调的每个路径都在 OpenAPI 里；
 - `/app/` 能取到页面与全部静态资源，不存在的资源 404，且静态挂载没有把 `/docs` 与 `/api/v1/*` 吃掉。
+
+模板那一条走的是另一条路：`parse.js` 认表头是**一遍精确匹配 + 一遍模糊兜底**，
+把它翻译成 Python 再断言，等于在测一份可能悄悄分叉的副本 —— 第一版就是这么写的，
+误报了 21 个「认不出」的单元格。现在直接用 node 执行 `web/js/parse.js`
+（它是个 IIFE，只依赖 `window`；`DOMParser` 只在 XLSX 那条路径里用），
+对每个模板断言能解析出四个必需列与至少 3 条读数。
 
 跑法：
 
