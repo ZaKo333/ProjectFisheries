@@ -8,7 +8,7 @@ rem ===========================================================================
 rem  Self check: all unit tests + all demo scripts + knowledge base index.
 rem  Double-click before a demo / defence, to confirm the environment is sane.
 rem
-rem  KEEP THIS FILE PURE ASCII -- see the note in run-demo.bat.
+rem  KEEP THIS FILE PURE ASCII -- see the note in src/fisheries/launcher.py.
 rem  All Chinese output comes from scripts/selftest.py.
 rem ===========================================================================
 
@@ -32,7 +32,7 @@ echo           %PY%
 echo.
 echo   Create it once (see README.md section 1):
 echo       python -m venv .venv
-echo       .venv\Scripts\python.exe -m pip install -e ".[dev,rag,webui]"
+echo       .venv\Scripts\python.exe -m pip install -e ".[dev,rag,api]"
 echo   Then double-click this file again.
 echo.
 if not "%PF_NO_PAUSE%"=="1" pause

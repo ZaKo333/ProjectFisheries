@@ -5,11 +5,12 @@ title ProjectFisheries - API Service
 cd /d "%~dp0"
 
 rem ===========================================================================
-rem  API service launcher (double-click), for front-end integration.
+rem  API service launcher (double-click).
+rem  Serves BOTH the HTTP API and the web front-end (mounted at /app).
 rem  Optional argument: port, default 8000.
 rem  To let other machines connect, change HOST below to 0.0.0.0.
 rem
-rem  KEEP THIS FILE PURE ASCII -- see the note in run-demo.bat.
+rem  KEEP THIS FILE PURE ASCII -- see the note in src/fisheries/launcher.py.
 rem ===========================================================================
 
 set "HOST=127.0.0.1"
@@ -50,7 +51,7 @@ echo           %PY%
 echo.
 echo   Create it once (see README.md section 1):
 echo       python -m venv .venv
-echo       .venv\Scripts\python.exe -m pip install -e ".[dev,rag,webui]"
+echo       .venv\Scripts\python.exe -m pip install -e ".[dev,rag,api]"
 echo   Then double-click this file again.
 echo.
 if not "%PF_NO_PAUSE%"=="1" pause

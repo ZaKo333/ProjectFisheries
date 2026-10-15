@@ -12,7 +12,7 @@
    模板不是"随手编的数字"，而是**被测试钉住的、规则引擎必然判成该等级的样例**。
 
 **表头风格刻意不统一。** 真实导出工具的表头五花八门（中文、全大写、
-带单位、甚至把 Dissolved Oxygen 拼成 Disolved），``webui/table.py`` 的别名层
+带单位、甚至把 Dissolved Oxygen 拼成 Disolved），``fisheries.tables`` 的别名层
 就是为这些坑写的。模板里有五种风格，其中 ``upper_en`` 保留了数据集里
 原样存在的拼写错误 —— 让"导入"这条路在演示时真的被走到。
 
@@ -57,7 +57,7 @@ __all__ = [
 # 常量
 # --------------------------------------------------------------------------- #
 
-#: 模板 CSV 的落地目录。与 ``webui/table.py`` 的 ``EXAMPLE_TABLE`` 不同，
+#: 模板 CSV 的落地目录。与 ``fisheries.tables.EXAMPLE_TABLE``（单个演示文件）不同，
 #: 这里是一整个目录：模板要能被用户当成"一批可选文件"看待。
 TEMPLATES_DIR: Path = Path(__file__).resolve().parents[2] / "templates"
 

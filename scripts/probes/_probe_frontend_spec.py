@@ -201,7 +201,7 @@ def main() -> int:
     w("\n" + "=" * 78)
     w("六、环境变量")
     w("=" * 78)
-    for fname in ("api/deps.py", "webui/runner.py", "webui/app.py", "agent/llm.py", "agent/translate.py"):
+    for fname in ("api/deps.py", "api/routes.py", "agent/llm.py", "agent/translate.py"):
         path = ROOT / "src" / "fisheries" / fname
         if not path.is_file():
             continue

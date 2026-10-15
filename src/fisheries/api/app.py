@@ -35,6 +35,7 @@ from fastapi.responses import JSONResponse
 from .. import __version__
 from .deps import ApiSettings, AppState
 from .routes import router
+from .static import WEB_MOUNT_PATH, mount_web, resolve_web_dir
 
 __all__ = ["create_app", "app", "main"]
 
@@ -116,6 +117,10 @@ def create_app(
 
     application.include_router(router)
 
+    # 静态前端放最后挂：接口路由优先匹配，/app 只吃自己前缀下的路径，
+    # 因此 /docs、/openapi.json、/api/v1/** 都不受影响。
+    web_dir = mount_web(application)
+
     @application.get("/", include_in_schema=False)
     def index() -> JSONResponse:
         """根路径给一份指路信息，避免打开首页看到 404 以为服务没起来。"""
@@ -126,6 +131,9 @@ def create_app(
                 "docs": "/docs",
                 "openapi": "/openapi.json",
                 "health": "/api/v1/health",
+                # 演示前端没跟这份部署一起带出来时这里是 None，
+                # 调用方据此决定要不要把用户往页面上引。
+                "app": WEB_MOUNT_PATH if web_dir is not None else None,
                 "endpoints": [
                     "POST /api/v1/assess",
                     "POST /api/v1/tools/call",
@@ -137,6 +145,8 @@ def create_app(
                     "GET  /api/v1/ponds/{pond_id}/history",
                     "GET  /api/v1/config/thresholds",
                     "GET  /api/v1/config/tools",
+                    "GET  /api/v1/config/templates",
+                    "GET  /api/v1/config/templates/{key}/csv",
                 ],
             }
         )
@@ -165,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = [a for a in argv if a != "--reload"]
 
     print(f"[fisheries] 启动接口服务 http://{host}:{port}  (docs: /docs)")
+    if resolve_web_dir() is not None:
+        print(f"[fisheries] 演示前端   http://{host}:{port}{WEB_MOUNT_PATH}/")
     uvicorn.run(
         "fisheries.api.app:app",
         host=host,

@@ -871,7 +871,7 @@ class TestChatAndConfig:
 
     def test_template_csv_downloads_and_reparses(self, client):
         """下载回来的字节必须能被真实的别名层解析——这是"导入就能用"的最低标准。"""
-        from fisheries.webui.table import ingest_rows
+        from fisheries.tables import ingest_rows
 
         catalog = client.get("/api/v1/config/templates").json()
         for item in catalog["templates"]:

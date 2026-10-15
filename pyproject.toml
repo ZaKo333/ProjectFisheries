@@ -26,9 +26,22 @@ data = ["pandas>=2.2", "numpy>=1.26"]
 # 数据集按需导入（`python scripts/fetch_datasets.py pull`）才需要。
 # 工程默认不带数据集：仓库里只有代码，1.37 GB 的原始数据放在工程外。
 datasets = ["kagglehub>=0.3"]
-# 现场演示页。必须 >=6.0：Gradio 6 把 theme / css / js / head 从
-# Blocks() 挪到了 launch()，5.x 上这样写会 TypeError。
-webui = ["gradio>=6.0"]
+# 接口服务（FastAPI）。装了它才有 HTTP 接口，也才由它托管 web/ 里的前端页面。
+# ⚠ python-multipart 不是可选项：POST /api/v1/ingest/image 用的是 multipart 表单，
+#   缺了它在**导入期**就抛 RuntimeError，服务根本起不来。
+api = ["fastapi>=0.115", "uvicorn>=0.30", "python-multipart>=0.0.9"]
+# 检索层（RAG）：向量库 + 稀疏检索 + 中文分词 + 语料 front-matter 解析。
+# 不装这些接口照样能起，只是知识库状态变成 unavailable、/chat 返回 503
+# （见 src/fisheries/api/deps.py 的 _prepare_knowledge）。
+rag = [
+    "langchain-core>=0.3",
+    "langchain-chroma>=0.2",
+    "chromadb>=0.5",
+    "fastembed>=0.4",
+    "rank-bm25>=0.2",
+    "jieba>=0.42",
+    "pyyaml>=6.0",
+]
 # 离线回译（D12）：把 AQUA-7B 的整句英文译成中文，不联网、不需要 key。
 # 权重不在 PyPI 上，用 `python scripts/fetch_translate_model.py` 下到
 # models/translate/。没装这个 extra 也能跑，只是回译退回受控词表，

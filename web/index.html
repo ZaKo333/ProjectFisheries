@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>水产养殖智能监测与决策 Agent · 前端演示</title>
+  <link rel="stylesheet" href="./css/app.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- 侧边导航 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3c3 3 5 6.5 5 10a5 5 0 0 1-10 0c0-3.5 2-7 5-10Z" />
+            <path d="M9.5 15.5c.6 1 1.6 1.6 2.5 1.6s1.9-.6 2.5-1.6" />
+            <circle cx="10.2" cy="12.4" r=".4" />
+            <circle cx="13.8" cy="12.4" r=".4" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">渔业智能决策 Agent</div>
+          <div class="brand-sub">水质 · 病害 · 融合评估</div>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <a class="nav-item" data-route="home" href="#/home">
+          <span class="nav-icon">⌂</span><span>总览</span>
+        </a>
+        <a class="nav-item" data-route="evaluate" href="#/evaluate">
+          <span class="nav-icon">⌘</span><span>智能评估</span>
+        </a>
+        <a class="nav-item" data-route="qa" href="#/qa">
+          <span class="nav-icon">?</span><span>知识问答</span>
+        </a>
+        <a class="nav-item" data-route="standards" href="#/standards">
+          <span class="nav-icon">⚙</span><span>数据与标准</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="conn-dot" id="conn-dot" title="后端连接状态"></div>
+        <div class="conn-text">
+          <div class="conn-label">接口基地址</div>
+          <div class="conn-url" id="conn-url">（与本页面同源）</div>
+        </div>
+        <button class="btn btn-ghost btn-xs" id="btn-config" type="button" title="修改后端地址">设置</button>
+      </div>
+    </aside>
+
+    <!-- 主区域 -->
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="view-title" id="view-title">总览</h1>
+          <div class="view-desc" id="view-desc">系统状态与历史风险趋势</div>
+        </div>
+        <div class="topbar-right">
+          <span class="badge badge-muted" id="topbar-health" title="后端健康状态">未连接</span>
+        </div>
+      </header>
+
+      <!-- 演示模式横幅（degraded_mode=true 时显示） -->
+      <div class="demo-banner" id="demo-banner" hidden>
+        <span class="demo-banner-icon">⚠</span>
+        <div>
+          <strong>演示模式</strong>
+          <span id="demo-banner-text">当前为确定性模拟输出，非真实模型结果。</span>
+        </div>
+      </div>
+
+      <!-- 页面容器 -->
+      <section class="content" id="content">
+        <div class="empty-state">正在加载…</div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 模态框容器 -->
+  <div class="modal-backdrop" id="modal-backdrop" hidden></div>
+
+  <script src="./js/dict.js"></script>
+  <script src="./js/charts.js"></script>
+  <script src="./js/markdown.js"></script>
+  <script src="./js/parse.js"></script>
+  <script src="./js/ui.js"></script>
+  <script src="./js/api.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

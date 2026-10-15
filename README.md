@@ -11,7 +11,7 @@
 | **输出** | 风险等级（正常 / 预警 / 高危）+ 告警 + 水质调控与病害处置建议 + 证据链 + 引用出处 + 完整推理链路 |
 | **离线可用** | 不配 API key、不联网也能跑通全链路（内置确定性离线模型 + 规则模板建议） |
 | **两个工具** | 水质时序风险预测、鱼体病害图像识别（烂鳃 / 细菌性出血 / 水霉 / 健康） |
-| **三种入口** | Web 演示页（Gradio）、HTTP 接口（FastAPI，12 个端点）、命令行 |
+| **三种入口** | Web 前端（与接口同源托管在 `/app`）、HTTP 接口（FastAPI，12 个端点）、命令行 |
 
 ---
 
@@ -106,10 +106,10 @@
 # 第 2 步：跑一遍全链路，确认能起来（不需要任何 API key）
 python scripts/demo_agent.py
 
-# 第 3 步：起演示页，用鼠标点一遍
-python -m fisheries.webui.app          # 然后打开 http://127.0.0.1:7860
+# 第 3 步：起服务，用鼠标点一遍（前端页面与接口是同一个服务）
+python -m fisheries.api                # 然后打开 http://127.0.0.1:8000/app/
 
-# 第 4 步：页面上选一个内置模板 → 点「用该模板填充」→ 点「运行 Agent」
+# 第 4 步：页面上选一个内置模板 → 点「用该模板填充」→ 点「运行评估」
 ```
 
 第 4 步用模板是为了让你**不用先去找数据**。内置 12 个水质场景（见 [§5](#5-内置水质模板)），
@@ -119,11 +119,25 @@ python -m fisheries.webui.app          # 然后打开 http://127.0.0.1:7860
 
 | 你的场景 | 用哪个入口 | 怎么做 |
 |---|---|---|
-| 想快速看一眼，不想敲命令 | **Web 演示页** | 上传表格 + 图片 → 点「运行 Agent」 |
+| 想快速看一眼，不想敲命令 | **Web 前端** | 打开 `/app/` → 选模板或上传表格 + 图片 → 点「运行评估」 |
 | 要把结果接进自己的系统 | **HTTP 接口** | `POST /api/v1/assess`（见 [§8](#8-http-接口)） |
 | 要接传感器做定时巡检 | **HTTP 接口 + 会话缓冲** | 先 `POST /api/v1/ingest/sensor` 追加读数，再 `POST /api/v1/assess` |
 | 写脚本批量跑 | **当作库调用** | `from fisheries.agent.orchestrator import ...`（见 [§9](#9-当作库调用)） |
 | 只想问知识库，不跑评估 | **`POST /api/v1/chat`** | 直接问答，不经 Agent |
+
+### 2.4 Web 前端有哪几页
+
+页面是一套纯原生 HTML/CSS/JS（无构建步骤、无 CDN、断网可演示），由接口进程同源托管在 `/app`：
+
+| 视图 | 干什么 |
+|---|---|
+| **总览** | 后端状态、塘口历史风险趋势、演示模式横幅 |
+| **智能评估** | 选内置模板或上传表格 + 鱼体照片 → 一键出完整报告（**主入口**） |
+| **知识问答** | 直接问知识库，看到召回原文片段与出处 |
+| **数据与标准** | 当前生效的阈值表、品种档位、红线，以及两个工具的调用契约 |
+
+页面故意**只读后端**：等级、分数、告警全部来自接口，前端一个都不重算。
+页面自身的说明见 [web/README.md](web/README.md)。
 
 ---
 
@@ -151,14 +165,14 @@ python -m pip install -U pip
 python -m pip install -e ".[dev]"
 
 # 运行所需的其余依赖（检索 + 接口）
-python -m pip install langchain-core langchain-chroma chromadb fastembed rank-bm25 jieba fastapi python-multipart
+python -m pip install -e ".[rag,api]"
 ```
 
 按需加装：
 
 | 想要什么 | 命令 |
 |---|---|
-| Web 演示页 | `python -m pip install -e ".[webui]"` |
+| Web 前端 + HTTP 接口 | `python -m pip install -e ".[api]"` |
 | 图像识别（加载训练好的权重） | `python -m pip install -e ".[vision]"` |
 | 自己训练病害识别模型 | 见 [docs/模型训练说明.md](docs/模型训练说明.md)（torch 需指定官方索引） |
 | 本地离线回译模型 | `python -m pip install -e ".[translate]"` 后跑 `python scripts/fetch_translate_model.py` |
@@ -188,13 +202,10 @@ python scripts/build_knowledge_base.py --check
 ### 3.4 三个常用命令
 
 ```bash
-# ① 起 HTTP 服务（Swagger 在 /docs）
-python -m uvicorn fisheries.api.app:app --host 127.0.0.1 --port 8812
+# ① 起 HTTP 服务 + Web 前端（页面在 /app/，Swagger 在 /docs）
+python -m fisheries.api                            # http://127.0.0.1:8000/app/
 
-# ② 起 Web 演示页（需先装可选依赖 [webui]，见 §3.2）
-python -m fisheries.webui.app                      # http://127.0.0.1:7860
-
-# ③ 环境体检（不开服务，逐项检查依赖、模型、知识库、数据集）
+# ② 环境体检（不开服务，逐项检查依赖、模型、知识库、数据集）
 python scripts/selftest.py
 ```
 
@@ -208,7 +219,6 @@ python scripts/selftest.py
 | `python scripts/demo_rag.py` | 检索质量，4 个场景，含注入提示词的原文 |
 | `python scripts/demo_prompt.py` | 系统提示词与护栏，3 个场景 |
 | `python scripts/demo_api.py` | 完整 HTTP 链路，6 个场景（进程内，不用起服务） |
-| `python scripts/demo_webui.py` | 把演示页每一栏原样打印到终端（不装 gradio 也能看） |
 | `python scripts/demo_translate.py` | 回译层，4 个场景 |
 
 ---
@@ -300,8 +310,8 @@ python scripts/selftest.py
 **三种用法**：
 
 ```bash
-# ① 演示页：输入区选模板 → 点「用该模板填充」→ 点「运行 Agent」
-#    （点了模板会自动清空粘贴框并切换品种档位，避免用到上一次的数据）
+# ① 前端页面：选模板 → 点「用该模板填充」→ 点「运行评估」
+#    （点了模板会同时填好数据、并把品种档位切到模板自带的品种）
 
 # ② 接口：先取目录，再取 CSV
 curl http://127.0.0.1:8812/api/v1/config/templates
@@ -562,11 +572,9 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ├── pyproject.toml
 ├── README.md                # 本文件
 ├── 使用说明.txt             # 面向非技术使用者（双击 .bat 之前先看这个）
-├── run-demo.bat             # 启动演示页（实际逻辑）
-├── run-api.bat              # 启动接口服务
+├── run-api.bat              # 启动接口服务（同时托管 Web 前端）
 ├── run-selftest.bat         # 环境体检
-├── 启动演示页.bat           # 中文名 .bat 只做转发，见下方说明
-├── 启动接口服务.bat
+├── 启动接口服务.bat         # 中文名 .bat 只做转发，见下方说明
 ├── 运行自检.bat
 ├── docs/                    # 设计与交付文档（见 §14）
 ├── knowledge/
@@ -574,6 +582,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 │   ├── corpus/              # 9 篇种子语料
 │   └── chroma/              # 向量库产物（随仓库分发，可重建）
 ├── templates/               # 12 个内置水质场景模板（可重建）
+├── web/                     # 前端页面（纯原生 HTML/CSS/JS，由接口同源托管在 /app）
 ├── examples/
 │   └── pond_demo_water.csv  # 演示用 24 小时水质读数
 ├── data/                    # 运行期产物（不进版本库；datasets/ 是可选的数据集落点）
@@ -587,8 +596,8 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 │   ├── tools/               # 工具层：给大模型调用的「手」
 │   ├── agent/               # Agent 层：调度、护栏、融合、回译
 │   ├── rag/                 # 检索层：加载 / 分块 / 向量库 / 混合检索
-│   ├── api/                 # 接口层：FastAPI 契约与路由
-│   ├── webui/               # 演示页：表格接入 / 渲染 / Gradio 装配
+│   ├── api/                 # 接口层：FastAPI 契约、路由与前端静态托管
+│   ├── tables.py            # 表格接入层：列名别名 / 时间轴 / 缺失与量纲
 │   └── evaluation/          # 外部验证（只做评测，不参与线上链路）
 └── tests/unit/              # 单元测试（见 §11）
 ```
@@ -603,7 +612,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1036 项
+python -m pytest                     # 全部 1020 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -619,11 +628,12 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_rag.py` | 105 | front-matter、分块、RRF 融合、清单一致性守卫 |
 | `test_api.py` | 84 | 契约校验、错误状态码、上传校验、并发 |
 | `test_api_rag.py` | 34 | 接口层 × 真实知识库的一致性、溯源标记 |
-| `test_webui.py` | 86 | 表格接入、列名别名、时间轴、缺失与量纲、模板填充 |
+| `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |
+| `test_web_contract.py` | 24 | 前端静态托管、`dict.js` 枚举码 vs 后端源码、`api.js` 路径 vs OpenAPI |
 | `test_water_templates.py` | 68 | 模板预期等级 vs 规则引擎、CSV 往返、提交物与代码一致 |
 | `test_datasets.py` | 75 | 数据集注册表、解析优先级、绝对路径回归守卫 |
 | `test_console.py` | 27 | 编码兜底、符号降级、编码锁 |
-| `test_launchers.py` | 35 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
+| `test_launchers.py` | 30 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
 

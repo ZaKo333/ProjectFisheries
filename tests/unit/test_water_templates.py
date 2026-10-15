@@ -41,8 +41,8 @@ from fisheries.water_templates import (
     template_path,
     write_all,
 )
-from fisheries.webui.runner import SPECIES_CHOICES
-from fisheries.webui.table import MIN_POINTS, ingest_rows
+from fisheries.tables import MIN_POINTS, ingest_rows
+from fisheries.tools.water_risk import SPECIES_CHOICES
 
 #: 刻意写死：增删模板必须是一次有意识的改动，顺手改坏这里会立刻红。
 EXPECTED_KEYS: tuple[str, ...] = (
@@ -85,8 +85,12 @@ class TestCatalog:
         for template in all_templates():
             assert template.expected_risk in _KNOWN_LEVELS
 
-    def test_every_species_can_be_selected_in_the_webui(self) -> None:
-        """模板里的品种必须是演示页下拉框里有的，否则「自动切品种」会切到不存在的值。"""
+    def test_every_species_has_a_threshold_profile(self) -> None:
+        """模板里的品种必须是有阈值档案的，否则前端「自动切品种」会切到不存在的值。
+
+        ``SPECIES_CHOICES`` 从 ``SPECIES_PROFILES`` 派生，所以这条同时钉住了
+        「模板品种 ⊆ 档案品种」和「界面可选项 = 档案品种」两件事。
+        """
         for template in all_templates():
             assert template.species in SPECIES_CHOICES
 

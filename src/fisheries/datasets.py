@@ -209,7 +209,7 @@ DATASETS: dict[str, DatasetSpec] = {
             "按病害类别分目录。演示脚本和单元测试都从这里取图。"
         ),
         required=("Test",),
-        used_by=("scripts/demo_*.py", "tests/unit/test_agent.py", "webui 演示图"),
+        used_by=("scripts/demo_*.py", "tests/unit/test_agent.py", "前端演示图"),
         size_hint="179.6 MB / 23808 文件",
     ),
     "sb_fish_disease": DatasetSpec(
@@ -283,7 +283,7 @@ DATASETS: dict[str, DatasetSpec] = {
         note=(
             "11 个 IoTpond*.csv，共 1,114,970 行。列名至少有四种写法"
             "（Dissolved Oxygen(g/ml) / DISOLVED OXYGEN / PH / Ammonia(g/ml)），"
-            "且用 -127 表示缺测——webui 的列名别名表就是照着这份数据做的。"
+            "且用 -127 表示缺测——tables.py 的列名别名表就是照着这份数据做的。"
             "**单位有两个必须记住的坑**："
             "① 氨氮与硝酸盐标着 (g/ml)，但按 g/ml 读会得到「鱼在致死浓度里长胖 100 倍」"
             "的矛盾，故按 µg/L 除以 1000（唯一标 (mg/L) 的 IoTPond8 不除）；"
@@ -293,7 +293,7 @@ DATASETS: dict[str, DatasetSpec] = {
         used_by=(
             "src/fisheries/evaluation/ponds.py",
             "src/fisheries/evaluation/do_trend.py",
-            "src/fisheries/webui/table.py（列名别名来源）",
+            "src/fisheries/tables.py（列名别名来源）",
         ),
         size_hint="96.0 MB / 11 文件",
     ),

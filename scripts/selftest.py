@@ -31,7 +31,7 @@ _BAR = "  " + "-" * 60
 _RULE = "  " + "=" * 60
 
 _OPTIONAL_DEPS = (
-    ("gradio", "演示页不可用", 'pip install -e ".[webui]"'),
+    ("fastapi", "接口服务（含托管的前端页面）不可用", 'pip install -e ".[api]"'),
     ("chromadb", "知识库不可用", 'pip install -e ".[rag]"'),
     ("ultralytics", "病害识别走模拟兜底（功能正常，只是不调用真实模型）", None),
 )
@@ -143,8 +143,8 @@ def main() -> int:
     print(_RULE)
     if ok:
         print("    自检通过：测试全绿、演示脚本全部正常。")
-        print("    演示页         双击 启动演示页.bat")
-        print("    接口服务       双击 启动接口服务.bat")
+        print("    接口服务 + 前端页面   双击 启动接口服务.bat")
+        print("    （启动后打开横幅里给出的地址，页面与接口是同一个服务）")
     else:
         print("    自检未通过，请把上面的 [失败] 行连同报错贴给我。")
     print(_RULE)

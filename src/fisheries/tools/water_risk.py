@@ -96,7 +96,17 @@ SPECIES_PROFILES: dict[str, dict[str, Any]] = {
     },
 }
 
+#: 可选品种的顺序列表。**从 :data:`SPECIES_PROFILES` 派生**，
+#: 保证「界面上能选的品种」与「有阈值档案的品种」永远不会分叉 ——
+#: 手抄一份字面量迟早会漏掉新加的品种，然后下拉框里选了一个没有档案的值。
+SPECIES_CHOICES: tuple[str, ...] = tuple(SPECIES_PROFILES)
+
 #: 红线阈值：命中任一即直接判「高危」，不再看加权分。
+#:
+#: 注意 ``PH_LOW_REDLINE`` / ``PH_HIGH_REDLINE`` 只是本表的键：pH 越界时
+#: :func:`_check_redlines` 发出的是 **``PH_REDLINE``** 这一个码。
+#: 前端字典如果照着这张表去列红线码，就会多出两个永远收不到的键、
+#: 同时漏掉真正会收到的码。
 REDLINE = {
     "DO_REDLINE": 1.5,        # 溶氧 < 1.5 mg/L：泛塘临界
     "NH3_REDLINE": 1.0,       # 氨氮 > 1.0 mg/L
