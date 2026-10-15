@@ -14,6 +14,8 @@ from __future__ import annotations
 import inspect
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,31 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_DIR = PROJECT_ROOT / "web"
 DICT_JS = WEB_DIR / "js" / "dict.js"
 API_JS = WEB_DIR / "js" / "api.js"
+PARSE_JS = WEB_DIR / "js" / "parse.js"
+
+# ``parse.js`` 是个 IIFE，只从 window 上取东西（DOMParser 仅在 XLSX 那条路径里用），
+# 所以可以在 node 里把 window 指到 global 上直接执行它 —— 不必移植它的列名匹配逻辑。
+NODE = shutil.which("node")
+
+_PARSE_DRIVER = r"""
+const fs = require("fs");
+global.window = global;
+eval(fs.readFileSync(process.argv[2], "utf8"));
+const P = global.Fisheries.parse;
+const cases = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+const out = {};
+for (const key of Object.keys(cases)) {
+  const r = P.parseText(cases[key]);
+  out[key] = {
+    ok: r.ok,
+    errors: r.errors,
+    warnings: r.warnings,
+    columns: r.columns,
+    rows: r.readings.length,
+  };
+}
+process.stdout.write(JSON.stringify(out));
+"""
 
 pytestmark = pytest.mark.skipif(not WEB_DIR.is_dir(), reason="web/ 静态目录不在，跳过前端契约检查")
 
@@ -242,7 +269,55 @@ class TestDictContract:
 
 
 # --------------------------------------------------------------------------- #
-# 3. api.js 调的路径必须是后端真有的
+# 3. 内置水质模板：后端发的 CSV 必须被 parse.js 认得出
+# --------------------------------------------------------------------------- #
+class TestTemplateContract:
+    @pytest.mark.skipif(NODE is None, reason="没有 node，跳过真实 parse.js 执行")
+    def test_every_template_csv_round_trips_through_parse_js(self, tmp_path: Path) -> None:
+        """把 12 个模板的 CSV 真喂给 ``web/js/parse.js`` 跑一遍。
+
+        「用该模板填充」是把 CSV 正文塞进 textarea 再走前端解析。模板故意用了好几种
+        表头风格（英文下划线 / 带单位 / 驼峰 / 全大写 / 中文 / 甚至拼错的
+        ``DISOLVED OXYGEN``），全靠 ``matchColumn`` 的模糊兜底才认全 —— 一旦认不出，
+        textarea 照样填满，解析却报「无法识别必需列」，按钮看起来点了没用。
+
+        这里**不移植那套列名匹配逻辑**：移植本身就可能与 JS 分叉，而且分叉了没人知道。
+        直接用 node 执行真文件（``parse.js`` 只依赖 ``window``，XLSX 那条路径才需要 DOM）。
+        """
+        from fisheries.water_templates import all_templates, render_csv
+
+        cases = {t.key: render_csv(t) for t in all_templates()}
+        (tmp_path / "cases.json").write_text(json.dumps(cases, ensure_ascii=False), encoding="utf-8")
+        (tmp_path / "driver.js").write_text(_PARSE_DRIVER, encoding="utf-8")
+
+        proc = subprocess.run(
+            [NODE, str(tmp_path / "driver.js"), str(PARSE_JS), str(tmp_path / "cases.json")],
+            capture_output=True, text=True, encoding="utf-8", timeout=60,
+        )
+        assert proc.returncode == 0, f"node 执行 parse.js 失败：{proc.stderr}"
+
+        results = json.loads(proc.stdout)
+        assert set(results) == set(cases), "有模板没跑到"
+        required = ("water_temp", "ph", "dissolved_oxygen", "ammonia_n")
+        for key, res in results.items():
+            header = cases[key].splitlines()[0]
+            assert res["ok"], f"{key} 解析失败：{res['errors']}（表头：{header}）"
+            for field in required:
+                assert field in res["columns"], f"{key} 认不出必需列 {field}（表头：{header}）"
+            assert res["rows"] >= 3, f"{key} 只有 {res['rows']} 条有效读数，前端会拒绝"
+
+    def test_every_template_has_a_csv_and_a_level(self) -> None:
+        from fisheries.water_templates import all_templates, render_csv
+
+        for tpl in all_templates():
+            csv_text = render_csv(tpl)
+            assert csv_text.count("\n") >= 4, f"{tpl.key} 的数据行不够 3 条，前端会拒绝"
+            assert tpl.expected_risk in {"正常", "预警", "高危"}, f"{tpl.key} 的 expected_risk 不是三档之一"
+            assert tpl.species, f"{tpl.key} 没有 species，前端无法自动切品种档位"
+
+
+# --------------------------------------------------------------------------- #
+# 4. api.js 调的路径必须是后端真有的
 # --------------------------------------------------------------------------- #
 class TestApiPathContract:
     def test_every_called_path_exists(self, client: TestClient) -> None:
