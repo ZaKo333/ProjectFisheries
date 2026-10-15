@@ -376,7 +376,7 @@ class TestFishDiseaseDetect:
 
         这是「没在偷看答案」的**正面证据**：同一张图放进类名完全不同的两个目录，
         真实模型必须给出逐字段一致的输出。没有训练权重时跳过
-        （工程默认不带权重，见 README §12.1）。
+        （工程默认不带权重，见 README §12.6）。
         """
         probe = write_min_png(tmp_path / "probe.png")
         if fish_disease_detect(str(probe))["degraded_mode"]:

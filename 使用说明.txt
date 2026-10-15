@@ -134,7 +134,7 @@
       另外 SB-FishDisease（10.6 MB）和 Freshwater Fish Disease（24.8 MB）经
       文件名比对与 Fish Disease Dataset 是同一批照片，一张新图都没多，
       也可以整目录删掉。三份一起删完约剩 180 MB。
-      详细清单见 README 第 12.2 节。
+      详细清单见 README 第 13.1 节。
 
   问：命令行里跑脚本，中文变成乱码了？
   答：别用 PowerShell 的 type / Get-Content 看 .bat，也别自己 set PYTHONIOENCODING。
