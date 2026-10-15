@@ -547,9 +547,18 @@ def _answer_from_chunks(
             tools=None,
         )
     except Exception as exc:  # noqa: BLE001 —— LLM 挂了就退回检索原文，别让接口 500
+        # 三条出路必须给同一种文本块。上面直接返回原文那条走的是
+        # ``_provenance_block``，这里原来是手写的 ``f"【…】\n{text}"``，
+        # 把「依据 GB 11607-1989；核验日期 …」整段丢了 —— 而模型不可用时，
+        # 调用方恰恰最需要看清这些数值的出处（它是唯一能自己判断可信度的线索）。
+        #
+        # 异常类型一并写进回答：本项目全项目不使用 ``logging``，不写在这里
+        # 就再没有任何通道看得出「模型为什么挂了」。
+        # 只写类型名不写 ``str(exc)``：LLM 客户端的异常消息里常带请求 URL，
+        # 有时还带 Authorization，接口文本是对外可见的。
         return (
-            f"（大模型调用失败，以下是检索到的原文）\n\n"
-            + "\n\n".join(f"【{c.title} > {c.heading_text}】\n{c.text}" for c in result.chunks),
+            f"（大模型调用失败：{type(exc).__name__}，以下是检索到的原文）\n\n"
+            + "\n\n".join(_provenance_block(c) for c in result.chunks),
             True,
         )
     return (resp.content or "").strip(), False

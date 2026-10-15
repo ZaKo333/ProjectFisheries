@@ -27,8 +27,10 @@ user_export.xlsx  ``水温`` / ``溶氧`` / ``氨氮``             中文表头
 
 from __future__ import annotations
 
+import bisect
 import csv
 import io
+import math
 import re
 import statistics
 from dataclasses import dataclass, field
@@ -320,9 +322,20 @@ def parse_timestamp(raw: Any) -> datetime | None:
 
     1. **丢掉时区缩写**。``2021-06-19 00:00:05 CET`` 无法用 :func:`datetime.strptime`
        直接解析；猜错时区比不带时区更危险，所以只取墙上时间。
-    2. **抹平 aware/naive**。同一个文件里可能既有 ``+08:00`` 又有裸时间，
-       混在一起做差会抛 ``TypeError: can't subtract offset-naive and
-       offset-aware datetimes``。采集器时区一致时墙上时间可比，统一去掉 tzinfo。
+    2. **抹平 aware/naive，但已知偏移要先换算再抹**。同一个文件里可能既有
+       ``+08:00`` 又有裸时间，混在一起做差会抛 ``TypeError: can't subtract
+       offset-naive and offset-aware datetimes``，所以时间轴最终必须是 naive 的。
+       但「naive 化」有两条路，结果差得很远：
+
+       - ``2026-07-20T00:00:00Z`` 与 ``2026-07-20T08:00:00+08:00`` 是**同一瞬间**。
+         若只把 ``tzinfo`` 抹掉，它们会变成相差 8 小时的两个时刻：混合时区的
+         文件排序错乱、趋势图上的时刻整体偏移，而且**不报任何错**。
+         所以带 ``±HH:MM`` / ``Z`` 的输入走 :meth:`datetime.astimezone`
+         换算到本机时区再抹 ``tzinfo``，与下面纯数字分支的
+         ``datetime.fromtimestamp`` 保持同一口径。
+       - ``CET`` 这类**缩写**是另一回事：偏移量本身不确定（CET 含夏令时），
+         猜错比不猜更危险，所以第 1 条只把它剪掉、墙上时间原样保留。
+
     3. **纯数字**按 Unix 秒/毫秒识别（导出工具常见）。
 
     >>> parse_timestamp("2021-06-19 00:00:05 CET").isoformat()
@@ -343,7 +356,9 @@ def parse_timestamp(raw: Any) -> datetime | None:
         except ValueError:
             dt = None
         if dt is not None:
-            return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+            if dt.tzinfo is None:
+                return dt
+            return dt.astimezone().replace(tzinfo=None)
 
     for fmt in _TIMESTAMP_FORMATS:
         for candidate in (text, stripped):
@@ -366,17 +381,28 @@ def parse_timestamp(raw: Any) -> datetime | None:
 
 
 def to_float(raw: Any) -> float | None:
-    """把单元格转成浮点数；空值、哨兵值、非数字都返回 ``None``。
+    """把单元格转成浮点数；空值、哨兵值、非有限数、非数字都返回 ``None``。
 
     哨兵值（``-127`` 之类）必须当缺失处理：``IoTPond10.csv`` 的温度列是
     ``-127``，当成真实读数会让「水温 -127℃」直接顶到危险档，
     现场演示会莫名其妙报出高危。
+
+    ``inf`` / ``nan`` 同样必须当缺失处理，理由与
+    :func:`fisheries.evaluation.ponds._to_float` 一致：``inf`` 不是一个
+    读数，但它是**能通过校验**的合法浮点数 —— 放进去不会让这一格报错，
+    而是让整份数据在工具层被整体拒收（``INVALID_INPUT``，因为
+    :class:`~fisheries.tools.water_risk.WaterQualityPoint` 拒绝非有限数），
+    用户看到的是「上传成功、分析失败」。一个单元格毁掉整张表，代价太大。
 
     >>> to_float("4.505")
     4.505
     >>> to_float("-127") is None
     True
     >>> to_float("N/A") is None
+    True
+    >>> to_float("inf") is None
+    True
+    >>> to_float(float("-inf")) is None
     True
     """
     if raw is None:
@@ -385,7 +411,9 @@ def to_float(raw: Any) -> float | None:
         return None
     if isinstance(raw, (int, float)):
         value = float(raw)
-        return None if value in MISSING_SENTINELS else value
+        if not math.isfinite(value) or value in MISSING_SENTINELS:
+            return None
+        return value
     text = str(raw).strip()
     if text.lower() in _MISSING_TOKENS:
         return None
@@ -394,7 +422,9 @@ def to_float(raw: Any) -> float | None:
         value = float(text)
     except ValueError:
         return None
-    return None if value in MISSING_SENTINELS else value
+    if not math.isfinite(value) or value in MISSING_SENTINELS:
+        return None
+    return value
 
 
 def _looks_like_sentinel(raw: Any) -> bool:
@@ -411,6 +441,30 @@ def _looks_like_sentinel(raw: Any) -> bool:
     text = str(raw).strip().replace(",", "")
     try:
         return float(text) in MISSING_SENTINELS
+    except ValueError:
+        return False
+
+
+def _looks_non_finite(raw: Any) -> bool:
+    """``to_float`` 返回 ``None`` 之后，判断这是「导出写了 inf」还是别的原因。
+
+    ``inf`` 与 ``-inf`` 被 :func:`to_float` 当缺失处理是对的，但用户需要知道
+    「这一格不是空的」：pandas / numpy 导出、Excel 里除零的公式，都会把
+    ``inf`` 原样写进 CSV。不点出来的话，用户会一直以为那几格是设备掉线，
+    跑去查网络，而真正要修的是导出脚本。
+
+    文本形式的 ``nan`` 落在 :data:`_MISSING_TOKENS` 里，按「空着」处理 ——
+    它本来就是被当作缺失标记写出来的，不必再单独解释一次。
+    """
+    if raw is None or isinstance(raw, bool):
+        return False
+    if isinstance(raw, (int, float)):
+        return not math.isfinite(float(raw))
+    text = str(raw).strip().replace(",", "")
+    if text.lower() in _MISSING_TOKENS:
+        return False
+    try:
+        return not math.isfinite(float(text))
     except ValueError:
         return False
 
@@ -735,42 +789,50 @@ def ingest_rows(
 
     by_index = {f: headers.index(raw) for f, raw in mapping.columns.items()
                 if raw in headers}
+    # 时间列的表头 -> 列下标，循环外算一次。``headers.index`` 是 O(列数)，
+    # 放在 720 行的循环里就是 720 次线性扫描，纯粹白烧。
+    ts_index = (
+        headers.index(ts_col) if ts_col is not None and ts_col in headers else None
+    )
+    merge_index = (
+        (headers.index(merge_parts[0]), headers.index(merge_parts[1]))
+        if merge_parts is not None
+        and merge_parts[0] in headers
+        and merge_parts[1] in headers
+        else None
+    )
+
+    def cell_at(row: Sequence[Any], idx: int | None) -> Any:
+        """按列序号取单元格。行是显式入参，不再靠闭包捕获循环变量。"""
+        if idx is None or idx >= len(row):
+            return None
+        return row[idx]
 
     # ---- 逐行取值 -------------------------------------------------------
     parsed: list[tuple[datetime | None, dict[str, Any]]] = []
     missing_cells: dict[str, int] = {f: 0 for f in INDICATORS}
     negatives: dict[str, int] = {f: 0 for f in INDICATORS}
     sentinels: dict[str, int] = {f: 0 for f in INDICATORS}
+    non_finite: dict[str, int] = {f: 0 for f in INDICATORS}
     for row in rows:
-        def cell_at(idx: int | None) -> Any:
-            """按列序号取单元格。指标列走这个。"""
-            if idx is None or idx >= len(row):
-                return None
-            return row[idx]
-
-        def cell(name: str | None) -> Any:
-            """按原始表头取单元格。时间列走这个（可能是拼接的两列）。"""
-            if name is None or name not in headers:
-                return None
-            idx = headers.index(name)
-            return cell_at(idx)
-
         stamp: datetime | None = None
-        if merge_parts is not None:
+        if merge_index is not None:
             stamp = parse_timestamp(
-                _merge_datetime(cell(merge_parts[0]), cell(merge_parts[1]))
+                _merge_datetime(cell_at(row, merge_index[0]), cell_at(row, merge_index[1]))
             )
-        elif ts_col is not None:
-            stamp = parse_timestamp(cell(ts_col))
+        elif ts_index is not None:
+            stamp = parse_timestamp(cell_at(row, ts_index))
 
         point: dict[str, Any] = {}
         for field_name in INDICATORS:
-            raw_cell = cell_at(by_index.get(field_name))
+            raw_cell = cell_at(row, by_index.get(field_name))
             value = to_float(raw_cell)
             if value is None:
                 missing_cells[field_name] += 1
                 if _looks_like_sentinel(raw_cell):
                     sentinels[field_name] += 1
+                elif _looks_non_finite(raw_cell):
+                    non_finite[field_name] += 1
             elif value < 0 and field_name != "water_temp":
                 # 理化指标为负 = 传感器/导出异常，按缺失处理，别让它顶到危险档。
                 negatives[field_name] += 1
@@ -795,6 +857,13 @@ def ingest_rows(
                 f"{_INDICATOR_LABEL[field_name]} 有 {count} 个负值哨兵"
                 f"（-127 / -999 这类设备用来表示「本次读数无效」的固定值），"
                 f"已按缺失处理。"
+            )
+    for field_name, count in non_finite.items():
+        if count:
+            result.warnings.append(
+                f"{_INDICATOR_LABEL[field_name]} 有 {count} 个非有限值（inf / nan），"
+                f"已按缺失处理。导出工具算不出数时会写 inf，"
+                f"这一格并不是空的，建议回原始数据核对来源。"
             )
 
     # ---- 时间轴：排序 + 补齐 + 推断间隔 ---------------------------------
@@ -833,12 +902,14 @@ def ingest_rows(
             statistics.median(per_row) if per_row
             else float((interval_minutes or 60) * 60)
         )
-        first_known, last_known = known_idx[0], known_idx[-1]
         for i, (stamp, point) in enumerate(parsed):
             if stamp is not None:
                 continue
-            prev_i = max((j for j in known_idx if j < i), default=None)
-            next_i = min((j for j in known_idx if j > i), default=None)
+            # ``known_idx`` 升序，二分找左右邻居。原来每缺一行就扫一遍
+            # 整张表（O(n·k)），720 行全缺时间戳时是 50 万次比较。
+            pos = bisect.bisect_left(known_idx, i)
+            prev_i = known_idx[pos - 1] if pos > 0 else None
+            next_i = known_idx[pos] if pos < len(known_idx) else None
             if prev_i is not None and next_i is not None:
                 # 落在两个已知点之间：按行序号线性内插
                 fraction = (i - prev_i) / (next_i - prev_i)

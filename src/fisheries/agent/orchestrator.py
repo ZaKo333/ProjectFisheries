@@ -54,8 +54,6 @@ from fisheries.agent.llm import (
     load_llm_config,
 )
 from fisheries.agent.prompts import (
-    ADVISOR_SYSTEM_PROMPT,
-    SCHEDULER_SYSTEM_PROMPT,
     advisor_system_prompt,
     build_advisor_user_message,
     build_confidence_facts,

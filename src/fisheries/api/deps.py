@@ -34,7 +34,6 @@ from typing import Any
 
 from ..agent.orchestrator import (
     KNOWLEDGE_DISABLE_ENV,
-    AgentResult,
     AquacultureAgent,
     knowledge_enabled_by_default,
 )

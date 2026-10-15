@@ -273,18 +273,30 @@ def _drop_collection(persist_path: Path, collection_name: str) -> None:
     直接删 collection 而不是删目录：Chroma 的 PersistentClient
     在同一进程内会缓存连接，删目录后新建可能仍指向旧句柄，
     表现为"重建了但检索到旧数据"。
+
+    **删除失败必须抛，不能吞**：吞掉之后 :func:`build_store` 会带着旧
+    collection 继续写，出来的正是这个函数要防的那个结果 ——
+    「collection 是新的、检索到的还是旧数据」，而且新数据看起来"建成功"了。
     """
     try:
         import chromadb
+    except ImportError:
+        # 没装 chromadb 的路径（只跑检索的轻量环境）。后面的 ``Chroma(...)``
+        # 会给出比这里更准确的报错，不必抢先抛。
+        return
 
+    try:
         client = chromadb.PersistentClient(path=str(persist_path))
         existing = {c.name for c in client.list_collections()}
         if collection_name in existing:
             client.delete_collection(collection_name)
-    except Exception:
-        # 目录还不存在、或 chromadb 版本差异时忽略：
-        # 后续 Chroma(...) 会正常创建新 collection。
-        pass
+    except Exception as exc:
+        raise StoreMismatchError(
+            f"删除旧 collection {collection_name!r} 失败：{type(exc).__name__}: {exc}。"
+            "重建已中止 —— 继续下去可能得到「collection 是新的、数据还是旧的」，"
+            "这是重建最危险的失败形态。请先关闭占用该向量库的进程（建库脚本、"
+            "服务实例）再重试。"
+        ) from exc
 
 
 def _write_manifest(persist_path: Path, payload: dict[str, object]) -> None:
@@ -359,6 +371,15 @@ def load_store(
     if strict and manifest:
         n_now = count_chunks(store)
         n_then = int(manifest.get("n_chunks", 0) or 0)
+        if n_now is None:
+            # 读不到块数 ≠ 库损坏。这里必须分开报，否则用户会去重建一个
+            # 本来完好的索引 —— 而重建是有代价的（重新嵌入 150 块）。
+            raise StoreMismatchError(
+                f"读不到向量库的块数（{persist_path}）：collection 打不开，"
+                "或正被另一个进程占用（建库脚本、另一个服务实例）。"
+                "这**不是**「库已损坏」——请先确认没有进程正在写这个库，再重试。"
+                "只有在读得到块数、且与 manifest 不一致时才需要 --rebuild。"
+            )
         if n_then and n_now != n_then:
             raise StoreMismatchError(
                 f"块数不一致：manifest 记录 {n_then} 块，库中实际 {n_now} 块。"
@@ -368,16 +389,24 @@ def load_store(
     return store
 
 
-def count_chunks(store: object) -> int:
-    """统计库中块数。"""
+def count_chunks(store: object) -> int | None:
+    """统计库中块数；**问不出来时返回 ``None``，绝不返回 0**。
+
+    返回 0 与「读不到」的意义正好相反。:func:`load_store` 的严格校验拿这个数
+    去和 manifest 比，若把读取失败当成 0，报出来的是
+    「库中实际 0 块。向量库可能被中断的构建写坏，请用 --rebuild 重建」——
+    把一个**读取失败**说成**数据损坏**，把用户推去做破坏性重建。
+    返回 ``None`` 让调用方能把这两种情况分开处理。
+    """
     try:
         return int(store._collection.count())  # type: ignore[attr-defined]
     except Exception:
-        try:
-            data = store.get(include=[])  # type: ignore[attr-defined]
-            return len(data.get("ids", []))
-        except Exception:
-            return 0
+        pass
+    try:
+        data = store.get(include=[])  # type: ignore[attr-defined]
+        return len(data.get("ids", []))
+    except Exception:
+        return None
 
 
 def store_exists(

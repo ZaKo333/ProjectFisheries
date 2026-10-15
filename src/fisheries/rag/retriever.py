@@ -30,10 +30,9 @@ RRF 只用**排名**，不需要两者可比，是业界默认的稳健做法。
 from __future__ import annotations
 
 import functools
-import json
 import pathlib
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Sequence
 
 from .embedder import (
     Embeddings,
@@ -41,12 +40,10 @@ from .embedder import (
     describe_embeddings,
     project_root,
 )
-from .schemas import ChunkMeta, RetrievedChunk, RetrievalQuery, RetrievalResult
+from .schemas import RetrievedChunk, RetrievalQuery, RetrievalResult
 from .store import (
     DEFAULT_COLLECTION,
-    DEFAULT_PERSIST_DIR,
     GENERIC_DISEASE,
-    chunk_to_metadata,
     count_chunks,
     load_store,
     read_manifest,
@@ -732,8 +729,12 @@ class KnowledgeBase:
         self.texts = list(texts)
         self.metadatas = list(metadatas)
         self.sparse = SparseIndex(self.texts, self.metadatas)
+        # ``count_chunks`` 读不到时返回 ``None``（见 rag/store.py），别让它
+        # 渲染成 "chroma(None 块)"。
+        n_chroma = count_chunks(store)
         self.backend = (
-            f"chroma({count_chunks(store)} 块) + bm25({len(self.sparse)} 块) / "
+            f"chroma({n_chroma if n_chroma is not None else '?'} 块) + "
+            f"bm25({len(self.sparse)} 块) / "
             f"{describe_embeddings(embeddings)}"
         )
         self._index_of: dict[str, int] = {cid: i for i, cid in enumerate(self.ids)}

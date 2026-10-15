@@ -48,6 +48,8 @@ __all__ = [
     "ToolResultResponse",
     "ThresholdResponse",
     "ToolSchemasResponse",
+    "TemplateInfo",
+    "TemplateCatalogResponse",
 ]
 
 

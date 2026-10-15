@@ -505,3 +505,65 @@ class TestProvenanceMark:
         from fisheries.api.routes import _provenance_block
 
         assert "未核对标准原文" in _provenance_block(_chunk(verified=False))
+
+
+class TestLlmFailureFallback:
+    """大模型挂掉时的退路必须和「没配模型」那条路给出同一种文本块。
+
+    模型不可用时调用方恰恰最需要看清数值出处——那是它唯一能自己判断
+    可信度的线索。所以这条退路不能是手写的 ``f"【…】\\n{text}"``。
+    """
+
+    @staticmethod
+    def _state(advisor):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(agent=SimpleNamespace(advisor=advisor))
+
+    @staticmethod
+    def _result(chunks):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(chunks=chunks)
+
+    def test_fallback_keeps_the_provenance_mark(self):
+        from fisheries.api.routes import _answer_from_chunks
+
+        class Exploding:
+            def chat(self, *_args, **_kwargs):
+                raise RuntimeError("模型服务连不上")
+
+        chunks = [
+            _chunk(
+                verified=True,
+                standard_codes=["GB 11607-1989"],
+                verified_on="2026-10-15",
+            )
+        ]
+        text, is_raw = _answer_from_chunks(
+            self._state(Exploding()), _payload(), self._result(chunks)
+        )
+        assert is_raw is True
+        assert "依据 GB 11607-1989" in text
+        assert "核验日期 2026-10-15" in text
+
+    def test_fallback_names_the_exception_type_but_not_its_message(self):
+        """只写异常类型名：LLM 客户端的异常消息里常带 URL 甚至 Authorization。"""
+        from fisheries.api.routes import _answer_from_chunks
+
+        class Exploding:
+            def chat(self, *_args, **_kwargs):
+                raise RuntimeError("https://api.example.com?key=sk-secret")
+
+        text, _ = _answer_from_chunks(
+            self._state(Exploding()), _payload(), self._result([_chunk()])
+        )
+        assert "RuntimeError" in text
+        assert "sk-secret" not in text
+
+
+def _payload():
+    from fisheries.api.schemas import ChatRequest
+
+    return ChatRequest(query="溶氧低了怎么办", answer_with_llm=True)
+

@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -57,6 +58,7 @@ from fisheries.rag.store import (
     StoreMismatchError,
     chunk_to_metadata,
     corpus_fingerprint,
+    count_chunks,
     load_store,
     read_manifest,
     split_list,
@@ -732,6 +734,94 @@ class TestStore:
         )
         with pytest.raises(StoreMismatchError):
             load_store(HashEmbeddings(dim=128), persist_dir=tmp_path / "chroma")
+
+    def test_count_chunks_returns_none_when_it_cannot_count(self) -> None:
+        """读不到块数必须返回 ``None``，不能返回 ``0``。
+
+        ``0`` 和「读不到」意义相反：``load_store(strict=True)`` 会拿 ``0``
+        去比 manifest，然后报「库中实际 0 块，向量库可能被写坏，请 --rebuild 重建」
+        —— 把**读取失败**说成**数据损坏**，把用户推去做破坏性重建。
+        """
+
+        class Exploding:
+            class _collection:  # noqa: N801 —— 只为复现 chroma 的属性形状
+                @staticmethod
+                def count() -> int:
+                    raise RuntimeError("collection 打不开")
+
+            @staticmethod
+            def get(**_kwargs: Any) -> dict[str, Any]:
+                raise RuntimeError("collection 打不开")
+
+        assert count_chunks(Exploding()) is None
+
+    def test_count_chunks_falls_back_to_get(self) -> None:
+        """``_collection.count()`` 不可用时用 ``get`` 数 id，而不是直接放弃。"""
+
+        class GetOnly:
+            class _collection:  # noqa: N801
+                @staticmethod
+                def count() -> int:
+                    raise RuntimeError("没有 count()")
+
+            @staticmethod
+            def get(**_kwargs: Any) -> dict[str, Any]:
+                return {"ids": ["a", "b", "c"]}
+
+        assert count_chunks(GetOnly()) == 3
+
+    def test_load_store_reports_unreadable_store_as_such(
+        self, corpus_dir: Path, tmp_path: Path
+    ) -> None:
+        """读不到块数时的报错**不能**建议 ``--rebuild``。"""
+        from fisheries.rag import store as store_module
+
+        KnowledgeBase.build(
+            corpus_dir=corpus_dir,
+            persist_dir=tmp_path / "chroma",
+            embeddings=HashEmbeddings(dim=64),
+        )
+        real = store_module.count_chunks
+        store_module.count_chunks = lambda _store: None
+        try:
+            with pytest.raises(StoreMismatchError) as excinfo:
+                load_store(HashEmbeddings(dim=64), persist_dir=tmp_path / "chroma")
+        finally:
+            store_module.count_chunks = real
+
+        message = str(excinfo.value)
+        assert "读不到" in message
+        assert "不是" in message
+        # 关键：不能出现那条把用户推向破坏性重建的措辞
+        assert "请用 --rebuild 重建" not in message
+
+    def test_drop_collection_failure_is_not_swallowed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """删不掉旧 collection 必须抛，不能吞。
+
+        吞掉之后 ``build_store`` 会带着旧 collection 继续写，出来的正是
+        这个函数要防的结果 ——「collection 是新的、检索到的还是旧数据」，
+        而且新数据看起来"建成功"了。
+        """
+        import sys
+        from types import SimpleNamespace
+
+        from fisheries.rag import store as store_module
+
+        class ExplodingClient:
+            def __init__(self, **_kwargs: Any) -> None:
+                raise RuntimeError("数据库被另一个进程占用")
+
+        monkeypatch.setitem(
+            sys.modules, "chromadb", SimpleNamespace(PersistentClient=ExplodingClient)
+        )
+        with pytest.raises(StoreMismatchError) as excinfo:
+            store_module._drop_collection(tmp_path, "fisheries")
+
+        message = str(excinfo.value)
+        assert "删除旧 collection" in message
+        assert "重建已中止" in message
 
 
 # --------------------------------------------------------------------------- #

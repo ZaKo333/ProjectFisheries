@@ -96,9 +96,9 @@ def _quality_section(
         "在这份数据上**填不进去**——引擎会把权重重新归一化。这是本次评测的一个真实盲区，"
         "不是可以绕过的细节。",
         "",
-        f"> 换算系数与量程表写在 `src/fisheries/evaluation/ponds.py` 的 "
-        f"`UNIT_DIVISORS` 与 `RANGES` 里，是可改常量。改掉它们，"
-        f"本报告的所有数字都会跟着变。",
+        "> 换算系数与量程表写在 `src/fisheries/evaluation/ponds.py` 的 "
+        "`UNIT_DIVISORS` 与 `RANGES` 里，是可改常量。改掉它们，"
+        "本报告的所有数字都会跟着变。",
         "",
         "### 2.3 标签口径：最差指标决定论",
         "",
@@ -161,7 +161,7 @@ def _quality_section(
             "如果标签反映的是真实的养殖风险，那么高危占比越高的塘，鱼应该长得越差——"
             "相关系数应当显著为负。",
             "",
-            f"| 参与池塘 | Spearman ρ | 解释 |",
+            "| 参与池塘 | Spearman ρ | 解释 |",
             "|---|---|---|",
             f"| {coherence.n} | {coherence.rho:+.3f} | {coherence.verdict()} |",
             "",
@@ -653,7 +653,7 @@ def render_report(
         "2. **这份数据的 `Ammonia(g/ml)` 不是 g/ml，而是 µg/L**——"
         "依据是同数据集的鱼体增重事实，而且 IoTPond8 的 `(mg/L)` 列"
         "恰好是其余文件的 1/1000，两条证据互相印证。这是一条关于数据的确定结论。",
-        f"3. **各塘高危标签占比与鱼体增重的关系**："
+        "3. **各塘高危标签占比与鱼体增重的关系**："
         + (
             f"Spearman ρ = {coherence.rho:+.3f}（{coherence.n} 口塘）"
             if coherence is not None and coherence.n

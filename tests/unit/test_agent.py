@@ -29,7 +29,6 @@ from fisheries.agent.fusion import (
 )
 from fisheries.agent.llm import (
     ChatResponse,
-    LLMConfig,
     LLMUnavailableError,
     MockLLMClient,
     OpenAICompatibleClient,
@@ -39,8 +38,6 @@ from fisheries.agent.llm import (
 from fisheries.agent.orchestrator import (
     KNOWLEDGE_DISABLE_ENV,
     MAX_ROUNDS,
-    AdvisorReport,
-    Advisory,
     AgentInput,
     AquacultureAgent,
 )

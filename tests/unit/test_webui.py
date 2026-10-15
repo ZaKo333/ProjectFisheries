@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import base64
+import math
 from pathlib import Path
 
 import pytest
@@ -169,6 +170,22 @@ class TestValueParsing:
         assert to_float("-127") is None
         assert to_float("-999") is None
 
+    @pytest.mark.parametrize("raw", ["inf", "-inf", "Infinity", "-Infinity", "INF"])
+    def test_infinite_text_is_treated_as_missing(self, raw: str) -> None:
+        """``inf`` 能过 ``float()``，但它不是读数。
+
+        放进去不会让这一格报错，而是让整份数据在工具层被整体拒收
+        （``INVALID_INPUT``）——用户看到的是「上传成功、分析失败」，
+        一个单元格毁掉整张表。导出工具算不出数时确实会写 ``inf``，
+        所以这里必须当缺测，而不是当数值。
+        """
+        assert to_float(raw) is None
+
+    @pytest.mark.parametrize("raw", [float("inf"), float("-inf")])
+    def test_infinite_float_objects_are_treated_as_missing(self, raw: float) -> None:
+        """表格层和 ``evaluation.ponds`` 走的是不同分支，两边都得挡住。"""
+        assert to_float(raw) is None
+
     @pytest.mark.parametrize("raw,expected", [
         ("2021-06-19 00:00:05 CET", "2021-06-19 00:00:05"),
         ("2023-06-01", "2023-06-01 00:00:00"),
@@ -185,6 +202,31 @@ class TestValueParsing:
         parsed = parse_timestamp("2021-06-19 00:00:05 CET")
         assert parsed is not None
         assert parsed.tzinfo is None
+
+    def test_utc_offset_is_converted_not_discarded(self) -> None:
+        """``Z`` 与 ``+08:00`` 写的是同一个瞬间，解析结果必须相同。
+
+        曾经这里是 ``dt.replace(tzinfo=None)``——直接抹掉偏移而不换算，
+        于是同一时刻被读成差 8 小时的两个值，而且不报任何错：
+        混合时区的表排序错乱、UTC 导出的表显示成错的墙上时间。
+        """
+        utc_marked = parse_timestamp("2026-07-20T00:00:00Z")
+        separated = parse_timestamp("2026-07-20T08:00:00+08:00")
+        assert utc_marked is not None
+        assert separated is not None
+        assert utc_marked == separated
+
+    def test_naive_and_aware_land_on_the_same_instant(self) -> None:
+        """带偏移的输入要换算到与纯数字分支同一口径。
+
+        纯数字走 ``datetime.fromtimestamp``（本地时间），带偏移的走
+        ``astimezone()``（同样本地时间）——两条分支不能各说各话。
+        """
+        from datetime import datetime
+
+        epoch = parse_timestamp("1789000000")
+        assert epoch is not None
+        assert epoch == datetime.fromtimestamp(1789000000)
 
     def test_unparseable_timestamp_is_none(self) -> None:
         assert parse_timestamp("不是时间") is None
@@ -237,6 +279,20 @@ class TestTableIngest:
         assert not result.ok
         assert result.n_rows_incomplete == 4
         assert any("只剩 2 个可用点" in e for e in result.errors)
+
+    def test_infinite_values_are_counted_and_explained(self) -> None:
+        """``inf`` 要按缺测处理，并且**说清楚它原本不是空的**。
+
+        导出工具算不出数时会写 ``inf``，这一格跟空着的成因不一样：
+        空着是没采集，``inf`` 是算溢出了。只报「缺失」会让人以为是设备没读数。
+        """
+        rows = _rows(6)
+        for i in range(3):
+            rows[i][4] = "inf"       # 氨氮
+        result = ingest_rows(_HEADERS, rows)
+        assert result.n_cells_missing.get("ammonia_n") == 3
+        assert any("非有限值" in w for w in result.warnings)
+        assert all(math.isfinite(r["ammonia_n"]) for r in result.readings)
 
     def test_truncation_keeps_the_latest_rows(self) -> None:
         result = ingest_rows(_HEADERS, _rows(48), max_rows=24)
@@ -396,7 +452,6 @@ class TestWebSession:
         这条走的是完整 Agent 链路，不是直接调 ``fuse_assessment``，
         所以它同时守着「网页拿到的报告等级」这一层。
         """
-        readings = _readings(6, do=1.9, ammonia=0.72)
         ingest = ingest_rows(_HEADERS, [
             [f"2026-10-13 0{2 + i}:00:00", "27.0", "8.10",
              f"{1.9 + 0.001 * i:.3f}", f"{0.72 + 0.001 * i:.3f}", "0.35"]

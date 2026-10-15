@@ -22,7 +22,6 @@ from fisheries.agent.translate import (
     DEFAULT_CHUNK_CHARS,
     DEFAULT_CHUNK_WORDS,
     DEFAULT_LOCAL_MODEL,
-    DEFAULT_MAX_CHUNKS,
     GLOSSARY_POST_ZH,
     GLOSSARY_ZH,
     LANG_EN,
@@ -34,11 +33,9 @@ from fisheries.agent.translate import (
     GlossaryTranslator,
     LLMTranslator,
     LocalTranslator,
-    TranslationOutcome,
     back_translate_report,
     build_translator,
     chunk_text,
-    clear_local_cache,
     describe_translator,
     local_model_available,
     local_model_path,
@@ -540,8 +537,7 @@ class TestOrchestratorEnglishPath:
         assert res.risk_level != "正常"
 
     def test_chinese_path_does_not_invoke_the_translator(self):
-        from fisheries.agent.orchestrator import AquacultureAgent, AgentInput
-        from fisheries.agent.llm import MockLLMClient
+        from fisheries.agent.orchestrator import AquacultureAgent
 
         advisor = _EnglishAdvisor(_chinese_fallback())
         agent = AquacultureAgent(advisor_client=advisor, use_knowledge=False,

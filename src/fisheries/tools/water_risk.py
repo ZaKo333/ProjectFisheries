@@ -809,7 +809,6 @@ def _predict_series(payload: WaterRiskInput) -> WaterRiskOutput:
         points=points, redline_hits=redline_hits,
     )
 
-    excluded = [k for k in BASE_WEIGHTS if k not in series]
     do_proj = projections.get("dissolved_oxygen")
     return WaterRiskOutput(
         tool="water_risk_predict",
