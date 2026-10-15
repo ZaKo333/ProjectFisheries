@@ -1,0 +1,2623 @@
+{
+  "GET /api/v1/health": {
+    "status": "ok",
+    "version": "0.1.0",
+    "server_time": "<服务器当前时间，形如 2026-10-15T13:27:13+0800>",
+    "uptime_seconds": "0",
+    "tools": {
+      "water_risk_predict": "rule-baseline（阈值规则 + 线性外推；LSTM 待接入）",
+      "fish_disease_detect": "yolov8-cls（权重 yolov8-fish.pt）"
+    },
+    "llm_backends": {
+      "scheduler": "scheduler: MockLLM（确定性离线模式）",
+      "advisor": "advisor: MockLLM（确定性离线模式）",
+      "prompt_lang": "zh",
+      "translator": "回译后端：本地离线翻译模型（opus-mt-en-zh）"
+    },
+    "knowledge": {
+      "status": "ready",
+      "detail": "已加载混合检索知识库（稠密 + BM25）",
+      "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+      "n_chunks": 150
+    },
+    "notes": [
+      "已开启「按服务器路径读图」（FISHERIES_API_ALLOW_LOCAL_PATH=1），便于演示与内网联调；公网部署请关闭并改用 /api/v1/ingest/image 上传。"
+    ]
+  },
+  "GET /api/v1/config/thresholds": {
+    "species": [
+      "鲤科",
+      "罗非鱼",
+      "虾蟹"
+    ],
+    "weights": {
+      "dissolved_oxygen": 0.35,
+      "ammonia_n": 0.2,
+      "nitrite_n": 0.15,
+      "ph": 0.12,
+      "water_temp": 0.1
+    },
+    "effective_note": "计算风险分时权重会在『本次实际可用的指标』上重新归一化：亚硝酸盐缺失（实测数据集只有硝酸盐）时该列剔除，其余权重按比例放大。",
+    "profiles": {
+      "鲤科": {
+        "temp_opt": [
+          20.0,
+          30.0
+        ],
+        "temp_warn": [
+          15.0,
+          33.0
+        ],
+        "ph_opt": [
+          6.5,
+          8.5
+        ],
+        "ph_warn": [
+          6.0,
+          9.0
+        ],
+        "do_opt": 5.0,
+        "do_warn": 3.0,
+        "ammonia_opt": 0.2,
+        "ammonia_warn": 0.5,
+        "nitrite_opt": 0.1,
+        "nitrite_warn": 0.3
+      },
+      "罗非鱼": {
+        "temp_opt": [
+          22.0,
+          32.0
+        ],
+        "temp_warn": [
+          18.0,
+          35.0
+        ],
+        "ph_opt": [
+          6.5,
+          8.5
+        ],
+        "ph_warn": [
+          6.0,
+          9.0
+        ],
+        "do_opt": 5.0,
+        "do_warn": 3.0,
+        "ammonia_opt": 0.2,
+        "ammonia_warn": 0.5,
+        "nitrite_opt": 0.1,
+        "nitrite_warn": 0.3
+      },
+      "虾蟹": {
+        "temp_opt": [
+          25.0,
+          32.0
+        ],
+        "temp_warn": [
+          20.0,
+          34.0
+        ],
+        "ph_opt": [
+          7.5,
+          8.5
+        ],
+        "ph_warn": [
+          7.0,
+          9.0
+        ],
+        "do_opt": 4.0,
+        "do_warn": 2.5,
+        "ammonia_opt": 0.1,
+        "ammonia_warn": 0.3,
+        "nitrite_opt": 0.05,
+        "nitrite_warn": 0.2
+      }
+    },
+    "redlines": {
+      "DO_REDLINE": 1.5,
+      "NH3_REDLINE": 1.0,
+      "NO2_REDLINE": 0.5,
+      "PH_LOW_REDLINE": 5.5,
+      "PH_HIGH_REDLINE": 9.5,
+      "DO_CRASH_DROP": 2.0,
+      "DO_CRASH_WINDOW_H": 3.0
+    },
+    "action_thresholds": {
+      "dissolved_oxygen": [
+        {
+          "value": 3.0,
+          "label": "危险线"
+        },
+        {
+          "value": 1.5,
+          "label": "泛塘临界值"
+        }
+      ],
+      "ammonia_n": [
+        {
+          "value": 1.0,
+          "label": "红线"
+        }
+      ],
+      "nitrite_n": [
+        {
+          "value": 0.5,
+          "label": "红线"
+        }
+      ]
+    },
+    "extrapolation_horizon_hours": 12.0,
+    "min_reliable_points": 24,
+    "persistence_cap": 1.5,
+    "disclaimer": "标准限值部分已对到 GB 11607-1989《渔业水质标准》（现行）原文（2026-10-15 核验，见 knowledge/corpus/08_标准与依据.md）；适宜 / 警戒 / 危险 / 红线四档中的后三档是本项目的工程扩展，不是标准原文；正式使用前仍须由有资质的水产技术人员复核。本系统输出不构成用药指令。"
+  },
+  "GET /api/v1/config/tools": {
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "water_risk_predict",
+          "description": "【水质时序风险预测】输入一段按时间升序排列的池塘水质监测序列（水温、pH、溶氧、氨氮、亚硝酸盐），输出综合风险等级、各项指标变化趋势，以及对未来一段时间的恶化预测描述。\n适用场景：用户提供传感器数据或水质 CSV；需要判断当前水质是否安全、是否需要提前增氧/换水/停料。\n不适用场景：只问养殖知识而不涉及具体数值（此时应查知识库）；只看图片（此时应调用 fish_disease_detect）。\n注意：readings 必须按时间升序，至少 3 条；建议 ≥24 条以获得可靠趋势。",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "pond_id": {
+                "type": "string",
+                "description": "池塘/塘口编号，用于在多塘场景下区分告警来源，例如 'POND-03'。未知时填 'unknown'。"
+              },
+              "readings": {
+                "type": "array",
+                "minItems": 3,
+                "description": "按时间升序排列的水质记录数组，至少 3 条，建议 ≥24 条（约 1 天，1 小时/条）。每条至少包含 water_temp / ph / dissolved_oxygen / ammonia_n 四项。",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string",
+                      "description": "ISO 8601 时间戳，如 '2026-10-14T08:00:00+08:00'。可选；缺失时按 interval_minutes 等间隔处理。"
+                    },
+                    "water_temp": {
+                      "type": "number",
+                      "description": "水温，单位 ℃。"
+                    },
+                    "ph": {
+                      "type": "number",
+                      "description": "pH 值，无量纲，淡水养殖正常范围 6.5–8.5。"
+                    },
+                    "dissolved_oxygen": {
+                      "type": "number",
+                      "description": "溶解氧，单位 mg/L。"
+                    },
+                    "ammonia_n": {
+                      "type": "number",
+                      "description": "氨氮（以 N 计），单位 mg/L。"
+                    },
+                    "nitrite_n": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "亚硝酸盐氮（以 N 计），单位 mg/L。若该塘口未安装亚硝酸盐探头，可传 null 或省略，此时该指标不参与打分，其余指标权重自动归一化。"
+                    }
+                  },
+                  "required": [
+                    "water_temp",
+                    "ph",
+                    "dissolved_oxygen",
+                    "ammonia_n"
+                  ]
+                }
+              },
+              "interval_minutes": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 60,
+                "description": "相邻两条记录的采样间隔（分钟）。若每条记录都带 timestamp，本参数会被自动推断值覆盖。"
+              },
+              "horizon_hours": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 168,
+                "default": 72,
+                "description": "预测窗口长度（小时），表示'未来多久内会不会出问题'。默认 72 小时（3 天）。"
+              },
+              "species": {
+                "type": "string",
+                "enum": [
+                  "鲤科",
+                  "罗非鱼",
+                  "虾蟹"
+                ],
+                "default": "鲤科",
+                "description": "养殖品种，决定阈值分组。鲤科（草鱼/鲫鱼/鲤鱼等）、罗非鱼、虾蟹（南美白对虾/河蟹等）。不确定时用默认值 '鲤科'。"
+              }
+            },
+            "required": [
+              "readings"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "fish_disease_detect",
+          "description": "【鱼体病害图像识别】输入一张鱼体（或鳃丝、体表病灶）图片的路径，调用 YOLO 分类模型识别病害类型，输出病害名称、置信度及概率分布。\n可识别类别：烂鳃、出血（细菌性败血症）、水霉、健康；此外底层 7 分类模型中不属于上述三类的病灶（赤皮/寄生虫/病毒性白尾）会归入 '其他'，并在 raw_class 字段保留原始判定，供人工复核。\n适用场景：用户上传鱼体照片并希望判断病症。\n不适用场景：只有传感器数值没有图片（此时应调用 water_risk_predict）。\n注意：单张图片只调用一次；若置信度低于阈值，返回值中 is_low_confidence 为 true，应向用户说明'图片不够清晰/需要人工复核'，不要强行下结论。",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "image_path": "<服务端落盘路径，前缀是 data/uploads/>",
+              "conf_threshold": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "default": 0.25,
+                "description": "最低置信度阈值。低于该值仍会返回结果，但会将 is_low_confidence 置为 true。"
+              },
+              "top_k": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 4,
+                "description": "返回概率最高的前 K 个类别，用于展示模型的犹豫程度。"
+              }
+            },
+            "required": [
+              "image_path"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "POST /api/v1/assess (水质单模态)": {
+    "pond_id": "POND-03",
+    "risk_level": "预警",
+    "fused_score": 57.07,
+    "reason": "融合分 57.1（水质模态 0.57×1.00），判定等级【预警】，本次仅有水质单模态输入，权重已归一化；等级下限 WATER_LEVEL:预警。",
+    "headline": "【预警】溶氧开始不对，今天盯紧点。",
+    "advisories": [
+      {
+        "priority": 1,
+        "target": "溶氧（水里的氧气）",
+        "action": "增氧机一直开着别停，后半夜最容易缺氧。",
+        "timing": "12.6 小时后会掉到 3.0，之前必须开机"
+      },
+      {
+        "priority": 2,
+        "target": "氨氮、亚硝酸盐",
+        "action": "停料 2–3 天，换掉两三成水，撒芽孢杆菌。",
+        "timing": "今天开始，两天后复测"
+      }
+    ],
+    "observation_window": "6 小时后复测溶氧和氨氮，明天看鱼有没有好转。",
+    "confidence_note": "依据：水质 24 点。不确定：结论含 12.0 小时外推；水质工具处于降级模式。复核：建议人工核对水质原始数据。",
+    "report": {
+      "risk_level": "预警",
+      "headline": "【预警】溶氧开始不对，今天盯紧点。",
+      "alerts": [],
+      "water_actions": [
+        {
+          "priority": 1,
+          "target": "溶氧（水里的氧气）",
+          "action": "增氧机一直开着别停，后半夜最容易缺氧。",
+          "timing": "12.6 小时后会掉到 3.0，之前必须开机"
+        },
+        {
+          "priority": 2,
+          "target": "氨氮、亚硝酸盐",
+          "action": "停料 2–3 天，换掉两三成水，撒芽孢杆菌。",
+          "timing": "今天开始，两天后复测"
+        }
+      ],
+      "disease_actions": [],
+      "observation_window": "6 小时后复测溶氧和氨氮，明天看鱼有没有好转。",
+      "confidence_note": "依据：水质 24 点。不确定：结论含 12.0 小时外推；水质工具处于降级模式。复核：建议人工核对水质原始数据。"
+    },
+    "alerts": [],
+    "evidence": [
+      {
+        "source": "water",
+        "code": "SEV_DISSOLVED_OXYGEN",
+        "label": "溶氧处于警戒区间",
+        "value": 4.2,
+        "unit": "mg/L"
+      },
+      {
+        "source": "water",
+        "code": "SEV_AMMONIA_N",
+        "label": "氨氮处于警戒区间",
+        "value": 0.34,
+        "unit": "mg/L"
+      },
+      {
+        "source": "water",
+        "code": "SEV_NITRITE_N",
+        "label": "亚硝酸盐处于警戒区间",
+        "value": 0.14,
+        "unit": "mg/L"
+      },
+      {
+        "source": "water",
+        "code": "DO_ALERT_ETA",
+        "label": "预计 12.6 小时后溶氧跌破 3.0 mg/L危险线",
+        "value": 12.56,
+        "unit": "小时"
+      }
+    ],
+    "water": {
+      "tool": "water_risk_predict",
+      "status": "ok",
+      "pond_id": "POND-03",
+      "risk_level": "预警",
+      "risk_score": 57.07,
+      "horizon_hours": 72,
+      "extrapolation_horizon_hours": 12.0,
+      "species": "鲤科",
+      "degradation_summary": "未来 72 小时内水质呈持续恶化趋势，综合风险分 57.1，判定等级【预警】。主控风险因子为溶氧：当前 4.20 mg/L，处于警戒区间。溶氧、氨氮、亚硝酸盐处于警戒区间。按近段回归速率 -0.096 mg/L/小时外推，预计 12.6 小时后溶氧将跌破 3.00 mg/L 危险线。氨氮在 12 小时内预计升至 0.47 mg/L。溶氧持续下降与氨氮、亚硝酸盐超标叠加，会显著削弱鱼类鳃组织的耐受力；夜间至凌晨（约 2–6 时）藻类停止产氧，泛塘风险将明显升高。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）",
+      "limiting_factor": "dissolved_oxygen",
+      "limiting_factor_label": "溶氧",
+      "projected_do_alert_eta_hours": 12.56,
+      "projected_do_alert_threshold": 3.0,
+      "projected_do_alert_label": "危险线",
+      "exceeded_indicators": [
+        "溶氧",
+        "氨氮",
+        "亚硝酸盐"
+      ],
+      "rule_hits": [
+        "DO_BELOW_OPTIMAL",
+        "NH3N_ABOVE_WARNING",
+        "NO2N_ABOVE_WARNING"
+      ],
+      "redline_hits": [],
+      "severity_map": {
+        "dissolved_oxygen": 0.5,
+        "ammonia_n": 0.5,
+        "nitrite_n": 0.5,
+        "ph": 0.0,
+        "water_temp": 0.0
+      },
+      "effective_weights": {
+        "dissolved_oxygen": 0.380435,
+        "ammonia_n": 0.217391,
+        "nitrite_n": 0.163043,
+        "ph": 0.130435,
+        "water_temp": 0.108696
+      },
+      "trends": {
+        "dissolved_oxygen": {
+          "indicator": "dissolved_oxygen",
+          "label": "溶氧",
+          "unit": "mg/L",
+          "current": 4.2,
+          "mean": 5.3,
+          "minimum": 4.2,
+          "maximum": 6.4,
+          "slope_per_hour": -0.09557,
+          "direction": "下降",
+          "change_pct": -34.38
+        },
+        "ammonia_n": {
+          "indicator": "ammonia_n",
+          "label": "氨氮",
+          "unit": "mg/L",
+          "current": 0.34,
+          "mean": 0.22,
+          "minimum": 0.1,
+          "maximum": 0.34,
+          "slope_per_hour": 0.01044,
+          "direction": "上升",
+          "change_pct": 240.0
+        },
+        "nitrite_n": {
+          "indicator": "nitrite_n",
+          "label": "亚硝酸盐",
+          "unit": "mg/L",
+          "current": 0.14,
+          "mean": 0.095,
+          "minimum": 0.05,
+          "maximum": 0.14,
+          "slope_per_hour": 0.00391,
+          "direction": "上升",
+          "change_pct": 180.0
+        },
+        "ph": {
+          "indicator": "ph",
+          "label": "pH",
+          "unit": "",
+          "current": 7.65,
+          "mean": 7.775,
+          "minimum": 7.65,
+          "maximum": 7.9,
+          "slope_per_hour": -0.01094,
+          "direction": "下降",
+          "change_pct": -3.16
+        },
+        "water_temp": {
+          "indicator": "water_temp",
+          "label": "水温",
+          "unit": "℃",
+          "current": 27.1,
+          "mean": 27.3,
+          "minimum": 27.1,
+          "maximum": 27.5,
+          "slope_per_hour": -0.01746,
+          "direction": "平稳",
+          "change_pct": -1.45
+        }
+      },
+      "projections": {
+        "dissolved_oxygen": {
+          "indicator": "dissolved_oxygen",
+          "label": "溶氧",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 3.053,
+          "projected_extreme": 3.053,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": 12.56,
+          "threshold_used": 3.0,
+          "threshold_label": "危险线"
+        },
+        "ammonia_n": {
+          "indicator": "ammonia_n",
+          "label": "氨氮",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 0.465,
+          "projected_extreme": 0.465,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "nitrite_n": {
+          "indicator": "nitrite_n",
+          "label": "亚硝酸盐",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 0.187,
+          "projected_extreme": 0.187,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "ph": {
+          "indicator": "ph",
+          "label": "pH",
+          "unit": "",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 7.519,
+          "projected_extreme": 7.65,
+          "extreme_at_hour": 0.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "water_temp": {
+          "indicator": "water_temp",
+          "label": "水温",
+          "unit": "℃",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 26.89,
+          "projected_extreme": 27.1,
+          "extreme_at_hour": 0.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        }
+      },
+      "data_quality": {
+        "n_points": 24,
+        "interval_minutes": 60,
+        "interval_source": "timestamp",
+        "span_hours": 23.0,
+        "missing_indicators": [],
+        "warnings": []
+      },
+      "degraded_mode": true,
+      "projection_method": "linear_extrapolation_baseline",
+      "error_code": null,
+      "error_message": null
+    },
+    "vision": null,
+    "fusion": {
+      "risk_level": "预警",
+      "fused_score": 57.07,
+      "weighted_score": 57.07,
+      "score_floor": null,
+      "level_floors": [
+        "WATER_LEVEL:预警"
+      ],
+      "water_score": 0.5707,
+      "vision_score": null,
+      "effective_weights": {
+        "water": 1.0
+      },
+      "synergy_score": 0.0,
+      "synergy_hits": [],
+      "alerts": [],
+      "evidence": [
+        {
+          "source": "water",
+          "code": "SEV_DISSOLVED_OXYGEN",
+          "label": "溶氧处于警戒区间",
+          "value": 4.2,
+          "unit": "mg/L"
+        },
+        {
+          "source": "water",
+          "code": "SEV_AMMONIA_N",
+          "label": "氨氮处于警戒区间",
+          "value": 0.34,
+          "unit": "mg/L"
+        },
+        {
+          "source": "water",
+          "code": "SEV_NITRITE_N",
+          "label": "亚硝酸盐处于警戒区间",
+          "value": 0.14,
+          "unit": "mg/L"
+        },
+        {
+          "source": "water",
+          "code": "DO_ALERT_ETA",
+          "label": "预计 12.6 小时后溶氧跌破 3.0 mg/L危险线",
+          "value": 12.56,
+          "unit": "小时"
+        }
+      ],
+      "reason": "融合分 57.1（水质模态 0.57×1.00），判定等级【预警】，本次仅有水质单模态输入，权重已归一化；等级下限 WATER_LEVEL:预警。",
+      "modalities": [
+        "water"
+      ],
+      "failed_modalities": {},
+      "degraded_mode": true
+    },
+    "references": [
+      "《水质调控操作手册——增氧、换水、调水、底改》> 2. 溶解氧偏低（最紧急） > 2.1 分级响应（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 2. 投喂率：随水温变化（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《水质调控操作手册——增氧、换水、调水、底改》> 1. 调控总则：先救急，再治本（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 4. 投喂量必须下调的四种情况（本项目 Agent 的决策依据） > 4.1 溶氧偏低时减料（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《淡水池塘养殖水质指标阈值与分级》> 2. 溶解氧（最关键的指标） > 2.4 溶解氧分级与对应处置（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
+    ],
+    "knowledge_summary": {
+      "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+      "n_chunks": 6,
+      "degraded": false,
+      "warnings": [],
+      "purposes": {
+        "水质调控": 3,
+        "投料管理": 3
+      }
+    },
+    "knowledge_block": "### 【水质调控】\n1. [水质] 水质调控操作手册——增氧、换水、调水、底改 > 2. 溶解氧偏低（最紧急） > 2.1 分级响应（已核对原文；向量相似度 0.72）\n| 实测溶氧 | 风险等级 | 立即动作 |\n|---|---|---|\n| **≥ 5 mg/L** | 正常 | 维持现有增氧安排 |\n| **3 – 5 mg/L** | 预警 | **开启增氧机**，延长运行时间；减少投喂 30%–50% |\n| **< 3 mg/L** | 高危 | **全部增氧机满负荷开启**；立即停止投喂；准备换水 |\n| **< 1.5 mg/L** | 泛塘临界 | **紧急增氧 + 立即换水 + 全员值守**；备好增氧剂应急 |\n\n2. [水质] 水质调控操作手册——增氧、换水、调水、底改 > 1. 调控总则：先救急，再治本（已核对原文；向量相似度 0.64）\n水质调控有明确的**优先级顺序**，顺序颠倒会白费力气甚至加重病情：\n\n```\n第一优先：保命 —— 增氧、停料、捞死鱼        （分钟级）\n第二优先：稀释 —— 换水                       （小时级）\n第三优先：解毒 —— 降氨氮、降亚硝酸盐         （天级）\n第四优先：治本 —— 底改、培菌、调藻相         （周级）\n```\n\n> **关键认识**：**溶氧是所有水质指标中的第一优先级**。\n> 氨氮、亚硝酸盐超标对鱼是**慢性伤害**（数天），\n> 而溶氧不足对鱼是**急性致死**（数小时）。\n> 当两者同时出现时，**必须先解决溶氧**，\n> 因为缺氧状态下鱼的解毒能力几乎为零，此时降氨氮效果也差。\n\n3. [水质] 淡水池塘养殖水质指标阈值与分级 > 2. 溶解氧（最关键的指标） > 2.4 溶解氧分级与对应处置（已核对原文；向量相似度 0.62）\n| 溶氧 | 等级 | 鱼体反应 | 立即处置 |\n|---|---|---|---|\n| ≥ 5.0 mg/L | 适宜 | 正常摄食 | 维持常规管理 |\n| 3.0 – 5.0 mg/L | **警戒** | 摄食下降、浮头 | 开启增氧机；减少或暂停投喂 |\n| 1.5 – 3.0 mg/L | **危险** | 明显浮头、聚集进水口 | 立即增氧；换注新水；停料 |\n| < 1.5 mg/L | **泛塘临界** | 死亡 | 应急抢救，见《07 应急处置预案》 |\n\n> 表中 3.0 与 5.0 两档来自标准原文；**1.5 的\"泛塘临界\"是本项目工程定义**，\n> 标准未设此档。\n\n### 【投料管理】\n1. [投料] 淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 2. 投喂率：随水温变化（已核对原文；向量相似度 0.80）\n投喂率指**日投喂量占鱼体总重的百分比**。水温直接影响鱼的代谢率，\n因此投喂率必须随水温调整：\n\n| 水温区间 | 摄食与代谢状态 | 投喂率建议 | 说明 |\n|---|---|---|---|\n| **< 10℃** | 基本停止摄食 | **0 – 0.5%** | 越冬期，**原则上不投喂或极少量投喂**；仅在水温回升的晴天中午少量投喂 |\n| **10 – 15℃** | 摄食弱 | **0.5 – 1.0%** | 开春/秋末，隔天投喂 1 次 |\n| **15 – 20℃** | 摄食恢复 | **1.0 – 2.0%** | 生长启动期，每天 1 – 2 次 |\n| **20 – 28℃** | **摄食最旺盛，生长最快** | **2.0 – 3.5%** | **黄金生长期**，每天 2 – 3 次 |\n| **28 – 32℃** | 摄食仍强但**溶氧与水质风险高** | **1.5 – 2.5%** | **须视溶氧与水质下调**，高温期宁可少喂 |\n| **> 32℃** | 应激，摄食下降 | **0 – 1.0%** | 水温过高时停料或大幅减料 |\n\n> **本项目 Agent 的联动**：工具 `water_risk_predict` 返回的\n> `trends.water_temp.current` 可直接用于查上表给出投喂率建议。\n\n2. [投料] 淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 4. 投喂量必须下调的四种情况（本项目 Agent 的决策依据） > 4.1 溶氧偏低时减料（已核对原文；向量相似度 0.65）\n| 实测溶氧 | 处置 |\n|---|---|\n| **≥ 5 mg/L** | 可按正常投喂率投喂 |\n| **3 – 5 mg/L** | **投喂量减少 30% – 50%**，并开启增氧机 |\n| **< 3 mg/L** | **立即停止投喂**，全力增氧 |\n\n**原理**：鱼的消化过程本身耗氧（食物特殊动力作用），\n溶氧不足时消化率大幅下降，未消化的饲料既浪费又污染水体。\n\n3. [投料] 淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 5. 饲料管理 > 5.3 投喂操作要点（已核对原文；向量相似度 0.65）\n1. **投喂速度要慢**——\"慢、匀、细\"，边投边观察，\n   让饲料在沉底前被抢食，**减少残饵**；\n2. **以\"八成饱\"为准**——投喂至**大部分鱼散去**即可停止，\n   **切忌投到没有鱼来吃**；\n3. **投喂后 1 小时检查食台**——若仍有残饵，说明投喂过量，\n   下次应减量，同时**及时捞出残饵**；\n4. **恶劣天气前不投喂**——雷雨、台风、寒潮来临前应减料或停料。",
+    "trace": [
+      {
+        "step": 1,
+        "kind": "llm",
+        "title": "启动 Agent 调度",
+        "detail": "塘口 POND-03，品种 鲤科，水质 24 条读数，无图片",
+        "data": {}
+      },
+      {
+        "step": 2,
+        "kind": "llm",
+        "title": "调度 LLM 第 1 轮决策",
+        "detail": "finish_reason=tool_calls，tool_calls=1",
+        "data": {
+          "content": ""
+        }
+      },
+      {
+        "step": 3,
+        "kind": "tool_call",
+        "title": "调用工具 water_risk_predict",
+        "detail": "{\"readings\": [{\"timestamp\": \"2026-10-13T00:00:00\", \"water_temp\": 27.5, \"ph\": 7.9, \"dissolved_oxygen\": 6.4, \"ammonia_n\": 0.1, \"nitrite_n\": 0.05}, {\"timestamp\": \"2026-10-13T01:00:00\", \"water_temp\": 27.48, \"ph\": 7.89, \"dissolved_oxygen\": 6.3, \"ammonia_n\": 0.11, \"nitrite_n\": 0.054}, {\"timestamp\": \"2026-",
+        "data": {}
+      },
+      {
+        "step": 4,
+        "kind": "tool_result",
+        "title": "water_risk_predict 返回 status=ok",
+        "detail": "未来 72 小时内水质呈持续恶化趋势，综合风险分 57.1，判定等级【预警】。主控风险因子为溶氧：当前 4.20 mg/L，处于警戒区间。溶氧、氨氮、亚硝酸盐处于警戒区间。按近段回归速率 -0.096 mg/L/小时外推，预计 12.6 小时后溶氧将跌破 3.00 mg/L 危险线。氨氮在 12 小时内预计升至 0.47 mg/L。溶氧持续下降与氨氮、亚硝酸盐超标叠加，会显著削弱鱼类鳃组织的耐受力",
+        "data": {}
+      },
+      {
+        "step": 5,
+        "kind": "llm",
+        "title": "调度 LLM 第 2 轮决策",
+        "detail": "finish_reason=stop，tool_calls=0",
+        "data": {
+          "content": "[MockLLM] 已完成工具调用与融合分析，详见结构化输出。"
+        }
+      },
+      {
+        "step": 6,
+        "kind": "fusion",
+        "title": "融合决策：预警",
+        "detail": "融合分 57.1（水质模态 0.57×1.00），判定等级【预警】，本次仅有水质单模态输入，权重已归一化；等级下限 WATER_LEVEL:预警。",
+        "data": {
+          "risk_level": "预警",
+          "fused_score": 57.07,
+          "weighted_score": 57.07,
+          "score_floor": null,
+          "level_floors": [
+            "WATER_LEVEL:预警"
+          ],
+          "water_score": 0.5707,
+          "vision_score": null,
+          "effective_weights": {
+            "water": 1.0
+          },
+          "synergy_score": 0.0,
+          "synergy_hits": [],
+          "alerts": [],
+          "evidence": [
+            {
+              "source": "water",
+              "code": "SEV_DISSOLVED_OXYGEN",
+              "label": "溶氧处于警戒区间",
+              "value": 4.2,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "SEV_AMMONIA_N",
+              "label": "氨氮处于警戒区间",
+              "value": 0.34,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "SEV_NITRITE_N",
+              "label": "亚硝酸盐处于警戒区间",
+              "value": 0.14,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "DO_ALERT_ETA",
+              "label": "预计 12.6 小时后溶氧跌破 3.0 mg/L危险线",
+              "value": 12.56,
+              "unit": "小时"
+            }
+          ],
+          "reason": "融合分 57.1（水质模态 0.57×1.00），判定等级【预警】，本次仅有水质单模态输入，权重已归一化；等级下限 WATER_LEVEL:预警。",
+          "modalities": [
+            "water"
+          ],
+          "failed_modalities": {},
+          "degraded_mode": true
+        }
+      },
+      {
+        "step": 7,
+        "kind": "tool_result",
+        "title": "知识库检索：6 条（水质调控、投料管理）",
+        "detail": "水质调控×3；投料管理×3",
+        "data": {
+          "chunk_ids": [
+            "1060fad5cde5",
+            "77ec2eff8332",
+            "84788786513d",
+            "f26ba5d24fbf",
+            "7c65cfaf8d9e",
+            "5788766bc4aa"
+          ]
+        }
+      },
+      {
+        "step": 8,
+        "kind": "advisor",
+        "title": "未配置建议 LLM，使用规则模板生成养殖建议",
+        "detail": "规则模板的结论与结构化字段完全一致，不会引入模型幻觉",
+        "data": {}
+      }
+    ],
+    "llm_backends": {
+      "scheduler": "scheduler: MockLLM（确定性离线模式）",
+      "advisor": "advisor: MockLLM（确定性离线模式）"
+    },
+    "degraded_mode": true,
+    "degraded_reasons": [
+      "未配置建议 LLM，养殖建议由规则模板生成"
+    ],
+    "elapsed_seconds": "<本次调用耗时，秒>"
+  },
+  "POST /api/v1/assess (图像单模态)": {
+    "pond_id": "POND-03",
+    "risk_level": "高危",
+    "fused_score": 84.99,
+    "reason": "融合分 85.0（图像模态 0.85×1.00），判定等级【高危】，本次仅有图像单模态输入，权重已归一化；检出高致病性病害；等级下限 DISEASE_DETECTED。",
+    "headline": "【高危】烂鳃很重，马上处理。",
+    "advisories": [
+      {
+        "priority": 1,
+        "target": "投料",
+        "action": "马上停料 1–2 天，之后改投药饵；剩料烂在水里会更缺氧。",
+        "timing": "今天开始"
+      },
+      {
+        "priority": 1,
+        "target": "烂鳃（把握 0.9999）",
+        "action": "捞走病鱼单独养，按说明书撒药，同时送检。",
+        "timing": "今天内做完"
+      }
+    ],
+    "observation_window": "每天早晚各捞一次死鱼并记数，3 天后复看病灶有没有扩大。",
+    "confidence_note": "依据：仅鱼体图片（无水质时序）。不确定：无明显不确定项。复核：无需人工复核。",
+    "report": {
+      "risk_level": "高危",
+      "headline": "【高危】烂鳃很重，马上处理。",
+      "alerts": [
+        {
+          "code": "SEVERE_DISEASE",
+          "level": "critical",
+          "title": "高致病性病害告警",
+          "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+        }
+      ],
+      "water_actions": [
+        {
+          "priority": 1,
+          "target": "投料",
+          "action": "马上停料 1–2 天，之后改投药饵；剩料烂在水里会更缺氧。",
+          "timing": "今天开始"
+        }
+      ],
+      "disease_actions": [
+        {
+          "priority": 1,
+          "target": "烂鳃（把握 0.9999）",
+          "action": "捞走病鱼单独养，按说明书撒药，同时送检。",
+          "timing": "今天内做完"
+        }
+      ],
+      "observation_window": "每天早晚各捞一次死鱼并记数，3 天后复看病灶有没有扩大。",
+      "confidence_note": "依据：仅鱼体图片（无水质时序）。不确定：无明显不确定项。复核：无需人工复核。"
+    },
+    "alerts": [
+      {
+        "code": "SEVERE_DISEASE",
+        "level": "critical",
+        "title": "高致病性病害告警",
+        "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+      }
+    ],
+    "evidence": [
+      {
+        "source": "vision",
+        "code": "VISION_DISEASE",
+        "label": "检出烂鳃（细菌性），置信度 1.00",
+        "value": 0.9999,
+        "unit": ""
+      },
+      {
+        "source": "vision",
+        "code": "VISION_RAW_CLASS",
+        "label": "底层模型原始判定：gill_rot",
+        "value": null,
+        "unit": ""
+      }
+    ],
+    "water": null,
+    "vision": {
+      "tool": "fish_disease_detect",
+      "status": "ok",
+      "image_path": "<服务端落盘路径，前缀是 data/uploads/>",
+      "disease_type": "烂鳃",
+      "disease_group": "细菌性",
+      "confidence": 0.9999,
+      "is_healthy": false,
+      "severity_weight": 0.85,
+      "is_low_confidence": false,
+      "all_scores": {
+        "烂鳃": 0.9999,
+        "健康": 0.0001,
+        "出血": 0.0,
+        "水霉": 0.0
+      },
+      "raw_class": "gill_rot",
+      "model_version": "yolov8-fish.pt",
+      "degraded_mode": false,
+      "image_meta": {
+        "format": "jpeg",
+        "size_bytes": 2508,
+        "resolved_path": "<服务端落盘路径，前缀是 data/uploads/>",
+        "is_remote": false
+      },
+      "note": "检出细菌性烂鳃特征，建议结合水质数据综合研判。",
+      "error_code": null,
+      "error_message": null
+    },
+    "fusion": {
+      "risk_level": "高危",
+      "fused_score": 84.99,
+      "weighted_score": 84.99,
+      "score_floor": null,
+      "level_floors": [
+        "SEVERE_DISEASE",
+        "DISEASE_DETECTED"
+      ],
+      "water_score": null,
+      "vision_score": 0.8499,
+      "effective_weights": {
+        "vision": 1.0
+      },
+      "synergy_score": 0.0,
+      "synergy_hits": [],
+      "alerts": [
+        {
+          "code": "SEVERE_DISEASE",
+          "level": "critical",
+          "title": "高致病性病害告警",
+          "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+        }
+      ],
+      "evidence": [
+        {
+          "source": "vision",
+          "code": "VISION_DISEASE",
+          "label": "检出烂鳃（细菌性），置信度 1.00",
+          "value": 0.9999,
+          "unit": ""
+        },
+        {
+          "source": "vision",
+          "code": "VISION_RAW_CLASS",
+          "label": "底层模型原始判定：gill_rot",
+          "value": null,
+          "unit": ""
+        }
+      ],
+      "reason": "融合分 85.0（图像模态 0.85×1.00），判定等级【高危】，本次仅有图像单模态输入，权重已归一化；检出高致病性病害；等级下限 DISEASE_DETECTED。",
+      "modalities": [
+        "vision"
+      ],
+      "failed_modalities": {},
+      "degraded_mode": false
+    },
+    "references": [
+      "《应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应》> 2. 急性氨氮中毒 > 2.2 立即动作（依据 GB 11607-1989、SC/T 7015-2022、NY/T 755-2022；核验日期 2026-10-15）",
+      "《水质调控操作手册——增氧、换水、调水、底改》> 1. 调控总则：先救急，再治本（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《细菌性烂鳃病——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.3 第三步：内服治疗（第 2 – 5 天）（依据 GB 11607-1989、SC/T 7201.2-2006、SC/T 7011.1-2021、NY/T 755-2022；核验日期 2026-10-15）",
+      "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 2. 投喂率：随水温变化（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应》> 1. 泛塘（严重缺氧）——最高优先级 > 1.2 立即动作（按顺序，不要跳步）（依据 GB 11607-1989、SC/T 7015-2022、NY/T 755-2022；核验日期 2026-10-15）",
+      "《淡水池塘养殖水质指标阈值与分级》> 2. 溶解氧（最关键的指标） > 2.4 溶解氧分级与对应处置（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《细菌性烂鳃病——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）（依据 GB 11607-1989、SC/T 7201.2-2006、SC/T 7011.1-2021、NY/T 755-2022；核验日期 2026-10-15）",
+      "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
+    ],
+    "knowledge_summary": {
+      "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+      "n_chunks": 8,
+      "degraded": false,
+      "warnings": [],
+      "purposes": {
+        "应急处置": 2,
+        "水质调控": 2,
+        "病害处置": 2,
+        "投料管理": 2
+      }
+    },
+    "knowledge_block": "### 【应急处置】\n1. [应急] 应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应 > 2. 急性氨氮中毒 > 2.2 立即动作（已核对原文；向量相似度 0.68）\n1. **大量换水**——这是最有效的措施，\n   迅速稀释氨氮浓度（注意控制温差，单次不超过 1/3）；\n2. **全部增氧机开启**——增氧促进硝化，同时缓解缺氧；\n3. **停料**——切断氨氮来源；\n4. **捞出死鱼与残饵**；\n5. **泼洒降氨产品**（沸石粉、硫代硫酸钠等）；\n6. **切忌泼洒生石灰**——\n   生石灰升高 pH，会使**分子氨比例骤增**，直接加重中毒；\n7. **若 pH 偏高**，可用有机酸类降碱产品**同时**降低 pH 与氨毒性。\n\n2. [应急] 应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应 > 1. 泛塘（严重缺氧）——最高优先级 > 1.2 立即动作（按顺序，不要跳步）（已核对原文；向量相似度 0.68）\n**第 1 分钟 —— 把氧打进去**\n\n1. **开启全部增氧机**（叶轮式、微孔、水车式，全部开）；\n2. **若停电或无设备**：\n   - 立即**泼洒增氧剂**（过碳酸钠、过氧化钙等，按产品说明用量）；\n   - 同时**人工搅水**——用船桨、水泵抽水抛洒，把表层水打到下层；\n   - **紧急调配备用发电机**。\n\n**第 5 分钟 —— 切断耗氧源**\n\n3. **立即停止投喂**——哪怕正在投喂也要停，\n   饲料与鱼的消化活动都是耗氧大户；\n4. **停止施用任何消毒剂、微生物制剂**——\n   这类产品本身耗氧或杀藻，会加重缺氧。\n\n**第 10 分钟 —— 稀释与换水**\n\n5. **注入新水**，尤其要**形成水流**（进水口开大，\n   让鱼群向进水口聚集，该处溶氧最高）；\n6. **抽取底层水排放**（若条件允许）——\n   底层水是缺氧与毒物的富集区。\n\n**持续动作**\n\n7. **专人值守至日出后 2 小时**——\n   泛塘最危险的时段是**凌晨 2 – 6 时**，\n   但日出后藻类刚恢复产氧，仍有反复风险，**不能过早撤人**；\n8. **捞出死鱼**并做无害化处理；\n9. **记录**：发生时间、水色、天气、鱼体表现、处置措施，供后续复盘。\n\n### 【水质调控】\n1. [水质] 水质调控操作手册——增氧、换水、调水、底改 > 1. 调控总则：先救急，再治本（已核对原文；向量相似度 0.70）\n水质调控有明确的**优先级顺序**，顺序颠倒会白费力气甚至加重病情：\n\n```\n第一优先：保命 —— 增氧、停料、捞死鱼        （分钟级）\n第二优先：稀释 —— 换水                       （小时级）\n第三优先：解毒 —— 降氨氮、降亚硝酸盐         （天级）\n第四优先：治本 —— 底改、培菌、调藻相         （周级）\n```\n\n> **关键认识**：**溶氧是所有水质指标中的第一优先级**。\n> 氨氮、亚硝酸盐超标对鱼是**慢性伤害**（数天），\n> 而溶氧不足对鱼是**急性致死**（数小时）。\n> 当两者同时出现时，**必须先解决溶氧**，\n> 因为缺氧状态下鱼的解毒能力几乎为零，此时降氨氮效果也差。\n\n2. [水质] 淡水池塘养殖水质指标阈值与分级 > 2. 溶解氧（最关键的指标） > 2.4 溶解氧分级与对应处置（已核对原文；向量相似度 0.63）\n| 溶氧 | 等级 | 鱼体反应 | 立即处置 |\n|---|---|---|---|\n| ≥ 5.0 mg/L | 适宜 | 正常摄食 | 维持常规管理 |\n| 3.0 – 5.0 mg/L | **警戒** | 摄食下降、浮头 | 开启增氧机；减少或暂停投喂 |\n| 1.5 – 3.0 mg/L | **危险** | 明显浮头、聚集进水口 | 立即增氧；换注新水；停料 |\n| < 1.5 mg/L | **泛塘临界** | 死亡 | 应急抢救，见《07 应急处置预案》 |\n\n> 表中 3.0 与 5.0 两档来自标准原文；**1.5 的\"泛塘临界\"是本项目工程定义**，\n> 标准未设此档。\n\n### 【病害处置】\n1. [病害] 细菌性烂鳃病——症状识别、发病条件与处置方案 > 3. 处置方案 > 3.3 第三步：内服治疗（第 2 – 5 天）（已核对原文；向量相似度 0.70）\n- **目的**：抑制体内病原菌；\n- **方式**：将国标渔用抗菌药拌入饲料投喂；\n- **关键要求**：\n  - **必须先停食 1 – 2 天再开始药饵投喂**，否则病鱼不摄食，药饵全部浪费并污染水体；\n  - **药饵量要足**（按鱼体重计算），但**投喂总量要少**（确保吃完，不留残饵）；\n  - **疗程要足**，一般为 5 – 7 天，中途停药易复发且诱发耐药性；\n  - **严禁使用**国家明令禁用的药物（如氯霉素、呋喃唑酮、孔雀石绿等）。\n\n2. [病害] 细菌性烂鳃病——症状识别、发病条件与处置方案 > 3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）（已核对原文；向量相似度 0.70）\n1. **立即开启全部增氧设备**，并持续运行；\n   - 烂鳃病鱼的鳃丝已受损，**氧摄取能力下降**，对溶氧的需求高于健康鱼，\n     因此维持高溶氧是首要措施；\n2. **停料**——病鱼摄食量低，投料只会转化为残饵污染水质，\n   进一步恶化病原繁殖环境；\n3. **换注新水**：排出部分底层水，注入新水，降低病原浓度与有机物负荷；\n4. **降低养殖密度**（条件允许时）：分池或起捕部分商品鱼，\n   减小单位水体负荷。\n\n### 【投料管理】\n1. [投料] 淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 2. 投喂率：随水温变化（已核对原文；向量相似度 0.70）\n投喂率指**日投喂量占鱼体总重的百分比**。水温直接影响鱼的代谢率，\n因此投喂率必须随水温调整：\n\n| 水温区间 | 摄食与代谢状态 | 投喂率建议 | 说明 |\n|---|---|---|---|\n| **< 10℃** | 基本停止摄食 | **0 – 0.5%** | 越冬期，**原则上不投喂或极少量投喂**；仅在水温回升的晴天中午少量投喂 |\n| **10 – 15℃** | 摄食弱 | **0.5 – 1.0%** | 开春/秋末，隔天投喂 1 次 |\n| **15 – 20℃** | 摄食恢复 | **1.0 – 2.0%** | 生长启动期，每天 1 – 2 次 |\n| **20 – 28℃** | **摄食最旺盛，生长最快** | **2.0 – 3.5%** | **黄金生长期**，每天 2 – 3 次 |\n| **28 – 32℃** | 摄食仍强但**溶氧与水质风险高** | **1.5 – 2.5%** | **须视溶氧与水质下调**，高温期宁可少喂 |\n| **> 32℃** | 应激，摄食下降 | **0 – 1.0%** | 水温过高时停料或大幅减料 |\n\n> **本项目 Agent 的联动**：工具 `water_risk_predict` 返回的\n> `trends.water_temp.current` 可直接用于查上表给出投喂率建议。\n\n2. [投料] 淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 5. 饲料管理 > 5.3 投喂操作要点（已核对原文；向量相似度 0.69）\n1. **投喂速度要慢**——\"慢、匀、细\"，边投边观察，\n   让饲料在沉底前被抢食，**减少残饵**；\n2. **以\"八成饱\"为准**——投喂至**大部分鱼散去**即可停止，\n   **切忌投到没有鱼来吃**；\n3. **投喂后 1 小时检查食台**——若仍有残饵，说明投喂过量，\n   下次应减量，同时**及时捞出残饵**；\n4. **恶劣天气前不投喂**——雷雨、台风、寒潮来临前应减料或停料。",
+    "trace": [
+      {
+        "step": 1,
+        "kind": "llm",
+        "title": "启动 Agent 调度",
+        "detail": "塘口 POND-03，品种 鲤科，无水质数据，含鱼体图片",
+        "data": {}
+      },
+      {
+        "step": 2,
+        "kind": "llm",
+        "title": "调度 LLM 第 1 轮决策",
+        "detail": "finish_reason=tool_calls，tool_calls=1",
+        "data": {
+          "content": ""
+        }
+      },
+      {
+        "step": 3,
+        "kind": "tool_call",
+        "title": "调用工具 fish_disease_detect",
+        "detail": "{\"image_path\": \"D:\\\\设置\\\\项目\\\\Agent\\\\数据集\\\\Fish Disease Dataset\\\\Test\\\\Bacterial gill disease\\\\Bacterial gill disease (100).jpg\", \"mock_source\": \"hash\"}",
+        "data": {}
+      },
+      {
+        "step": 4,
+        "kind": "tool_result",
+        "title": "fish_disease_detect 返回 status=ok",
+        "detail": "烂鳃",
+        "data": {}
+      },
+      {
+        "step": 5,
+        "kind": "llm",
+        "title": "调度 LLM 第 2 轮决策",
+        "detail": "finish_reason=stop，tool_calls=0",
+        "data": {
+          "content": "[MockLLM] 已完成工具调用与融合分析，详见结构化输出。"
+        }
+      },
+      {
+        "step": 6,
+        "kind": "fusion",
+        "title": "融合决策：高危",
+        "detail": "融合分 85.0（图像模态 0.85×1.00），判定等级【高危】，本次仅有图像单模态输入，权重已归一化；检出高致病性病害；等级下限 DISEASE_DETECTED。",
+        "data": {
+          "risk_level": "高危",
+          "fused_score": 84.99,
+          "weighted_score": 84.99,
+          "score_floor": null,
+          "level_floors": [
+            "SEVERE_DISEASE",
+            "DISEASE_DETECTED"
+          ],
+          "water_score": null,
+          "vision_score": 0.8499,
+          "effective_weights": {
+            "vision": 1.0
+          },
+          "synergy_score": 0.0,
+          "synergy_hits": [],
+          "alerts": [
+            {
+              "code": "SEVERE_DISEASE",
+              "level": "critical",
+              "title": "高致病性病害告警",
+              "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+            }
+          ],
+          "evidence": [
+            {
+              "source": "vision",
+              "code": "VISION_DISEASE",
+              "label": "检出烂鳃（细菌性），置信度 1.00",
+              "value": 0.9999,
+              "unit": ""
+            },
+            {
+              "source": "vision",
+              "code": "VISION_RAW_CLASS",
+              "label": "底层模型原始判定：gill_rot",
+              "value": null,
+              "unit": ""
+            }
+          ],
+          "reason": "融合分 85.0（图像模态 0.85×1.00），判定等级【高危】，本次仅有图像单模态输入，权重已归一化；检出高致病性病害；等级下限 DISEASE_DETECTED。",
+          "modalities": [
+            "vision"
+          ],
+          "failed_modalities": {},
+          "degraded_mode": false
+        }
+      },
+      {
+        "step": 7,
+        "kind": "tool_result",
+        "title": "知识库检索：8 条（应急处置、水质调控、病害处置、投料管理）",
+        "detail": "应急处置×2；水质调控×2；病害处置×2；投料管理×2",
+        "data": {
+          "chunk_ids": [
+            "840792757f98",
+            "84788786513d",
+            "a9191de0ef63",
+            "77ec2eff8332",
+            "134a37a1de93",
+            "7c65cfaf8d9e",
+            "d9970fbf9690",
+            "5788766bc4aa"
+          ]
+        }
+      },
+      {
+        "step": 8,
+        "kind": "advisor",
+        "title": "未配置建议 LLM，使用规则模板生成养殖建议",
+        "detail": "规则模板的结论与结构化字段完全一致，不会引入模型幻觉",
+        "data": {}
+      }
+    ],
+    "llm_backends": {
+      "scheduler": "scheduler: MockLLM（确定性离线模式）",
+      "advisor": "advisor: MockLLM（确定性离线模式）"
+    },
+    "degraded_mode": true,
+    "degraded_reasons": [
+      "未配置建议 LLM，养殖建议由规则模板生成"
+    ],
+    "elapsed_seconds": "<本次调用耗时，秒>"
+  },
+  "POST /api/v1/assess (双模态)": {
+    "pond_id": "demo-pond-1",
+    "risk_level": "高危",
+    "fused_score": 100.0,
+    "reason": "融合分 100.0（水质模态 0.57×0.60 + 图像模态 0.85×0.40 + 协同加成 35），判定等级【高危】；检出高致病性病害；等级下限 WATER_LEVEL:预警、DISEASE_DETECTED；命中 3 条多源协同规则。",
+    "headline": "【高危】溶氧出问题了，马上处理。",
+    "advisories": [
+      {
+        "priority": 1,
+        "target": "溶氧（水里的氧气）",
+        "action": "增氧机一直开着别停，后半夜最容易缺氧。",
+        "timing": "12.6 小时后会掉到 3.0，之前必须开机"
+      },
+      {
+        "priority": 1,
+        "target": "烂鳃（把握 0.9999）",
+        "action": "捞走病鱼单独养，按说明书撒药，同时送检。",
+        "timing": "今天内做完"
+      },
+      {
+        "priority": 2,
+        "target": "氨氮、亚硝酸盐",
+        "action": "停料 2–3 天，换掉两三成水，撒芽孢杆菌。",
+        "timing": "今天开始，两天后复测"
+      }
+    ],
+    "observation_window": "6 小时后复测溶氧和氨氮，明天看鱼有没有好转。",
+    "confidence_note": "依据：水质 24 点 + 图片检出烂鳃（把握 0.9999）。不确定：结论含 12.0 小时外推；水质工具处于降级模式。复核：建议人工核对水质原始数据。",
+    "report": {
+      "risk_level": "高危",
+      "headline": "【高危】溶氧出问题了，马上处理。",
+      "alerts": [
+        {
+          "code": "SEVERE_DISEASE",
+          "level": "critical",
+          "title": "高致病性病害告警",
+          "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+        },
+        {
+          "code": "SYN_BACTERIAL_ON_WARNING",
+          "level": "critical",
+          "title": "多源协同风险",
+          "detail": "水质已达预警及以上，同时检出细菌性病害，细菌繁殖条件与宿主抵抗力下降叠加"
+        },
+        {
+          "code": "SYN_NITROGEN_WITH_DISEASE",
+          "level": "critical",
+          "title": "多源协同风险",
+          "detail": "氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫"
+        },
+        {
+          "code": "SYN_LOW_DO_WITH_GILL",
+          "level": "critical",
+          "title": "多源协同风险",
+          "detail": "溶氧处于低位/预测将持续下降，同时检出烂鳃，鳃组织摄氧能力已受损"
+        }
+      ],
+      "water_actions": [
+        {
+          "priority": 1,
+          "target": "溶氧（水里的氧气）",
+          "action": "增氧机一直开着别停，后半夜最容易缺氧。",
+          "timing": "12.6 小时后会掉到 3.0，之前必须开机"
+        },
+        {
+          "priority": 2,
+          "target": "氨氮、亚硝酸盐",
+          "action": "停料 2–3 天，换掉两三成水，撒芽孢杆菌。",
+          "timing": "今天开始，两天后复测"
+        }
+      ],
+      "disease_actions": [
+        {
+          "priority": 1,
+          "target": "烂鳃（把握 0.9999）",
+          "action": "捞走病鱼单独养，按说明书撒药，同时送检。",
+          "timing": "今天内做完"
+        }
+      ],
+      "observation_window": "6 小时后复测溶氧和氨氮，明天看鱼有没有好转。",
+      "confidence_note": "依据：水质 24 点 + 图片检出烂鳃（把握 0.9999）。不确定：结论含 12.0 小时外推；水质工具处于降级模式。复核：建议人工核对水质原始数据。"
+    },
+    "alerts": [
+      {
+        "code": "SEVERE_DISEASE",
+        "level": "critical",
+        "title": "高致病性病害告警",
+        "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+      },
+      {
+        "code": "SYN_BACTERIAL_ON_WARNING",
+        "level": "critical",
+        "title": "多源协同风险",
+        "detail": "水质已达预警及以上，同时检出细菌性病害，细菌繁殖条件与宿主抵抗力下降叠加"
+      },
+      {
+        "code": "SYN_NITROGEN_WITH_DISEASE",
+        "level": "critical",
+        "title": "多源协同风险",
+        "detail": "氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫"
+      },
+      {
+        "code": "SYN_LOW_DO_WITH_GILL",
+        "level": "critical",
+        "title": "多源协同风险",
+        "detail": "溶氧处于低位/预测将持续下降，同时检出烂鳃，鳃组织摄氧能力已受损"
+      }
+    ],
+    "evidence": [
+      {
+        "source": "water",
+        "code": "SEV_DISSOLVED_OXYGEN",
+        "label": "溶氧处于警戒区间",
+        "value": 4.2,
+        "unit": "mg/L"
+      },
+      {
+        "source": "water",
+        "code": "SEV_AMMONIA_N",
+        "label": "氨氮处于警戒区间",
+        "value": 0.34,
+        "unit": "mg/L"
+      },
+      {
+        "source": "water",
+        "code": "SEV_NITRITE_N",
+        "label": "亚硝酸盐处于警戒区间",
+        "value": 0.14,
+        "unit": "mg/L"
+      },
+      {
+        "source": "water",
+        "code": "DO_ALERT_ETA",
+        "label": "预计 12.6 小时后溶氧跌破 3.0 mg/L危险线",
+        "value": 12.56,
+        "unit": "小时"
+      },
+      {
+        "source": "vision",
+        "code": "VISION_DISEASE",
+        "label": "检出烂鳃（细菌性），置信度 1.00",
+        "value": 0.9999,
+        "unit": ""
+      },
+      {
+        "source": "vision",
+        "code": "VISION_RAW_CLASS",
+        "label": "底层模型原始判定：gill_rot",
+        "value": null,
+        "unit": ""
+      },
+      {
+        "source": "fusion",
+        "code": "SYN_BACTERIAL_ON_WARNING",
+        "label": "水质已达预警及以上，同时检出细菌性病害，细菌繁殖条件与宿主抵抗力下降叠加",
+        "value": 12.0,
+        "unit": ""
+      },
+      {
+        "source": "fusion",
+        "code": "SYN_NITROGEN_WITH_DISEASE",
+        "label": "氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫",
+        "value": 8.0,
+        "unit": ""
+      },
+      {
+        "source": "fusion",
+        "code": "SYN_LOW_DO_WITH_GILL",
+        "label": "溶氧处于低位/预测将持续下降，同时检出烂鳃，鳃组织摄氧能力已受损",
+        "value": 15.0,
+        "unit": ""
+      }
+    ],
+    "water": {
+      "tool": "water_risk_predict",
+      "status": "ok",
+      "pond_id": "demo-pond-1",
+      "risk_level": "预警",
+      "risk_score": 57.07,
+      "horizon_hours": 72,
+      "extrapolation_horizon_hours": 12.0,
+      "species": "鲤科",
+      "degradation_summary": "未来 72 小时内水质呈持续恶化趋势，综合风险分 57.1，判定等级【预警】。主控风险因子为溶氧：当前 4.20 mg/L，处于警戒区间。溶氧、氨氮、亚硝酸盐处于警戒区间。按近段回归速率 -0.096 mg/L/小时外推，预计 12.6 小时后溶氧将跌破 3.00 mg/L 危险线。氨氮在 12 小时内预计升至 0.47 mg/L。溶氧持续下降与氨氮、亚硝酸盐超标叠加，会显著削弱鱼类鳃组织的耐受力；夜间至凌晨（约 2–6 时）藻类停止产氧，泛塘风险将明显升高。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）",
+      "limiting_factor": "dissolved_oxygen",
+      "limiting_factor_label": "溶氧",
+      "projected_do_alert_eta_hours": 12.56,
+      "projected_do_alert_threshold": 3.0,
+      "projected_do_alert_label": "危险线",
+      "exceeded_indicators": [
+        "溶氧",
+        "氨氮",
+        "亚硝酸盐"
+      ],
+      "rule_hits": [
+        "DO_BELOW_OPTIMAL",
+        "NH3N_ABOVE_WARNING",
+        "NO2N_ABOVE_WARNING"
+      ],
+      "redline_hits": [],
+      "severity_map": {
+        "dissolved_oxygen": 0.5,
+        "ammonia_n": 0.5,
+        "nitrite_n": 0.5,
+        "ph": 0.0,
+        "water_temp": 0.0
+      },
+      "effective_weights": {
+        "dissolved_oxygen": 0.380435,
+        "ammonia_n": 0.217391,
+        "nitrite_n": 0.163043,
+        "ph": 0.130435,
+        "water_temp": 0.108696
+      },
+      "trends": {
+        "dissolved_oxygen": {
+          "indicator": "dissolved_oxygen",
+          "label": "溶氧",
+          "unit": "mg/L",
+          "current": 4.2,
+          "mean": 5.3,
+          "minimum": 4.2,
+          "maximum": 6.4,
+          "slope_per_hour": -0.09557,
+          "direction": "下降",
+          "change_pct": -34.38
+        },
+        "ammonia_n": {
+          "indicator": "ammonia_n",
+          "label": "氨氮",
+          "unit": "mg/L",
+          "current": 0.34,
+          "mean": 0.22,
+          "minimum": 0.1,
+          "maximum": 0.34,
+          "slope_per_hour": 0.01044,
+          "direction": "上升",
+          "change_pct": 240.0
+        },
+        "nitrite_n": {
+          "indicator": "nitrite_n",
+          "label": "亚硝酸盐",
+          "unit": "mg/L",
+          "current": 0.14,
+          "mean": 0.095,
+          "minimum": 0.05,
+          "maximum": 0.14,
+          "slope_per_hour": 0.00391,
+          "direction": "上升",
+          "change_pct": 180.0
+        },
+        "ph": {
+          "indicator": "ph",
+          "label": "pH",
+          "unit": "",
+          "current": 7.65,
+          "mean": 7.775,
+          "minimum": 7.65,
+          "maximum": 7.9,
+          "slope_per_hour": -0.01094,
+          "direction": "下降",
+          "change_pct": -3.16
+        },
+        "water_temp": {
+          "indicator": "water_temp",
+          "label": "水温",
+          "unit": "℃",
+          "current": 27.1,
+          "mean": 27.3,
+          "minimum": 27.1,
+          "maximum": 27.5,
+          "slope_per_hour": -0.01746,
+          "direction": "平稳",
+          "change_pct": -1.45
+        }
+      },
+      "projections": {
+        "dissolved_oxygen": {
+          "indicator": "dissolved_oxygen",
+          "label": "溶氧",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 3.053,
+          "projected_extreme": 3.053,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": 12.56,
+          "threshold_used": 3.0,
+          "threshold_label": "危险线"
+        },
+        "ammonia_n": {
+          "indicator": "ammonia_n",
+          "label": "氨氮",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 0.465,
+          "projected_extreme": 0.465,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "nitrite_n": {
+          "indicator": "nitrite_n",
+          "label": "亚硝酸盐",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 0.187,
+          "projected_extreme": 0.187,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "ph": {
+          "indicator": "ph",
+          "label": "pH",
+          "unit": "",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 7.519,
+          "projected_extreme": 7.65,
+          "extreme_at_hour": 0.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "water_temp": {
+          "indicator": "water_temp",
+          "label": "水温",
+          "unit": "℃",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 26.89,
+          "projected_extreme": 27.1,
+          "extreme_at_hour": 0.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        }
+      },
+      "data_quality": {
+        "n_points": 24,
+        "interval_minutes": 60,
+        "interval_source": "timestamp",
+        "span_hours": 23.0,
+        "missing_indicators": [],
+        "warnings": []
+      },
+      "degraded_mode": true,
+      "projection_method": "linear_extrapolation_baseline",
+      "error_code": null,
+      "error_message": null
+    },
+    "vision": {
+      "tool": "fish_disease_detect",
+      "status": "ok",
+      "image_path": "<服务端落盘路径，前缀是 data/uploads/>",
+      "disease_type": "烂鳃",
+      "disease_group": "细菌性",
+      "confidence": 0.9999,
+      "is_healthy": false,
+      "severity_weight": 0.85,
+      "is_low_confidence": false,
+      "all_scores": {
+        "烂鳃": 0.9999,
+        "健康": 0.0001,
+        "出血": 0.0,
+        "水霉": 0.0
+      },
+      "raw_class": "gill_rot",
+      "model_version": "yolov8-fish.pt",
+      "degraded_mode": false,
+      "image_meta": {
+        "format": "jpeg",
+        "size_bytes": 2508,
+        "resolved_path": "<服务端落盘路径，前缀是 data/uploads/>",
+        "is_remote": false
+      },
+      "note": "检出细菌性烂鳃特征，建议结合水质数据综合研判。",
+      "error_code": null,
+      "error_message": null
+    },
+    "fusion": {
+      "risk_level": "高危",
+      "fused_score": 100.0,
+      "weighted_score": 100.0,
+      "score_floor": null,
+      "level_floors": [
+        "SEVERE_DISEASE",
+        "WATER_LEVEL:预警",
+        "DISEASE_DETECTED"
+      ],
+      "water_score": 0.5707,
+      "vision_score": 0.8499,
+      "effective_weights": {
+        "water": 0.6,
+        "vision": 0.4
+      },
+      "synergy_score": 35.0,
+      "synergy_hits": [
+        "SYN_BACTERIAL_ON_WARNING",
+        "SYN_NITROGEN_WITH_DISEASE",
+        "SYN_LOW_DO_WITH_GILL"
+      ],
+      "alerts": [
+        {
+          "code": "SEVERE_DISEASE",
+          "level": "critical",
+          "title": "高致病性病害告警",
+          "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+        },
+        {
+          "code": "SYN_BACTERIAL_ON_WARNING",
+          "level": "critical",
+          "title": "多源协同风险",
+          "detail": "水质已达预警及以上，同时检出细菌性病害，细菌繁殖条件与宿主抵抗力下降叠加"
+        },
+        {
+          "code": "SYN_NITROGEN_WITH_DISEASE",
+          "level": "critical",
+          "title": "多源协同风险",
+          "detail": "氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫"
+        },
+        {
+          "code": "SYN_LOW_DO_WITH_GILL",
+          "level": "critical",
+          "title": "多源协同风险",
+          "detail": "溶氧处于低位/预测将持续下降，同时检出烂鳃，鳃组织摄氧能力已受损"
+        }
+      ],
+      "evidence": [
+        {
+          "source": "water",
+          "code": "SEV_DISSOLVED_OXYGEN",
+          "label": "溶氧处于警戒区间",
+          "value": 4.2,
+          "unit": "mg/L"
+        },
+        {
+          "source": "water",
+          "code": "SEV_AMMONIA_N",
+          "label": "氨氮处于警戒区间",
+          "value": 0.34,
+          "unit": "mg/L"
+        },
+        {
+          "source": "water",
+          "code": "SEV_NITRITE_N",
+          "label": "亚硝酸盐处于警戒区间",
+          "value": 0.14,
+          "unit": "mg/L"
+        },
+        {
+          "source": "water",
+          "code": "DO_ALERT_ETA",
+          "label": "预计 12.6 小时后溶氧跌破 3.0 mg/L危险线",
+          "value": 12.56,
+          "unit": "小时"
+        },
+        {
+          "source": "vision",
+          "code": "VISION_DISEASE",
+          "label": "检出烂鳃（细菌性），置信度 1.00",
+          "value": 0.9999,
+          "unit": ""
+        },
+        {
+          "source": "vision",
+          "code": "VISION_RAW_CLASS",
+          "label": "底层模型原始判定：gill_rot",
+          "value": null,
+          "unit": ""
+        },
+        {
+          "source": "fusion",
+          "code": "SYN_BACTERIAL_ON_WARNING",
+          "label": "水质已达预警及以上，同时检出细菌性病害，细菌繁殖条件与宿主抵抗力下降叠加",
+          "value": 12.0,
+          "unit": ""
+        },
+        {
+          "source": "fusion",
+          "code": "SYN_NITROGEN_WITH_DISEASE",
+          "label": "氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫",
+          "value": 8.0,
+          "unit": ""
+        },
+        {
+          "source": "fusion",
+          "code": "SYN_LOW_DO_WITH_GILL",
+          "label": "溶氧处于低位/预测将持续下降，同时检出烂鳃，鳃组织摄氧能力已受损",
+          "value": 15.0,
+          "unit": ""
+        }
+      ],
+      "reason": "融合分 100.0（水质模态 0.57×0.60 + 图像模态 0.85×0.40 + 协同加成 35），判定等级【高危】；检出高致病性病害；等级下限 WATER_LEVEL:预警、DISEASE_DETECTED；命中 3 条多源协同规则。",
+      "modalities": [
+        "water",
+        "vision"
+      ],
+      "failed_modalities": {},
+      "degraded_mode": true
+    },
+    "references": [
+      "《应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应》> 0. 总原则（依据 GB 11607-1989、SC/T 7015-2022、NY/T 755-2022；核验日期 2026-10-15）",
+      "《水质调控操作手册——增氧、换水、调水、底改》> 2. 溶解氧偏低（最紧急） > 2.1 分级响应（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《细菌性烂鳃病——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.3 第三步：内服治疗（第 2 – 5 天）（依据 GB 11607-1989、SC/T 7201.2-2006、SC/T 7011.1-2021、NY/T 755-2022；核验日期 2026-10-15）",
+      "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 2. 投喂率：随水温变化（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应》> 1. 泛塘（严重缺氧）——最高优先级 > 1.2 立即动作（按顺序，不要跳步）（依据 GB 11607-1989、SC/T 7015-2022、NY/T 755-2022；核验日期 2026-10-15）",
+      "《水质调控操作手册——增氧、换水、调水、底改》> 1. 调控总则：先救急，再治本（依据 GB 11607-1989；核验日期 2026-10-15）",
+      "《细菌性烂鳃病——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）（依据 GB 11607-1989、SC/T 7201.2-2006、SC/T 7011.1-2021、NY/T 755-2022；核验日期 2026-10-15）",
+      "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
+    ],
+    "knowledge_summary": {
+      "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+      "n_chunks": 8,
+      "degraded": false,
+      "warnings": [],
+      "purposes": {
+        "应急处置": 2,
+        "水质调控": 2,
+        "病害处置": 2,
+        "投料管理": 2
+      }
+    },
+    "knowledge_block": "### 【应急处置】\n1. [应急] 应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应 > 0. 总原则（已核对原文；向量相似度 0.71）\n> **先保命，后找原因；先做不可逆伤害最小的事，再考虑根治。**\n\n应急处置中**最大的错误是\"先搞清楚原因再动手\"**——\n泛塘从浮头到大批死亡可能只有 **1 – 2 小时**，\n等做完水质检测、查完资料，鱼已经死完了。\n\n**应急响应的正确姿势是：一边做通用急救动作，一边排查原因。**\n\n2. [应急] 应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应 > 1. 泛塘（严重缺氧）——最高优先级 > 1.2 立即动作（按顺序，不要跳步）（已核对原文；向量相似度 0.75）\n**第 1 分钟 —— 把氧打进去**\n\n1. **开启全部增氧机**（叶轮式、微孔、水车式，全部开）；\n2. **若停电或无设备**：\n   - 立即**泼洒增氧剂**（过碳酸钠、过氧化钙等，按产品说明用量）；\n   - 同时**人工搅水**——用船桨、水泵抽水抛洒，把表层水打到下层；\n   - **紧急调配备用发电机**。\n\n**第 5 分钟 —— 切断耗氧源**\n\n3. **立即停止投喂**——哪怕正在投喂也要停，\n   饲料与鱼的消化活动都是耗氧大户；\n4. **停止施用任何消毒剂、微生物制剂**——\n   这类产品本身耗氧或杀藻，会加重缺氧。\n\n**第 10 分钟 —— 稀释与换水**\n\n5. **注入新水**，尤其要**形成水流**（进水口开大，\n   让鱼群向进水口聚集，该处溶氧最高）；\n6. **抽取底层水排放**（若条件允许）——\n   底层水是缺氧与毒物的富集区。\n\n**持续动作**\n\n7. **专人值守至日出后 2 小时**——\n   泛塘最危险的时段是**凌晨 2 – 6 时**，\n   但日出后藻类刚恢复产氧，仍有反复风险，**不能过早撤人**；\n8. **捞出死鱼**并做无害化处理；\n9. **记录**：发生时间、水色、天气、鱼体表现、处置措施，供后续复盘。\n\n### 【水质调控】\n1. [水质] 水质调控操作手册——增氧、换水、调水、底改 > 2. 溶解氧偏低（最紧急） > 2.1 分级响应（已核对原文；向量相似度 0.72）\n| 实测溶氧 | 风险等级 | 立即动作 |\n|---|---|---|\n| **≥ 5 mg/L** | 正常 | 维持现有增氧安排 |\n| **3 – 5 mg/L** | 预警 | **开启增氧机**，延长运行时间；减少投喂 30%–50% |\n| **< 3 mg/L** | 高危 | **全部增氧机满负荷开启**；立即停止投喂；准备换水 |\n| **< 1.5 mg/L** | 泛塘临界 | **紧急增氧 + 立即换水 + 全员值守**；备好增氧剂应急 |\n\n2. [水质] 水质调控操作手册——增氧、换水、调水、底改 > 1. 调控总则：先救急，再治本（已核对原文；向量相似度 0.64）\n水质调控有明确的**优先级顺序**，顺序颠倒会白费力气甚至加重病情：\n\n```\n第一优先：保命 —— 增氧、停料、捞死鱼        （分钟级）\n第二优先：稀释 —— 换水                       （小时级）\n第三优先：解毒 —— 降氨氮、降亚硝酸盐         （天级）\n第四优先：治本 —— 底改、培菌、调藻相         （周级）\n```\n\n> **关键认识**：**溶氧是所有水质指标中的第一优先级**。\n> 氨氮、亚硝酸盐超标对鱼是**慢性伤害**（数天），\n> 而溶氧不足对鱼是**急性致死**（数小时）。\n> 当两者同时出现时，**必须先解决溶氧**，\n> 因为缺氧状态下鱼的解毒能力几乎为零，此时降氨氮效果也差。\n\n### 【病害处置】\n1. [病害] 细菌性烂鳃病——症状识别、发病条件与处置方案 > 3. 处置方案 > 3.3 第三步：内服治疗（第 2 – 5 天）（已核对原文；向量相似度 0.70）\n- **目的**：抑制体内病原菌；\n- **方式**：将国标渔用抗菌药拌入饲料投喂；\n- **关键要求**：\n  - **必须先停食 1 – 2 天再开始药饵投喂**，否则病鱼不摄食，药饵全部浪费并污染水体；\n  - **药饵量要足**（按鱼体重计算），但**投喂总量要少**（确保吃完，不留残饵）；\n  - **疗程要足**，一般为 5 – 7 天，中途停药易复发且诱发耐药性；\n  - **严禁使用**国家明令禁用的药物（如氯霉素、呋喃唑酮、孔雀石绿等）。\n\n2. [病害] 细菌性烂鳃病——症状识别、发病条件与处置方案 > 3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）（已核对原文；向量相似度 0.70）\n1. **立即开启全部增氧设备**，并持续运行；\n   - 烂鳃病鱼的鳃丝已受损，**氧摄取能力下降**，对溶氧的需求高于健康鱼，\n     因此维持高溶氧是首要措施；\n2. **停料**——病鱼摄食量低，投料只会转化为残饵污染水质，\n   进一步恶化病原繁殖环境；\n3. **换注新水**：排出部分底层水，注入新水，降低病原浓度与有机物负荷；\n4. **降低养殖密度**（条件允许时）：分池或起捕部分商品鱼，\n   减小单位水体负荷。\n\n### 【投料管理】\n1. [投料] 淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 2. 投喂率：随水温变化（已核对原文；向量相似度 0.78）\n投喂率指**日投喂量占鱼体总重的百分比**。水温直接影响鱼的代谢率，\n因此投喂率必须随水温调整：\n\n| 水温区间 | 摄食与代谢状态 | 投喂率建议 | 说明 |\n|---|---|---|---|\n| **< 10℃** | 基本停止摄食 | **0 – 0.5%** | 越冬期，**原则上不投喂或极少量投喂**；仅在水温回升的晴天中午少量投喂 |\n| **10 – 15℃** | 摄食弱 | **0.5 – 1.0%** | 开春/秋末，隔天投喂 1 次 |\n| **15 – 20℃** | 摄食恢复 | **1.0 – 2.0%** | 生长启动期，每天 1 – 2 次 |\n| **20 – 28℃** | **摄食最旺盛，生长最快** | **2.0 – 3.5%** | **黄金生长期**，每天 2 – 3 次 |\n| **28 – 32℃** | 摄食仍强但**溶氧与水质风险高** | **1.5 – 2.5%** | **须视溶氧与水质下调**，高温期宁可少喂 |\n| **> 32℃** | 应激，摄食下降 | **0 – 1.0%** | 水温过高时停料或大幅减料 |\n\n> **本项目 Agent 的联动**：工具 `water_risk_predict` 返回的\n> `trends.water_temp.current` 可直接用于查上表给出投喂率建议。\n\n2. [投料] 淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 5. 饲料管理 > 5.3 投喂操作要点（已核对原文；向量相似度 0.70）\n1. **投喂速度要慢**——\"慢、匀、细\"，边投边观察，\n   让饲料在沉底前被抢食，**减少残饵**；\n2. **以\"八成饱\"为准**——投喂至**大部分鱼散去**即可停止，\n   **切忌投到没有鱼来吃**；\n3. **投喂后 1 小时检查食台**——若仍有残饵，说明投喂过量，\n   下次应减量，同时**及时捞出残饵**；\n4. **恶劣天气前不投喂**——雷雨、台风、寒潮来临前应减料或停料。",
+    "trace": [
+      {
+        "step": 1,
+        "kind": "llm",
+        "title": "启动 Agent 调度",
+        "detail": "塘口 demo-pond-1，品种 鲤科，水质 24 条读数，含鱼体图片",
+        "data": {}
+      },
+      {
+        "step": 2,
+        "kind": "llm",
+        "title": "调度 LLM 第 1 轮决策",
+        "detail": "finish_reason=tool_calls，tool_calls=2",
+        "data": {
+          "content": ""
+        }
+      },
+      {
+        "step": 3,
+        "kind": "tool_call",
+        "title": "调用工具 water_risk_predict",
+        "detail": "{\"readings\": [{\"timestamp\": \"2026-10-13T00:00:00\", \"water_temp\": 27.5, \"ph\": 7.9, \"dissolved_oxygen\": 6.4, \"ammonia_n\": 0.1, \"nitrite_n\": 0.05}, {\"timestamp\": \"2026-10-13T01:00:00\", \"water_temp\": 27.48, \"ph\": 7.89, \"dissolved_oxygen\": 6.3, \"ammonia_n\": 0.11, \"nitrite_n\": 0.054}, {\"timestamp\": \"2026-",
+        "data": {}
+      },
+      {
+        "step": 4,
+        "kind": "tool_result",
+        "title": "water_risk_predict 返回 status=ok",
+        "detail": "未来 72 小时内水质呈持续恶化趋势，综合风险分 57.1，判定等级【预警】。主控风险因子为溶氧：当前 4.20 mg/L，处于警戒区间。溶氧、氨氮、亚硝酸盐处于警戒区间。按近段回归速率 -0.096 mg/L/小时外推，预计 12.6 小时后溶氧将跌破 3.00 mg/L 危险线。氨氮在 12 小时内预计升至 0.47 mg/L。溶氧持续下降与氨氮、亚硝酸盐超标叠加，会显著削弱鱼类鳃组织的耐受力",
+        "data": {}
+      },
+      {
+        "step": 5,
+        "kind": "tool_call",
+        "title": "调用工具 fish_disease_detect",
+        "detail": "{\"image_path\": \"D:\\\\设置\\\\项目\\\\Agent\\\\数据集\\\\Fish Disease Dataset\\\\Test\\\\Bacterial gill disease\\\\Bacterial gill disease (100).jpg\", \"mock_source\": \"hash\"}",
+        "data": {}
+      },
+      {
+        "step": 6,
+        "kind": "tool_result",
+        "title": "fish_disease_detect 返回 status=ok",
+        "detail": "烂鳃",
+        "data": {}
+      },
+      {
+        "step": 7,
+        "kind": "llm",
+        "title": "调度 LLM 第 2 轮决策",
+        "detail": "finish_reason=stop，tool_calls=0",
+        "data": {
+          "content": "[MockLLM] 已完成工具调用与融合分析，详见结构化输出。"
+        }
+      },
+      {
+        "step": 8,
+        "kind": "fusion",
+        "title": "融合决策：高危",
+        "detail": "融合分 100.0（水质模态 0.57×0.60 + 图像模态 0.85×0.40 + 协同加成 35），判定等级【高危】；检出高致病性病害；等级下限 WATER_LEVEL:预警、DISEASE_DETECTED；命中 3 条多源协同规则。",
+        "data": {
+          "risk_level": "高危",
+          "fused_score": 100.0,
+          "weighted_score": 100.0,
+          "score_floor": null,
+          "level_floors": [
+            "SEVERE_DISEASE",
+            "WATER_LEVEL:预警",
+            "DISEASE_DETECTED"
+          ],
+          "water_score": 0.5707,
+          "vision_score": 0.8499,
+          "effective_weights": {
+            "water": 0.6,
+            "vision": 0.4
+          },
+          "synergy_score": 35.0,
+          "synergy_hits": [
+            "SYN_BACTERIAL_ON_WARNING",
+            "SYN_NITROGEN_WITH_DISEASE",
+            "SYN_LOW_DO_WITH_GILL"
+          ],
+          "alerts": [
+            {
+              "code": "SEVERE_DISEASE",
+              "level": "critical",
+              "title": "高致病性病害告警",
+              "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+            },
+            {
+              "code": "SYN_BACTERIAL_ON_WARNING",
+              "level": "critical",
+              "title": "多源协同风险",
+              "detail": "水质已达预警及以上，同时检出细菌性病害，细菌繁殖条件与宿主抵抗力下降叠加"
+            },
+            {
+              "code": "SYN_NITROGEN_WITH_DISEASE",
+              "level": "critical",
+              "title": "多源协同风险",
+              "detail": "氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫"
+            },
+            {
+              "code": "SYN_LOW_DO_WITH_GILL",
+              "level": "critical",
+              "title": "多源协同风险",
+              "detail": "溶氧处于低位/预测将持续下降，同时检出烂鳃，鳃组织摄氧能力已受损"
+            }
+          ],
+          "evidence": [
+            {
+              "source": "water",
+              "code": "SEV_DISSOLVED_OXYGEN",
+              "label": "溶氧处于警戒区间",
+              "value": 4.2,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "SEV_AMMONIA_N",
+              "label": "氨氮处于警戒区间",
+              "value": 0.34,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "SEV_NITRITE_N",
+              "label": "亚硝酸盐处于警戒区间",
+              "value": 0.14,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "DO_ALERT_ETA",
+              "label": "预计 12.6 小时后溶氧跌破 3.0 mg/L危险线",
+              "value": 12.56,
+              "unit": "小时"
+            },
+            {
+              "source": "vision",
+              "code": "VISION_DISEASE",
+              "label": "检出烂鳃（细菌性），置信度 1.00",
+              "value": 0.9999,
+              "unit": ""
+            },
+            {
+              "source": "vision",
+              "code": "VISION_RAW_CLASS",
+              "label": "底层模型原始判定：gill_rot",
+              "value": null,
+              "unit": ""
+            },
+            {
+              "source": "fusion",
+              "code": "SYN_BACTERIAL_ON_WARNING",
+              "label": "水质已达预警及以上，同时检出细菌性病害，细菌繁殖条件与宿主抵抗力下降叠加",
+              "value": 12.0,
+              "unit": ""
+            },
+            {
+              "source": "fusion",
+              "code": "SYN_NITROGEN_WITH_DISEASE",
+              "label": "氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫",
+              "value": 8.0,
+              "unit": ""
+            },
+            {
+              "source": "fusion",
+              "code": "SYN_LOW_DO_WITH_GILL",
+              "label": "溶氧处于低位/预测将持续下降，同时检出烂鳃，鳃组织摄氧能力已受损",
+              "value": 15.0,
+              "unit": ""
+            }
+          ],
+          "reason": "融合分 100.0（水质模态 0.57×0.60 + 图像模态 0.85×0.40 + 协同加成 35），判定等级【高危】；检出高致病性病害；等级下限 WATER_LEVEL:预警、DISEASE_DETECTED；命中 3 条多源协同规则。",
+          "modalities": [
+            "water",
+            "vision"
+          ],
+          "failed_modalities": {},
+          "degraded_mode": true
+        }
+      },
+      {
+        "step": 9,
+        "kind": "tool_result",
+        "title": "知识库检索：8 条（应急处置、水质调控、病害处置、投料管理）",
+        "detail": "应急处置×2；水质调控×2；病害处置×2；投料管理×2",
+        "data": {
+          "chunk_ids": [
+            "0a5db8fee626",
+            "1060fad5cde5",
+            "a9191de0ef63",
+            "77ec2eff8332",
+            "134a37a1de93",
+            "84788786513d",
+            "d9970fbf9690",
+            "5788766bc4aa"
+          ]
+        }
+      },
+      {
+        "step": 10,
+        "kind": "advisor",
+        "title": "未配置建议 LLM，使用规则模板生成养殖建议",
+        "detail": "规则模板的结论与结构化字段完全一致，不会引入模型幻觉",
+        "data": {}
+      }
+    ],
+    "llm_backends": {
+      "scheduler": "scheduler: MockLLM（确定性离线模式）",
+      "advisor": "advisor: MockLLM（确定性离线模式）"
+    },
+    "degraded_mode": true,
+    "degraded_reasons": [
+      "未配置建议 LLM，养殖建议由规则模板生成"
+    ],
+    "elapsed_seconds": "<本次调用耗时，秒>"
+  },
+  "POST /api/v1/tools/call": {
+    "tool": "water_risk_predict",
+    "elapsed_seconds": "<本次调用耗时，秒>",
+    "result": {
+      "tool": "water_risk_predict",
+      "status": "ok",
+      "pond_id": "unknown",
+      "risk_level": "预警",
+      "risk_score": 57.07,
+      "horizon_hours": 72,
+      "extrapolation_horizon_hours": 12.0,
+      "species": "鲤科",
+      "degradation_summary": "未来 72 小时内水质呈持续恶化趋势，综合风险分 57.1，判定等级【预警】。主控风险因子为溶氧：当前 4.20 mg/L，处于警戒区间。溶氧、氨氮、亚硝酸盐处于警戒区间。按近段回归速率 -0.096 mg/L/小时外推，预计 12.6 小时后溶氧将跌破 3.00 mg/L 危险线。氨氮在 12 小时内预计升至 0.47 mg/L。溶氧持续下降与氨氮、亚硝酸盐超标叠加，会显著削弱鱼类鳃组织的耐受力；夜间至凌晨（约 2–6 时）藻类停止产氧，泛塘风险将明显升高。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）",
+      "limiting_factor": "dissolved_oxygen",
+      "limiting_factor_label": "溶氧",
+      "projected_do_alert_eta_hours": 12.56,
+      "projected_do_alert_threshold": 3.0,
+      "projected_do_alert_label": "危险线",
+      "exceeded_indicators": [
+        "溶氧",
+        "氨氮",
+        "亚硝酸盐"
+      ],
+      "rule_hits": [
+        "DO_BELOW_OPTIMAL",
+        "NH3N_ABOVE_WARNING",
+        "NO2N_ABOVE_WARNING"
+      ],
+      "redline_hits": [],
+      "severity_map": {
+        "dissolved_oxygen": 0.5,
+        "ammonia_n": 0.5,
+        "nitrite_n": 0.5,
+        "ph": 0.0,
+        "water_temp": 0.0
+      },
+      "effective_weights": {
+        "dissolved_oxygen": 0.380435,
+        "ammonia_n": 0.217391,
+        "nitrite_n": 0.163043,
+        "ph": 0.130435,
+        "water_temp": 0.108696
+      },
+      "trends": {
+        "dissolved_oxygen": {
+          "indicator": "dissolved_oxygen",
+          "label": "溶氧",
+          "unit": "mg/L",
+          "current": 4.2,
+          "mean": 5.3,
+          "minimum": 4.2,
+          "maximum": 6.4,
+          "slope_per_hour": -0.09557,
+          "direction": "下降",
+          "change_pct": -34.38
+        },
+        "ammonia_n": {
+          "indicator": "ammonia_n",
+          "label": "氨氮",
+          "unit": "mg/L",
+          "current": 0.34,
+          "mean": 0.22,
+          "minimum": 0.1,
+          "maximum": 0.34,
+          "slope_per_hour": 0.01044,
+          "direction": "上升",
+          "change_pct": 240.0
+        },
+        "nitrite_n": {
+          "indicator": "nitrite_n",
+          "label": "亚硝酸盐",
+          "unit": "mg/L",
+          "current": 0.14,
+          "mean": 0.095,
+          "minimum": 0.05,
+          "maximum": 0.14,
+          "slope_per_hour": 0.00391,
+          "direction": "上升",
+          "change_pct": 180.0
+        },
+        "ph": {
+          "indicator": "ph",
+          "label": "pH",
+          "unit": "",
+          "current": 7.65,
+          "mean": 7.775,
+          "minimum": 7.65,
+          "maximum": 7.9,
+          "slope_per_hour": -0.01094,
+          "direction": "下降",
+          "change_pct": -3.16
+        },
+        "water_temp": {
+          "indicator": "water_temp",
+          "label": "水温",
+          "unit": "℃",
+          "current": 27.1,
+          "mean": 27.3,
+          "minimum": 27.1,
+          "maximum": 27.5,
+          "slope_per_hour": -0.01746,
+          "direction": "平稳",
+          "change_pct": -1.45
+        }
+      },
+      "projections": {
+        "dissolved_oxygen": {
+          "indicator": "dissolved_oxygen",
+          "label": "溶氧",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 3.053,
+          "projected_extreme": 3.053,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": 12.56,
+          "threshold_used": 3.0,
+          "threshold_label": "危险线"
+        },
+        "ammonia_n": {
+          "indicator": "ammonia_n",
+          "label": "氨氮",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 0.465,
+          "projected_extreme": 0.465,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "nitrite_n": {
+          "indicator": "nitrite_n",
+          "label": "亚硝酸盐",
+          "unit": "mg/L",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 0.187,
+          "projected_extreme": 0.187,
+          "extreme_at_hour": 12.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "ph": {
+          "indicator": "ph",
+          "label": "pH",
+          "unit": "",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 7.519,
+          "projected_extreme": 7.65,
+          "extreme_at_hour": 0.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        },
+        "water_temp": {
+          "indicator": "water_temp",
+          "label": "水温",
+          "unit": "℃",
+          "horizon_used_hours": 12.0,
+          "projected_at_horizon": 26.89,
+          "projected_extreme": 27.1,
+          "extreme_at_hour": 0.0,
+          "hours_to_threshold": null,
+          "threshold_used": null,
+          "threshold_label": null
+        }
+      },
+      "data_quality": {
+        "n_points": 24,
+        "interval_minutes": 60,
+        "interval_source": "timestamp",
+        "span_hours": 23.0,
+        "missing_indicators": [],
+        "warnings": []
+      },
+      "degraded_mode": true,
+      "projection_method": "linear_extrapolation_baseline",
+      "error_code": null,
+      "error_message": null
+    }
+  },
+  "POST /api/v1/ingest/sensor": {
+    "pond_id": "POND-03",
+    "accepted": 4,
+    "buffered_total": 4,
+    "first_timestamp": "2026-10-13T00:00:00",
+    "last_timestamp": "2026-10-13T03:00:00"
+  },
+  "GET /api/v1/ponds/{pond_id}/readings": {
+    "pond_id": "POND-03",
+    "total": 4,
+    "returned": 4,
+    "readings": [
+      {
+        "timestamp": "2026-10-13T00:00:00",
+        "water_temp": 27.5,
+        "ph": 7.9,
+        "dissolved_oxygen": 6.4,
+        "ammonia_n": 0.1,
+        "nitrite_n": 0.05
+      },
+      {
+        "timestamp": "2026-10-13T01:00:00",
+        "water_temp": 27.37,
+        "ph": 7.82,
+        "dissolved_oxygen": 5.67,
+        "ammonia_n": 0.18,
+        "nitrite_n": 0.08
+      },
+      {
+        "timestamp": "2026-10-13T02:00:00",
+        "water_temp": 27.23,
+        "ph": 7.73,
+        "dissolved_oxygen": 4.93,
+        "ammonia_n": 0.26,
+        "nitrite_n": 0.11
+      },
+      {
+        "timestamp": "2026-10-13T03:00:00",
+        "water_temp": 27.1,
+        "ph": 7.65,
+        "dissolved_oxygen": 4.2,
+        "ammonia_n": 0.34,
+        "nitrite_n": 0.14
+      }
+    ]
+  },
+  "GET /api/v1/ponds/{pond_id}/history": {
+    "pond_id": "POND-03",
+    "total": 2,
+    "items": [
+      {
+        "pond_id": "POND-03",
+        "risk_level": "高危",
+        "fused_score": 84.99,
+        "reason": "融合分 85.0（图像模态 0.85×1.00），判定等级【高危】，本次仅有图像单模态输入，权重已归一化；检出高致病性病害；等级下限 DISEASE_DETECTED。",
+        "headline": "【高危】烂鳃很重，马上处理。",
+        "advisories": [
+          {
+            "priority": 1,
+            "target": "投料",
+            "action": "马上停料 1–2 天，之后改投药饵；剩料烂在水里会更缺氧。",
+            "timing": "今天开始"
+          },
+          {
+            "priority": 1,
+            "target": "烂鳃（把握 0.9999）",
+            "action": "捞走病鱼单独养，按说明书撒药，同时送检。",
+            "timing": "今天内做完"
+          }
+        ],
+        "observation_window": "每天早晚各捞一次死鱼并记数，3 天后复看病灶有没有扩大。",
+        "confidence_note": "依据：仅鱼体图片（无水质时序）。不确定：无明显不确定项。复核：无需人工复核。",
+        "report": {
+          "risk_level": "高危",
+          "headline": "【高危】烂鳃很重，马上处理。",
+          "alerts": [
+            {
+              "code": "SEVERE_DISEASE",
+              "level": "critical",
+              "title": "高致病性病害告警",
+              "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+            }
+          ],
+          "water_actions": [
+            {
+              "priority": 1,
+              "target": "投料",
+              "action": "马上停料 1–2 天，之后改投药饵；剩料烂在水里会更缺氧。",
+              "timing": "今天开始"
+            }
+          ],
+          "disease_actions": [
+            {
+              "priority": 1,
+              "target": "烂鳃（把握 0.9999）",
+              "action": "捞走病鱼单独养，按说明书撒药，同时送检。",
+              "timing": "今天内做完"
+            }
+          ],
+          "observation_window": "每天早晚各捞一次死鱼并记数，3 天后复看病灶有没有扩大。",
+          "confidence_note": "依据：仅鱼体图片（无水质时序）。不确定：无明显不确定项。复核：无需人工复核。"
+        },
+        "alerts": [
+          {
+            "code": "SEVERE_DISEASE",
+            "level": "critical",
+            "title": "高致病性病害告警",
+            "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+          }
+        ],
+        "evidence": [
+          {
+            "source": "vision",
+            "code": "VISION_DISEASE",
+            "label": "检出烂鳃（细菌性），置信度 1.00",
+            "value": 0.9999,
+            "unit": ""
+          },
+          {
+            "source": "vision",
+            "code": "VISION_RAW_CLASS",
+            "label": "底层模型原始判定：gill_rot",
+            "value": null,
+            "unit": ""
+          }
+        ],
+        "water": null,
+        "vision": {
+          "tool": "fish_disease_detect",
+          "status": "ok",
+          "image_path": "<服务端落盘路径，前缀是 data/uploads/>",
+          "disease_type": "烂鳃",
+          "disease_group": "细菌性",
+          "confidence": 0.9999,
+          "is_healthy": false,
+          "severity_weight": 0.85,
+          "is_low_confidence": false,
+          "all_scores": {
+            "烂鳃": 0.9999,
+            "健康": 0.0001,
+            "出血": 0.0,
+            "水霉": 0.0
+          },
+          "raw_class": "gill_rot",
+          "model_version": "yolov8-fish.pt",
+          "degraded_mode": false,
+          "image_meta": {
+            "format": "jpeg",
+            "size_bytes": 2508,
+            "resolved_path": "<服务端落盘路径，前缀是 data/uploads/>",
+            "is_remote": false
+          },
+          "note": "检出细菌性烂鳃特征，建议结合水质数据综合研判。",
+          "error_code": null,
+          "error_message": null
+        },
+        "fusion": {
+          "risk_level": "高危",
+          "fused_score": 84.99,
+          "weighted_score": 84.99,
+          "score_floor": null,
+          "level_floors": [
+            "SEVERE_DISEASE",
+            "DISEASE_DETECTED"
+          ],
+          "water_score": null,
+          "vision_score": 0.8499,
+          "effective_weights": {
+            "vision": 1.0
+          },
+          "synergy_score": 0.0,
+          "synergy_hits": [],
+          "alerts": [
+            {
+              "code": "SEVERE_DISEASE",
+              "level": "critical",
+              "title": "高致病性病害告警",
+              "detail": "检出烂鳃（严重度 0.85，置信度 1.00），即使水质正常也需立即隔离处置。"
+            }
+          ],
+          "evidence": [
+            {
+              "source": "vision",
+              "code": "VISION_DISEASE",
+              "label": "检出烂鳃（细菌性），置信度 1.00",
+              "value": 0.9999,
+              "unit": ""
+            },
+            {
+              "source": "vision",
+              "code": "VISION_RAW_CLASS",
+              "label": "底层模型原始判定：gill_rot",
+              "value": null,
+              "unit": ""
+            }
+          ],
+          "reason": "融合分 85.0（图像模态 0.85×1.00），判定等级【高危】，本次仅有图像单模态输入，权重已归一化；检出高致病性病害；等级下限 DISEASE_DETECTED。",
+          "modalities": [
+            "vision"
+          ],
+          "failed_modalities": {},
+          "degraded_mode": false
+        },
+        "references": [
+          "《应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应》> 2. 急性氨氮中毒 > 2.2 立即动作（依据 GB 11607-1989、SC/T 7015-2022、NY/T 755-2022；核验日期 2026-10-15）",
+          "《水质调控操作手册——增氧、换水、调水、底改》> 1. 调控总则：先救急，再治本（依据 GB 11607-1989；核验日期 2026-10-15）",
+          "《细菌性烂鳃病——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.3 第三步：内服治疗（第 2 – 5 天）（依据 GB 11607-1989、SC/T 7201.2-2006、SC/T 7011.1-2021、NY/T 755-2022；核验日期 2026-10-15）",
+          "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 2. 投喂率：随水温变化（依据 GB 11607-1989；核验日期 2026-10-15）",
+          "《应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应》> 1. 泛塘（严重缺氧）——最高优先级 > 1.2 立即动作（按顺序，不要跳步）（依据 GB 11607-1989、SC/T 7015-2022、NY/T 755-2022；核验日期 2026-10-15）",
+          "《淡水池塘养殖水质指标阈值与分级》> 2. 溶解氧（最关键的指标） > 2.4 溶解氧分级与对应处置（依据 GB 11607-1989；核验日期 2026-10-15）",
+          "《细菌性烂鳃病——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）（依据 GB 11607-1989、SC/T 7201.2-2006、SC/T 7011.1-2021、NY/T 755-2022；核验日期 2026-10-15）",
+          "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
+        ],
+        "knowledge_summary": {
+          "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+          "n_chunks": 8,
+          "degraded": false,
+          "warnings": [],
+          "purposes": {
+            "应急处置": 2,
+            "水质调控": 2,
+            "病害处置": 2,
+            "投料管理": 2
+          }
+        },
+        "knowledge_block": "",
+        "trace": [],
+        "llm_backends": {
+          "scheduler": "scheduler: MockLLM（确定性离线模式）",
+          "advisor": "advisor: MockLLM（确定性离线模式）"
+        },
+        "degraded_mode": true,
+        "degraded_reasons": [
+          "未配置建议 LLM，养殖建议由规则模板生成"
+        ],
+        "elapsed_seconds": "<本次调用耗时，秒>"
+      },
+      {
+        "pond_id": "POND-03",
+        "risk_level": "预警",
+        "fused_score": 57.07,
+        "reason": "融合分 57.1（水质模态 0.57×1.00），判定等级【预警】，本次仅有水质单模态输入，权重已归一化；等级下限 WATER_LEVEL:预警。",
+        "headline": "【预警】溶氧开始不对，今天盯紧点。",
+        "advisories": [
+          {
+            "priority": 1,
+            "target": "溶氧（水里的氧气）",
+            "action": "增氧机一直开着别停，后半夜最容易缺氧。",
+            "timing": "12.6 小时后会掉到 3.0，之前必须开机"
+          },
+          {
+            "priority": 2,
+            "target": "氨氮、亚硝酸盐",
+            "action": "停料 2–3 天，换掉两三成水，撒芽孢杆菌。",
+            "timing": "今天开始，两天后复测"
+          }
+        ],
+        "observation_window": "6 小时后复测溶氧和氨氮，明天看鱼有没有好转。",
+        "confidence_note": "依据：水质 24 点。不确定：结论含 12.0 小时外推；水质工具处于降级模式。复核：建议人工核对水质原始数据。",
+        "report": {
+          "risk_level": "预警",
+          "headline": "【预警】溶氧开始不对，今天盯紧点。",
+          "alerts": [],
+          "water_actions": [
+            {
+              "priority": 1,
+              "target": "溶氧（水里的氧气）",
+              "action": "增氧机一直开着别停，后半夜最容易缺氧。",
+              "timing": "12.6 小时后会掉到 3.0，之前必须开机"
+            },
+            {
+              "priority": 2,
+              "target": "氨氮、亚硝酸盐",
+              "action": "停料 2–3 天，换掉两三成水，撒芽孢杆菌。",
+              "timing": "今天开始，两天后复测"
+            }
+          ],
+          "disease_actions": [],
+          "observation_window": "6 小时后复测溶氧和氨氮，明天看鱼有没有好转。",
+          "confidence_note": "依据：水质 24 点。不确定：结论含 12.0 小时外推；水质工具处于降级模式。复核：建议人工核对水质原始数据。"
+        },
+        "alerts": [],
+        "evidence": [
+          {
+            "source": "water",
+            "code": "SEV_DISSOLVED_OXYGEN",
+            "label": "溶氧处于警戒区间",
+            "value": 4.2,
+            "unit": "mg/L"
+          },
+          {
+            "source": "water",
+            "code": "SEV_AMMONIA_N",
+            "label": "氨氮处于警戒区间",
+            "value": 0.34,
+            "unit": "mg/L"
+          },
+          {
+            "source": "water",
+            "code": "SEV_NITRITE_N",
+            "label": "亚硝酸盐处于警戒区间",
+            "value": 0.14,
+            "unit": "mg/L"
+          },
+          {
+            "source": "water",
+            "code": "DO_ALERT_ETA",
+            "label": "预计 12.6 小时后溶氧跌破 3.0 mg/L危险线",
+            "value": 12.56,
+            "unit": "小时"
+          }
+        ],
+        "water": {
+          "tool": "water_risk_predict",
+          "status": "ok",
+          "pond_id": "POND-03",
+          "risk_level": "预警",
+          "risk_score": 57.07,
+          "horizon_hours": 72,
+          "extrapolation_horizon_hours": 12.0,
+          "species": "鲤科",
+          "degradation_summary": "未来 72 小时内水质呈持续恶化趋势，综合风险分 57.1，判定等级【预警】。主控风险因子为溶氧：当前 4.20 mg/L，处于警戒区间。溶氧、氨氮、亚硝酸盐处于警戒区间。按近段回归速率 -0.096 mg/L/小时外推，预计 12.6 小时后溶氧将跌破 3.00 mg/L 危险线。氨氮在 12 小时内预计升至 0.47 mg/L。溶氧持续下降与氨氮、亚硝酸盐超标叠加，会显著削弱鱼类鳃组织的耐受力；夜间至凌晨（约 2–6 时）藻类停止产氧，泛塘风险将明显升高。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）",
+          "limiting_factor": "dissolved_oxygen",
+          "limiting_factor_label": "溶氧",
+          "projected_do_alert_eta_hours": 12.56,
+          "projected_do_alert_threshold": 3.0,
+          "projected_do_alert_label": "危险线",
+          "exceeded_indicators": [
+            "溶氧",
+            "氨氮",
+            "亚硝酸盐"
+          ],
+          "rule_hits": [
+            "DO_BELOW_OPTIMAL",
+            "NH3N_ABOVE_WARNING",
+            "NO2N_ABOVE_WARNING"
+          ],
+          "redline_hits": [],
+          "severity_map": {
+            "dissolved_oxygen": 0.5,
+            "ammonia_n": 0.5,
+            "nitrite_n": 0.5,
+            "ph": 0.0,
+            "water_temp": 0.0
+          },
+          "effective_weights": {
+            "dissolved_oxygen": 0.380435,
+            "ammonia_n": 0.217391,
+            "nitrite_n": 0.163043,
+            "ph": 0.130435,
+            "water_temp": 0.108696
+          },
+          "trends": {
+            "dissolved_oxygen": {
+              "indicator": "dissolved_oxygen",
+              "label": "溶氧",
+              "unit": "mg/L",
+              "current": 4.2,
+              "mean": 5.3,
+              "minimum": 4.2,
+              "maximum": 6.4,
+              "slope_per_hour": -0.09557,
+              "direction": "下降",
+              "change_pct": -34.38
+            },
+            "ammonia_n": {
+              "indicator": "ammonia_n",
+              "label": "氨氮",
+              "unit": "mg/L",
+              "current": 0.34,
+              "mean": 0.22,
+              "minimum": 0.1,
+              "maximum": 0.34,
+              "slope_per_hour": 0.01044,
+              "direction": "上升",
+              "change_pct": 240.0
+            },
+            "nitrite_n": {
+              "indicator": "nitrite_n",
+              "label": "亚硝酸盐",
+              "unit": "mg/L",
+              "current": 0.14,
+              "mean": 0.095,
+              "minimum": 0.05,
+              "maximum": 0.14,
+              "slope_per_hour": 0.00391,
+              "direction": "上升",
+              "change_pct": 180.0
+            },
+            "ph": {
+              "indicator": "ph",
+              "label": "pH",
+              "unit": "",
+              "current": 7.65,
+              "mean": 7.775,
+              "minimum": 7.65,
+              "maximum": 7.9,
+              "slope_per_hour": -0.01094,
+              "direction": "下降",
+              "change_pct": -3.16
+            },
+            "water_temp": {
+              "indicator": "water_temp",
+              "label": "水温",
+              "unit": "℃",
+              "current": 27.1,
+              "mean": 27.3,
+              "minimum": 27.1,
+              "maximum": 27.5,
+              "slope_per_hour": -0.01746,
+              "direction": "平稳",
+              "change_pct": -1.45
+            }
+          },
+          "projections": {
+            "dissolved_oxygen": {
+              "indicator": "dissolved_oxygen",
+              "label": "溶氧",
+              "unit": "mg/L",
+              "horizon_used_hours": 12.0,
+              "projected_at_horizon": 3.053,
+              "projected_extreme": 3.053,
+              "extreme_at_hour": 12.0,
+              "hours_to_threshold": 12.56,
+              "threshold_used": 3.0,
+              "threshold_label": "危险线"
+            },
+            "ammonia_n": {
+              "indicator": "ammonia_n",
+              "label": "氨氮",
+              "unit": "mg/L",
+              "horizon_used_hours": 12.0,
+              "projected_at_horizon": 0.465,
+              "projected_extreme": 0.465,
+              "extreme_at_hour": 12.0,
+              "hours_to_threshold": null,
+              "threshold_used": null,
+              "threshold_label": null
+            },
+            "nitrite_n": {
+              "indicator": "nitrite_n",
+              "label": "亚硝酸盐",
+              "unit": "mg/L",
+              "horizon_used_hours": 12.0,
+              "projected_at_horizon": 0.187,
+              "projected_extreme": 0.187,
+              "extreme_at_hour": 12.0,
+              "hours_to_threshold": null,
+              "threshold_used": null,
+              "threshold_label": null
+            },
+            "ph": {
+              "indicator": "ph",
+              "label": "pH",
+              "unit": "",
+              "horizon_used_hours": 12.0,
+              "projected_at_horizon": 7.519,
+              "projected_extreme": 7.65,
+              "extreme_at_hour": 0.0,
+              "hours_to_threshold": null,
+              "threshold_used": null,
+              "threshold_label": null
+            },
+            "water_temp": {
+              "indicator": "water_temp",
+              "label": "水温",
+              "unit": "℃",
+              "horizon_used_hours": 12.0,
+              "projected_at_horizon": 26.89,
+              "projected_extreme": 27.1,
+              "extreme_at_hour": 0.0,
+              "hours_to_threshold": null,
+              "threshold_used": null,
+              "threshold_label": null
+            }
+          },
+          "data_quality": {
+            "n_points": 24,
+            "interval_minutes": 60,
+            "interval_source": "timestamp",
+            "span_hours": 23.0,
+            "missing_indicators": [],
+            "warnings": []
+          },
+          "degraded_mode": true,
+          "projection_method": "linear_extrapolation_baseline",
+          "error_code": null,
+          "error_message": null
+        },
+        "vision": null,
+        "fusion": {
+          "risk_level": "预警",
+          "fused_score": 57.07,
+          "weighted_score": 57.07,
+          "score_floor": null,
+          "level_floors": [
+            "WATER_LEVEL:预警"
+          ],
+          "water_score": 0.5707,
+          "vision_score": null,
+          "effective_weights": {
+            "water": 1.0
+          },
+          "synergy_score": 0.0,
+          "synergy_hits": [],
+          "alerts": [],
+          "evidence": [
+            {
+              "source": "water",
+              "code": "SEV_DISSOLVED_OXYGEN",
+              "label": "溶氧处于警戒区间",
+              "value": 4.2,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "SEV_AMMONIA_N",
+              "label": "氨氮处于警戒区间",
+              "value": 0.34,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "SEV_NITRITE_N",
+              "label": "亚硝酸盐处于警戒区间",
+              "value": 0.14,
+              "unit": "mg/L"
+            },
+            {
+              "source": "water",
+              "code": "DO_ALERT_ETA",
+              "label": "预计 12.6 小时后溶氧跌破 3.0 mg/L危险线",
+              "value": 12.56,
+              "unit": "小时"
+            }
+          ],
+          "reason": "融合分 57.1（水质模态 0.57×1.00），判定等级【预警】，本次仅有水质单模态输入，权重已归一化；等级下限 WATER_LEVEL:预警。",
+          "modalities": [
+            "water"
+          ],
+          "failed_modalities": {},
+          "degraded_mode": true
+        },
+        "references": [
+          "《水质调控操作手册——增氧、换水、调水、底改》> 2. 溶解氧偏低（最紧急） > 2.1 分级响应（依据 GB 11607-1989；核验日期 2026-10-15）",
+          "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 2. 投喂率：随水温变化（依据 GB 11607-1989；核验日期 2026-10-15）",
+          "《水质调控操作手册——增氧、换水、调水、底改》> 1. 调控总则：先救急，再治本（依据 GB 11607-1989；核验日期 2026-10-15）",
+          "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 4. 投喂量必须下调的四种情况（本项目 Agent 的决策依据） > 4.1 溶氧偏低时减料（依据 GB 11607-1989；核验日期 2026-10-15）",
+          "《淡水池塘养殖水质指标阈值与分级》> 2. 溶解氧（最关键的指标） > 2.4 溶解氧分级与对应处置（依据 GB 11607-1989；核验日期 2026-10-15）",
+          "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
+        ],
+        "knowledge_summary": {
+          "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+          "n_chunks": 6,
+          "degraded": false,
+          "warnings": [],
+          "purposes": {
+            "水质调控": 3,
+            "投料管理": 3
+          }
+        },
+        "knowledge_block": "",
+        "trace": [],
+        "llm_backends": {
+          "scheduler": "scheduler: MockLLM（确定性离线模式）",
+          "advisor": "advisor: MockLLM（确定性离线模式）"
+        },
+        "degraded_mode": true,
+        "degraded_reasons": [
+          "未配置建议 LLM，养殖建议由规则模板生成"
+        ],
+        "elapsed_seconds": "<本次调用耗时，秒>"
+      }
+    ]
+  },
+  "POST /api/v1/ingest/image": {
+    "upload_id": "<每次上传生成的 id>",
+    "filename": "Bacterial gill disease (100).jpg",
+    "size_bytes": 2508,
+    "content_type": "image/jpeg",
+    "stored_path": "<服务端落盘路径，前缀是 data/uploads/>",
+    "vision": "<mock 识别结果。字段结构与 POST /api/v1/assess (图像单模态) 的 vision 字段完全一致，请看那份样例——那份走的是固定图片路径，数值是稳定的真值。这里不固化的原因：上传后的落盘路径含随机 id，而 mock 分值由路径派生，每次不同。>"
+  },
+  "POST /api/v1/chat": {
+    "query": "溶氧低怎么办",
+    "answer": "【淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 3. 投喂频次与时间安排 > 3.2 关键禁忌（务必遵守）】（依据 GB 11607-1989；核验日期 2026-10-15）\n1. **严禁在溶氧低谷时投喂**——\n   凌晨至日出前（**约 2 – 6 时**）是池塘溶氧最低的时段，\n   此时投喂会因鱼类摄食活动加剧耗氧而**直接诱发泛塘**；\n2. **严禁在雷雨前、闷热天、气压低时投喂**——\n   这类天气本身溶氧就低，投喂等于雪上加霜；\n3. **严禁在水质异常时按常规量投喂**——\n   氨氮、亚硝酸盐超标时鱼体处于中毒状态，摄食后代谢负担更重，\n   且残饵与粪便会**进一步恶化水质，形成恶性循环**；\n4. **严禁带病投喂常规量**——\n   发病期应先停料 1 – 2 天再改投药饵（见病害处置方案）。\n\n【细菌性烂鳃病——症状识别、发病条件与处置方案 > 3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）】（依据 GB 11607-1989、SC/T 7201.2-2006、SC/T 7011.1-2021、NY/T 755-2022；核验日期 2026-10-15）\n1. **立即开启全部增氧设备**，并持续运行；\n   - 烂鳃病鱼的鳃丝已受损，**氧摄取能力下降**，对溶氧的需求高于健康鱼，\n     因此维持高溶氧是首要措施；\n2. **停料**——病鱼摄食量低，投料只会转化为残饵污染水质，\n   进一步恶化病原繁殖环境；\n3. **换注新水**：排出部分底层水，注入新水，降低病原浓度与有机物负荷；\n4. **降低养殖密度**（条件允许时）：分池或起捕部分商品鱼，\n   减小单位水体负荷。\n\n【淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 4. 投喂量必须下调的四种情况（本项目 Agent 的决策依据） > 4.4 溶氧出现快速下降趋势时提前减料】（依据 GB 11607-1989；核验日期 2026-10-15）\n即使当前溶氧仍在适宜区间，若 `water_risk_predict` 返回\n`trends.dissolved_oxygen.direction == \"下降\"` 且斜率明显，\n应**提前减料**——这是**预防性措施**，\n等到溶氧真的跌破危险线时已经来不及。",
+    "answer_is_raw_retrieval": true,
+    "chunks": [
+      {
+        "chunk_id": "62eb3a921fd8",
+        "title": "淡水池塘投料管理规范——投喂量、频次、时机与饲料管理",
+        "heading_text": "3. 投喂频次与时间安排 > 3.2 关键禁忌（务必遵守）",
+        "text": "1. **严禁在溶氧低谷时投喂**——\n   凌晨至日出前（**约 2 – 6 时**）是池塘溶氧最低的时段，\n   此时投喂会因鱼类摄食活动加剧耗氧而**直接诱发泛塘**；\n2. **严禁在雷雨前、闷热天、气压低时投喂**——\n   这类天气本身溶氧就低，投喂等于雪上加霜；\n3. **严禁在水质异常时按常规量投喂**——\n   氨氮、亚硝酸盐超标时鱼体处于中毒状态，摄食后代谢负担更重，\n   且残饵与粪便会**进一步恶化水质，形成恶性循环**；\n4. **严禁带病投喂常规量**——\n   发病期应先停料 1 – 2 天再改投药饵（见病害处置方案）。",
+        "category": "投料",
+        "disease": null,
+        "verified": true,
+        "score": 0.9607,
+        "dense_score": 0.644,
+        "sparse_score": 3.6204,
+        "matched_by": [
+          "dense",
+          "sparse"
+        ],
+        "citation_keys": []
+      },
+      {
+        "chunk_id": "d9970fbf9690",
+        "title": "细菌性烂鳃病——症状识别、发病条件与处置方案",
+        "heading_text": "3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）",
+        "text": "1. **立即开启全部增氧设备**，并持续运行；\n   - 烂鳃病鱼的鳃丝已受损，**氧摄取能力下降**，对溶氧的需求高于健康鱼，\n     因此维持高溶氧是首要措施；\n2. **停料**——病鱼摄食量低，投料只会转化为残饵污染水质，\n   进一步恶化病原繁殖环境；\n3. **换注新水**：排出部分底层水，注入新水，降低病原浓度与有机物负荷；\n4. **降低养殖密度**（条件允许时）：分池或起捕部分商品鱼，\n   减小单位水体负荷。",
+        "category": "病害",
+        "disease": "烂鳃",
+        "verified": true,
+        "score": 0.9472,
+        "dense_score": 0.6338,
+        "sparse_score": 3.8996,
+        "matched_by": [
+          "dense",
+          "sparse"
+        ],
+        "citation_keys": []
+      },
+      {
+        "chunk_id": "e121b46e9116",
+        "title": "淡水池塘投料管理规范——投喂量、频次、时机与饲料管理",
+        "heading_text": "4. 投喂量必须下调的四种情况（本项目 Agent 的决策依据） > 4.4 溶氧出现快速下降趋势时提前减料",
+        "text": "即使当前溶氧仍在适宜区间，若 `water_risk_predict` 返回\n`trends.dissolved_oxygen.direction == \"下降\"` 且斜率明显，\n应**提前减料**——这是**预防性措施**，\n等到溶氧真的跌破危险线时已经来不及。",
+        "category": "投料",
+        "disease": null,
+        "verified": true,
+        "score": 0.9236,
+        "dense_score": 0.7135,
+        "sparse_score": 1.3476,
+        "matched_by": [
+          "dense",
+          "sparse"
+        ],
+        "citation_keys": []
+      }
+    ],
+    "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+    "warnings": []
+  },
+  "POST /api/v1/assess (错误：什么都没传，422)": {
+    "detail": "水质时序数据与鱼体图片至少要提供一项（readings / image_path / upload_id）"
+  },
+  "POST /api/v1/chat (错误：query 太短，422)": {
+    "detail": [
+      {
+        "type": "string_too_short",
+        "loc": [
+          "body",
+          "query"
+        ],
+        "msg": "String should have at least 2 characters",
+        "input": "x",
+        "ctx": {
+          "min_length": 2
+        }
+      }
+    ]
+  },
+  "GET /api/v1/ponds/{pond_id}/history (不存在的塘口)": {
+    "pond_id": "NOPE",
+    "total": 0,
+    "items": []
+  }
+}

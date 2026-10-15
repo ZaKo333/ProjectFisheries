@@ -1,0 +1,1547 @@
+{
+  "generated_at": "2026-10-15 16:47:15 +0800",
+  "protocol": {
+    "species": "鲤科",
+    "horizon_hours": 72,
+    "window_hours": 3.0,
+    "stride_hours": 3.0,
+    "aggregate_minutes": 10,
+    "limit_files": null,
+    "limit_windows": null,
+    "history_points": 18,
+    "lead_points": 6
+  },
+  "data": {
+    "n_files": 11,
+    "n_lines": 1114970,
+    "n_samples": 49394,
+    "n_bad_timestamp": 6494,
+    "n_dropped_missing_required": 464808,
+    "n_out_of_range": 384372
+  },
+  "data_per_file": [
+    {
+      "pond_id": "IoTpond1",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTpond1.csv",
+      "n_lines": 83126,
+      "n_bad_timestamp": 0,
+      "n_dropped_missing_required": 22230,
+      "n_out_of_range": 22770,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 17796,
+        "ammonia_n": 4933,
+        "water_temp": 1,
+        "ph": 40
+      },
+      "n_samples": 6224,
+      "growth_pct": 1723.3766233766237,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "Temperature (C)",
+        "turbidity": "Turbidity(NTU)",
+        "dissolved_oxygen": "Dissolved Oxygen(g/ml)",
+        "ph": "PH",
+        "ammonia_n": "Ammonia(g/ml)",
+        "nitrate": "Nitrate(g/ml)",
+        "population": "Population",
+        "fish_length": "Fish_Length(cm)",
+        "fish_weight": "Fish_Weight(g)"
+      }
+    },
+    {
+      "pond_id": "IoTPond2",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond2.csv",
+      "n_lines": 172249,
+      "n_bad_timestamp": 0,
+      "n_dropped_missing_required": 88133,
+      "n_out_of_range": 99440,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 27102,
+        "ammonia_n": 12218,
+        "water_temp": 1,
+        "ph": 60119
+      },
+      "n_samples": 7815,
+      "growth_pct": 6132.954545454545,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "Temperature (C)",
+        "turbidity": "Turbidity (NTU)",
+        "dissolved_oxygen": "Dissolved Oxygen(g/ml)",
+        "ph": "PH",
+        "ammonia_n": "Ammonia(g/ml)",
+        "nitrate": "Nitrate(g/ml)",
+        "population": "Population",
+        "fish_length": "Fish_Length (cm)",
+        "fish_weight": "Fish_Weight (g)"
+      }
+    },
+    {
+      "pond_id": "IoTPond3",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond3.csv",
+      "n_lines": 169185,
+      "n_bad_timestamp": 0,
+      "n_dropped_missing_required": 34667,
+      "n_out_of_range": 26838,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 10449,
+        "ammonia_n": 16368,
+        "water_temp": 15,
+        "ph": 6
+      },
+      "n_samples": 7904,
+      "growth_pct": 3094.8310139165005,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "Temperature(C)",
+        "turbidity": "Turbidity(NTU)",
+        "dissolved_oxygen": "Dissolved Oxygen(g/ml)",
+        "ph": "PH",
+        "ammonia_n": "Ammonia(g/ml)",
+        "nitrate": "Nitrate(g/ml)",
+        "population": "Population",
+        "fish_length": "Fish_Length(cm)",
+        "fish_weight": "Fish_Weight(g)"
+      }
+    },
+    {
+      "pond_id": "IoTPond4",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond4.csv",
+      "n_lines": 89844,
+      "n_bad_timestamp": 47,
+      "n_dropped_missing_required": 12745,
+      "n_out_of_range": 13586,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 8356,
+        "ammonia_n": 5221,
+        "water_temp": 1,
+        "ph": 8
+      },
+      "n_samples": 6335,
+      "growth_pct": 4385.492227979274,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "Temperature(C)",
+        "turbidity": "Turbidity(NTU)",
+        "dissolved_oxygen": "Dissolved Oxygen(g/ml)",
+        "ph": "PH",
+        "ammonia_n": "Ammonia(g/ml)",
+        "nitrate": "Nitrate(g/ml)",
+        "population": "Population",
+        "fish_length": "Fish_Length(cm)",
+        "fish_weight": "Fish_Weight(g)"
+      }
+    },
+    {
+      "pond_id": "IoTPond6",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond6.csv",
+      "n_lines": 91050,
+      "n_bad_timestamp": 35,
+      "n_dropped_missing_required": 13399,
+      "n_out_of_range": 13391,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 11671,
+        "ph": 1720
+      },
+      "n_samples": 7201,
+      "growth_pct": 6900.0,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "Temperature(C)",
+        "turbidity": "Turbidity(NTU)",
+        "dissolved_oxygen": "Dissolved Oxygen(g/ml)",
+        "ph": "PH",
+        "ammonia_n": "Ammonia(g/ml)",
+        "nitrate": "Nitrate(g/ml)",
+        "population": "Population",
+        "fish_length": "Fish_Length(cm)",
+        "fish_weight": "Fish_Weight(g)"
+      }
+    },
+    {
+      "pond_id": "IoTPond7",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond7.csv",
+      "n_lines": 279612,
+      "n_bad_timestamp": 0,
+      "n_dropped_missing_required": 222307,
+      "n_out_of_range": 128799,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 76441,
+        "ammonia_n": 5250,
+        "ph": 47098,
+        "water_temp": 10
+      },
+      "n_samples": 4153,
+      "growth_pct": 12359.536541798914,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "temperature(C)",
+        "turbidity": "turbidity (NTU)",
+        "dissolved_oxygen": "Dissolved Oxygen (g/ml)",
+        "ph": "PH",
+        "ammonia_n": "ammonia(g/ml)",
+        "nitrate": "nitrate(g/ml)",
+        "fish_length": "Fish_length(cm)",
+        "fish_weight": "Fish_weight(g)"
+      }
+    },
+    {
+      "pond_id": "IoTPond8",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond8.csv",
+      "n_lines": 70744,
+      "n_bad_timestamp": 0,
+      "n_dropped_missing_required": 30884,
+      "n_out_of_range": 36891,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 8298,
+        "water_temp": 5,
+        "ph": 28588
+      },
+      "n_samples": 2251,
+      "growth_pct": 8207.958476869822,
+      "columns": {
+        "water_temp": "Temperature (C)",
+        "turbidity": "Turbidity(NTU)",
+        "dissolved_oxygen": "Dissolved Oxygen (mg/L)",
+        "ph": "PH",
+        "ammonia_n": "Ammonia (mg/L)",
+        "nitrate": "Nitrate (mg/L)",
+        "fish_length": "Total_length (cm)",
+        "fish_weight": "Weight (g)",
+        "created_at": ""
+      }
+    },
+    {
+      "pond_id": "IoTPond9",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond9.csv",
+      "n_lines": 151785,
+      "n_bad_timestamp": 0,
+      "n_dropped_missing_required": 40201,
+      "n_out_of_range": 42405,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 38593,
+        "ammonia_n": 2575,
+        "water_temp": 1,
+        "ph": 1236
+      },
+      "n_samples": 7428,
+      "growth_pct": 5219.164802287115,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "Temperature(C)",
+        "turbidity": "Turbidity(NTU)",
+        "dissolved_oxygen": "Dissolved Oxygen(g/ml)",
+        "ph": "PH",
+        "ammonia_n": "Ammonia(g/ml)",
+        "nitrate": "Nitrate(g/ml)",
+        "fish_length": "Fish_length(cm)",
+        "fish_weight": "Fish_weight(g)"
+      }
+    },
+    {
+      "pond_id": "IoTPond10",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond10.csv",
+      "n_lines": 620,
+      "n_bad_timestamp": 310,
+      "n_dropped_missing_required": 27,
+      "n_out_of_range": 27,
+      "out_of_range_by_field": {
+        "water_temp": 10,
+        "ph": 14,
+        "dissolved_oxygen": 3
+      },
+      "n_samples": 28,
+      "growth_pct": 95.88490684782607,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "TEMPERATURE",
+        "turbidity": "TURBIDITY",
+        "dissolved_oxygen": "DISOLVED OXYGEN",
+        "ph": "pH",
+        "ammonia_n": "AMMONIA",
+        "nitrate": "NITRATE",
+        "population": "Population",
+        "fish_length": "Length",
+        "fish_weight": "Weight"
+      }
+    },
+    {
+      "pond_id": "IoTPond11",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond11.csv",
+      "n_lines": 3165,
+      "n_bad_timestamp": 2538,
+      "n_dropped_missing_required": 215,
+      "n_out_of_range": 225,
+      "out_of_range_by_field": {
+        "dissolved_oxygen": 20,
+        "ammonia_n": 205
+      },
+      "n_samples": 53,
+      "growth_pct": 21.090448076923085,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "TEMPERATURE",
+        "turbidity": "TURBIDITY",
+        "dissolved_oxygen": "DISOLVED OXYGEN",
+        "ph": "pH",
+        "ammonia_n": "AMMONIA",
+        "nitrate": "NITRATE",
+        "population": "Population",
+        "fish_length": "Lenght",
+        "fish_weight": "Weight"
+      }
+    },
+    {
+      "pond_id": "IoTPond12",
+      "path": "D:\\设置\\项目\\Agent\\数据集\\Sensor Based Aquaponics Fish Pond Datasets\\IoTPond12.csv",
+      "n_lines": 3590,
+      "n_bad_timestamp": 3564,
+      "n_dropped_missing_required": 0,
+      "n_out_of_range": 0,
+      "out_of_range_by_field": {},
+      "n_samples": 2,
+      "growth_pct": 0.0,
+      "columns": {
+        "created_at": "created_at",
+        "water_temp": "TEMPERATURE",
+        "turbidity": "TURBIDITY",
+        "dissolved_oxygen": "DISOLVED OXYGEN",
+        "ph": "pH",
+        "ammonia_n": "AMMONIA",
+        "nitrate": "NITRATE",
+        "population": "Population",
+        "fish_length": "Length",
+        "fish_weight": "Weight"
+      }
+    }
+  ],
+  "summary": {
+    "n_samples": 49394,
+    "n_ponds": 11,
+    "label_counts": {
+      "正常": 19692,
+      "预警": 14081,
+      "高危": 15621
+    },
+    "time_from": "2021-06-18T11:10:00+00:00",
+    "time_to": "2021-12-06T10:30:00+00:00",
+    "samples_per_pond_min": 2,
+    "samples_per_pond_max": 7904,
+    "per_pond": {
+      "IoTpond1": 6224,
+      "IoTPond2": 7815,
+      "IoTPond3": 7904,
+      "IoTPond4": 6335,
+      "IoTPond6": 7201,
+      "IoTPond7": 4153,
+      "IoTPond8": 2251,
+      "IoTPond9": 7428,
+      "IoTPond10": 28,
+      "IoTPond11": 53,
+      "IoTPond12": 2
+    },
+    "per_pond_detail": {
+      "IoTpond1": {
+        "n_samples": 6224,
+        "正常": 2334,
+        "预警": 2261,
+        "高危": 1629,
+        "high_risk_rate": 0.26172879177377895
+      },
+      "IoTPond2": {
+        "n_samples": 7815,
+        "正常": 2492,
+        "预警": 2342,
+        "高危": 2981,
+        "high_risk_rate": 0.381445937300064
+      },
+      "IoTPond3": {
+        "n_samples": 7904,
+        "正常": 3607,
+        "预警": 2845,
+        "高危": 1452,
+        "high_risk_rate": 0.18370445344129555
+      },
+      "IoTPond4": {
+        "n_samples": 6335,
+        "正常": 1548,
+        "预警": 3226,
+        "高危": 1561,
+        "high_risk_rate": 0.24640883977900552
+      },
+      "IoTPond6": {
+        "n_samples": 7201,
+        "正常": 3442,
+        "预警": 1090,
+        "高危": 2669,
+        "high_risk_rate": 0.37064296625468685
+      },
+      "IoTPond7": {
+        "n_samples": 4153,
+        "正常": 3091,
+        "预警": 730,
+        "高危": 332,
+        "high_risk_rate": 0.07994221045027691
+      },
+      "IoTPond8": {
+        "n_samples": 2251,
+        "正常": 547,
+        "预警": 1116,
+        "高危": 588,
+        "high_risk_rate": 0.2612172367836517
+      },
+      "IoTPond9": {
+        "n_samples": 7428,
+        "正常": 2627,
+        "预警": 458,
+        "高危": 4343,
+        "high_risk_rate": 0.5846795907377491
+      },
+      "IoTPond10": {
+        "n_samples": 28,
+        "正常": 0,
+        "预警": 7,
+        "高危": 21,
+        "high_risk_rate": 0.75
+      },
+      "IoTPond11": {
+        "n_samples": 53,
+        "正常": 4,
+        "预警": 5,
+        "高危": 44,
+        "high_risk_rate": 0.8301886792452831
+      },
+      "IoTPond12": {
+        "n_samples": 2,
+        "正常": 0,
+        "预警": 1,
+        "高危": 1,
+        "high_risk_rate": 0.5
+      }
+    }
+  },
+  "coherence": {
+    "n_ponds": 11,
+    "n_pairs": 11,
+    "rho": -0.5818181818181818,
+    "verdict": "在 11 个池塘上，「高危样本占比」与「鱼体重增长」的 Spearman ρ -0.582（负相关）：标签与塘的实际产出方向一致。"
+  },
+  "skipped_samples": 411,
+  "primary": {
+    "name": "阈值定级（主口径）",
+    "mode": "trend",
+    "window_hours": 3.0,
+    "engine": {
+      "n_calls": 3183,
+      "n_failed": 0,
+      "n_ok": 3183,
+      "elapsed_seconds": 0.596,
+      "ms_per_call": 0.19,
+      "errors": []
+    },
+    "n_samples": 3183,
+    "n_usable": 3183,
+    "confusion": {
+      "labels": [
+        "正常",
+        "预警",
+        "高危"
+      ],
+      "matrix": [
+        [
+          849,
+          85,
+          230
+        ],
+        [
+          71,
+          321,
+          500
+        ],
+        [
+          0,
+          0,
+          1127
+        ]
+      ],
+      "counts": {
+        "正常->正常": 849,
+        "正常->预警": 85,
+        "正常->高危": 230,
+        "预警->正常": 71,
+        "预警->预警": 321,
+        "预警->高危": 500,
+        "高危->高危": 1127
+      },
+      "per_class": [
+        {
+          "label": "正常",
+          "support": 1164,
+          "predicted": 920,
+          "tp": 849,
+          "fp": 71,
+          "fn": 315,
+          "precision": 0.9228,
+          "recall": 0.7294,
+          "f1": 0.8148
+        },
+        {
+          "label": "预警",
+          "support": 892,
+          "predicted": 406,
+          "tp": 321,
+          "fp": 85,
+          "fn": 571,
+          "precision": 0.7906,
+          "recall": 0.3599,
+          "f1": 0.4946
+        },
+        {
+          "label": "高危",
+          "support": 1127,
+          "predicted": 1857,
+          "tp": 1127,
+          "fp": 730,
+          "fn": 0,
+          "precision": 0.6069,
+          "recall": 1.0,
+          "f1": 0.7554
+        }
+      ],
+      "macro": {
+        "n": 3183,
+        "accuracy": 0.7216,
+        "macro_precision": 0.7735,
+        "macro_recall": 0.6964,
+        "macro_f1": 0.6882,
+        "weighted_f1": 0.704,
+        "kappa": 0.5731
+      }
+    },
+    "spearman_score_vs_level": 0.7856,
+    "late_prediction_rate": 0.0,
+    "false_alarm_rate": 0.1976,
+    "redline_recall": {
+      "hit": 1123,
+      "total": 1127,
+      "rate": 0.9965
+    },
+    "limiting_agreement": {
+      "hit": 1644,
+      "total": 1907,
+      "rate": 0.8621
+    },
+    "severity_distribution": {
+      "正常": 920,
+      "预警": 406,
+      "高危": 1857
+    },
+    "true_distribution": {
+      "正常": 1164,
+      "预警": 892,
+      "高危": 1127
+    },
+    "score_by_true_level": {
+      "正常": {
+        "count": 1164,
+        "min": 0.0,
+        "p25": 0.0,
+        "median": 0.0,
+        "p75": 0.0,
+        "max": 73.05,
+        "mean": 3.184
+      },
+      "预警": {
+        "count": 892,
+        "min": 0.0,
+        "p25": 25.0,
+        "median": 34.09,
+        "p75": 57.47,
+        "max": 100.0,
+        "mean": 36.819
+      },
+      "高危": {
+        "count": 1127,
+        "min": 0.0,
+        "p25": 38.96,
+        "median": 57.47,
+        "p75": 73.05,
+        "max": 100.0,
+        "mean": 56.924
+      }
+    },
+    "per_pond": {
+      "IoTPond10": {
+        "n": 3,
+        "accuracy": 1.0,
+        "true": {
+          "正常": 0,
+          "预警": 0,
+          "高危": 3
+        },
+        "pred": {
+          "正常": 0,
+          "预警": 0,
+          "高危": 3
+        }
+      },
+      "IoTPond11": {
+        "n": 7,
+        "accuracy": 1.0,
+        "true": {
+          "正常": 1,
+          "预警": 0,
+          "高危": 6
+        },
+        "pred": {
+          "正常": 1,
+          "预警": 0,
+          "高危": 6
+        }
+      },
+      "IoTPond2": {
+        "n": 528,
+        "accuracy": 0.714,
+        "true": {
+          "正常": 154,
+          "预警": 155,
+          "高危": 219
+        },
+        "pred": {
+          "正常": 130,
+          "预警": 54,
+          "高危": 344
+        }
+      },
+      "IoTPond3": {
+        "n": 467,
+        "accuracy": 0.7259,
+        "true": {
+          "正常": 204,
+          "预警": 169,
+          "高危": 94
+        },
+        "pred": {
+          "正常": 147,
+          "预警": 149,
+          "高危": 171
+        }
+      },
+      "IoTPond4": {
+        "n": 389,
+        "accuracy": 0.5656,
+        "true": {
+          "正常": 82,
+          "预警": 202,
+          "高危": 105
+        },
+        "pred": {
+          "正常": 61,
+          "预警": 73,
+          "高危": 255
+        }
+      },
+      "IoTPond6": {
+        "n": 504,
+        "accuracy": 0.7817,
+        "true": {
+          "正常": 206,
+          "预警": 73,
+          "高危": 225
+        },
+        "pred": {
+          "正常": 160,
+          "预警": 23,
+          "高危": 321
+        }
+      },
+      "IoTPond7": {
+        "n": 251,
+        "accuracy": 0.7331,
+        "true": {
+          "正常": 185,
+          "预警": 42,
+          "高危": 24
+        },
+        "pred": {
+          "正常": 151,
+          "预警": 20,
+          "高危": 80
+        }
+      },
+      "IoTPond8": {
+        "n": 145,
+        "accuracy": 0.5931,
+        "true": {
+          "正常": 35,
+          "预警": 72,
+          "高危": 38
+        },
+        "pred": {
+          "正常": 29,
+          "预警": 24,
+          "高危": 92
+        }
+      },
+      "IoTPond9": {
+        "n": 457,
+        "accuracy": 0.86,
+        "true": {
+          "正常": 156,
+          "预警": 32,
+          "高危": 269
+        },
+        "pred": {
+          "正常": 120,
+          "预警": 8,
+          "高危": 329
+        }
+      },
+      "IoTpond1": {
+        "n": 432,
+        "accuracy": 0.6806,
+        "true": {
+          "正常": 141,
+          "预警": 147,
+          "高危": 144
+        },
+        "pred": {
+          "正常": 121,
+          "预警": 55,
+          "高危": 256
+        }
+      }
+    }
+  },
+  "sensitivity": [
+    {
+      "name": "窗长 1 小时",
+      "mode": "trend",
+      "window_hours": 1.0,
+      "engine": {
+        "n_calls": 8563,
+        "n_failed": 0,
+        "n_ok": 8563,
+        "elapsed_seconds": 1.068,
+        "ms_per_call": 0.12,
+        "errors": []
+      },
+      "n_samples": 8563,
+      "n_usable": 8563,
+      "confusion": {
+        "labels": [
+          "正常",
+          "预警",
+          "高危"
+        ],
+        "matrix": [
+          [
+            1958,
+            234,
+            1111
+          ],
+          [
+            115,
+            748,
+            1583
+          ],
+          [
+            0,
+            0,
+            2814
+          ]
+        ],
+        "counts": {
+          "正常->正常": 1958,
+          "正常->预警": 234,
+          "正常->高危": 1111,
+          "预警->正常": 115,
+          "预警->预警": 748,
+          "预警->高危": 1583,
+          "高危->高危": 2814
+        },
+        "per_class": [
+          {
+            "label": "正常",
+            "support": 3303,
+            "predicted": 2073,
+            "tp": 1958,
+            "fp": 115,
+            "fn": 1345,
+            "precision": 0.9445,
+            "recall": 0.5928,
+            "f1": 0.7284
+          },
+          {
+            "label": "预警",
+            "support": 2446,
+            "predicted": 982,
+            "tp": 748,
+            "fp": 234,
+            "fn": 1698,
+            "precision": 0.7617,
+            "recall": 0.3058,
+            "f1": 0.4364
+          },
+          {
+            "label": "高危",
+            "support": 2814,
+            "predicted": 5508,
+            "tp": 2814,
+            "fp": 2694,
+            "fn": 0,
+            "precision": 0.5109,
+            "recall": 1.0,
+            "f1": 0.6763
+          }
+        ],
+        "macro": {
+          "n": 8563,
+          "accuracy": 0.6446,
+          "macro_precision": 0.739,
+          "macro_recall": 0.6329,
+          "macro_f1": 0.6137,
+          "weighted_f1": 0.6279,
+          "kappa": 0.4636
+        }
+      },
+      "spearman_score_vs_level": 0.7869,
+      "late_prediction_rate": 0.0,
+      "false_alarm_rate": 0.3364,
+      "redline_recall": {
+        "hit": 2805,
+        "total": 2814,
+        "rate": 0.9968
+      },
+      "limiting_agreement": {
+        "hit": 4293,
+        "total": 4979,
+        "rate": 0.8622
+      },
+      "severity_distribution": {
+        "正常": 2073,
+        "预警": 982,
+        "高危": 5508
+      },
+      "true_distribution": {
+        "正常": 3303,
+        "预警": 2446,
+        "高危": 2814
+      },
+      "score_by_true_level": {
+        "正常": {
+          "count": 3303,
+          "min": 0.0,
+          "p25": 0.0,
+          "median": 0.0,
+          "p75": 0.0,
+          "max": 68.18,
+          "mean": 2.833
+        },
+        "预警": {
+          "count": 2446,
+          "min": 0.0,
+          "p25": 23.38,
+          "median": 34.09,
+          "p75": 54.55,
+          "max": 100.0,
+          "mean": 35.143
+        },
+        "高危": {
+          "count": 2814,
+          "min": 0.0,
+          "p25": 33.77,
+          "median": 57.47,
+          "p75": 68.18,
+          "max": 100.0,
+          "mean": 52.419
+        }
+      },
+      "per_pond": {
+        "IoTPond10": {
+          "n": 3,
+          "accuracy": 0.6667,
+          "true": {
+            "正常": 0,
+            "预警": 1,
+            "高危": 2
+          },
+          "pred": {
+            "正常": 0,
+            "预警": 0,
+            "高危": 3
+          }
+        },
+        "IoTPond11": {
+          "n": 9,
+          "accuracy": 0.7778,
+          "true": {
+            "正常": 1,
+            "预警": 2,
+            "高危": 6
+          },
+          "pred": {
+            "正常": 1,
+            "预警": 0,
+            "高危": 8
+          }
+        },
+        "IoTPond2": {
+          "n": 1378,
+          "accuracy": 0.6531,
+          "true": {
+            "正常": 415,
+            "预警": 421,
+            "高危": 542
+          },
+          "pred": {
+            "正常": 270,
+            "预警": 136,
+            "高危": 972
+          }
+        },
+        "IoTPond3": {
+          "n": 1335,
+          "accuracy": 0.603,
+          "true": {
+            "正常": 607,
+            "预警": 482,
+            "高危": 246
+          },
+          "pred": {
+            "正常": 353,
+            "预警": 339,
+            "高危": 643
+          }
+        },
+        "IoTPond4": {
+          "n": 1098,
+          "accuracy": 0.4964,
+          "true": {
+            "正常": 257,
+            "预警": 563,
+            "高危": 278
+          },
+          "pred": {
+            "正常": 148,
+            "预警": 167,
+            "高危": 783
+          }
+        },
+        "IoTPond6": {
+          "n": 1277,
+          "accuracy": 0.7173,
+          "true": {
+            "正常": 582,
+            "预警": 184,
+            "高危": 511
+          },
+          "pred": {
+            "正常": 371,
+            "预警": 56,
+            "高危": 850
+          }
+        },
+        "IoTPond7": {
+          "n": 707,
+          "accuracy": 0.6266,
+          "true": {
+            "正常": 525,
+            "预警": 127,
+            "高危": 55
+          },
+          "pred": {
+            "正常": 348,
+            "预警": 63,
+            "高危": 296
+          }
+        },
+        "IoTPond8": {
+          "n": 379,
+          "accuracy": 0.5726,
+          "true": {
+            "正常": 93,
+            "预警": 185,
+            "高危": 101
+          },
+          "pred": {
+            "正常": 67,
+            "预警": 64,
+            "高危": 248
+          }
+        },
+        "IoTPond9": {
+          "n": 1262,
+          "accuracy": 0.8106,
+          "true": {
+            "正常": 439,
+            "预警": 79,
+            "高危": 744
+          },
+          "pred": {
+            "正常": 267,
+            "预警": 21,
+            "高危": 974
+          }
+        },
+        "IoTpond1": {
+          "n": 1115,
+          "accuracy": 0.5937,
+          "true": {
+            "正常": 384,
+            "预警": 402,
+            "高危": 329
+          },
+          "pred": {
+            "正常": 248,
+            "预警": 136,
+            "高危": 731
+          }
+        }
+      }
+    },
+    {
+      "name": "窗长 6 小时",
+      "mode": "trend",
+      "window_hours": 6.0,
+      "engine": {
+        "n_calls": 1694,
+        "n_failed": 0,
+        "n_ok": 1694,
+        "elapsed_seconds": 0.388,
+        "ms_per_call": 0.23,
+        "errors": []
+      },
+      "n_samples": 1694,
+      "n_usable": 1694,
+      "confusion": {
+        "labels": [
+          "正常",
+          "预警",
+          "高危"
+        ],
+        "matrix": [
+          [
+            176,
+            23,
+            425
+          ],
+          [
+            8,
+            98,
+            348
+          ],
+          [
+            0,
+            0,
+            616
+          ]
+        ],
+        "counts": {
+          "正常->正常": 176,
+          "正常->预警": 23,
+          "正常->高危": 425,
+          "预警->正常": 8,
+          "预警->预警": 98,
+          "预警->高危": 348,
+          "高危->高危": 616
+        },
+        "per_class": [
+          {
+            "label": "正常",
+            "support": 624,
+            "predicted": 184,
+            "tp": 176,
+            "fp": 8,
+            "fn": 448,
+            "precision": 0.9565,
+            "recall": 0.2821,
+            "f1": 0.4356
+          },
+          {
+            "label": "预警",
+            "support": 454,
+            "predicted": 121,
+            "tp": 98,
+            "fp": 23,
+            "fn": 356,
+            "precision": 0.8099,
+            "recall": 0.2159,
+            "f1": 0.3409
+          },
+          {
+            "label": "高危",
+            "support": 616,
+            "predicted": 1389,
+            "tp": 616,
+            "fp": 773,
+            "fn": 0,
+            "precision": 0.4435,
+            "recall": 1.0,
+            "f1": 0.6145
+          }
+        ],
+        "macro": {
+          "n": 1694,
+          "accuracy": 0.5254,
+          "macro_precision": 0.7366,
+          "macro_recall": 0.4993,
+          "macro_f1": 0.4637,
+          "weighted_f1": 0.4753,
+          "kappa": 0.2615
+        }
+      },
+      "spearman_score_vs_level": 0.7922,
+      "late_prediction_rate": 0.0,
+      "false_alarm_rate": 0.6811,
+      "redline_recall": {
+        "hit": 616,
+        "total": 616,
+        "rate": 1.0
+      },
+      "limiting_agreement": {
+        "hit": 871,
+        "total": 1014,
+        "rate": 0.859
+      },
+      "severity_distribution": {
+        "正常": 184,
+        "预警": 121,
+        "高危": 1389
+      },
+      "true_distribution": {
+        "正常": 624,
+        "预警": 454,
+        "高危": 616
+      },
+      "score_by_true_level": {
+        "正常": {
+          "count": 624,
+          "min": 0.0,
+          "p25": 0.0,
+          "median": 0.0,
+          "p75": 0.0,
+          "max": 38.96,
+          "mean": 2.621
+        },
+        "预警": {
+          "count": 454,
+          "min": 0.0,
+          "p25": 27.27,
+          "median": 34.09,
+          "p75": 68.18,
+          "max": 100.0,
+          "mean": 38.524
+        },
+        "高危": {
+          "count": 616,
+          "min": 0.0,
+          "p25": 38.96,
+          "median": 57.47,
+          "p75": 73.05,
+          "max": 100.0,
+          "mean": 56.889
+        }
+      },
+      "per_pond": {
+        "IoTPond10": {
+          "n": 3,
+          "accuracy": 1.0,
+          "true": {
+            "正常": 0,
+            "预警": 0,
+            "高危": 3
+          },
+          "pred": {
+            "正常": 0,
+            "预警": 0,
+            "高危": 3
+          }
+        },
+        "IoTPond11": {
+          "n": 5,
+          "accuracy": 1.0,
+          "true": {
+            "正常": 1,
+            "预警": 0,
+            "高危": 4
+          },
+          "pred": {
+            "正常": 1,
+            "预警": 0,
+            "高危": 4
+          }
+        },
+        "IoTPond2": {
+          "n": 283,
+          "accuracy": 0.5512,
+          "true": {
+            "正常": 88,
+            "预警": 72,
+            "高危": 123
+          },
+          "pred": {
+            "正常": 22,
+            "预警": 17,
+            "高危": 244
+          }
+        },
+        "IoTPond3": {
+          "n": 242,
+          "accuracy": 0.5744,
+          "true": {
+            "正常": 101,
+            "预警": 89,
+            "高危": 52
+          },
+          "pred": {
+            "正常": 36,
+            "预警": 64,
+            "高危": 142
+          }
+        },
+        "IoTPond4": {
+          "n": 203,
+          "accuracy": 0.3842,
+          "true": {
+            "正常": 40,
+            "预警": 104,
+            "高危": 59
+          },
+          "pred": {
+            "正常": 13,
+            "预警": 8,
+            "高危": 182
+          }
+        },
+        "IoTPond6": {
+          "n": 276,
+          "accuracy": 0.5399,
+          "true": {
+            "正常": 114,
+            "预警": 43,
+            "高危": 119
+          },
+          "pred": {
+            "正常": 27,
+            "预警": 4,
+            "高危": 245
+          }
+        },
+        "IoTPond7": {
+          "n": 132,
+          "accuracy": 0.3636,
+          "true": {
+            "正常": 91,
+            "预警": 26,
+            "高危": 15
+          },
+          "pred": {
+            "正常": 29,
+            "预警": 7,
+            "高危": 96
+          }
+        },
+        "IoTPond8": {
+          "n": 80,
+          "accuracy": 0.475,
+          "true": {
+            "正常": 22,
+            "预警": 36,
+            "高危": 22
+          },
+          "pred": {
+            "正常": 13,
+            "预警": 3,
+            "高危": 64
+          }
+        },
+        "IoTPond9": {
+          "n": 241,
+          "accuracy": 0.6846,
+          "true": {
+            "正常": 85,
+            "预警": 15,
+            "高危": 141
+          },
+          "pred": {
+            "正常": 23,
+            "预警": 1,
+            "高危": 217
+          }
+        },
+        "IoTpond1": {
+          "n": 229,
+          "accuracy": 0.476,
+          "true": {
+            "正常": 82,
+            "预警": 69,
+            "高危": 78
+          },
+          "pred": {
+            "正常": 20,
+            "预警": 17,
+            "高危": 192
+          }
+        }
+      }
+    }
+  ],
+  "do_trend": {
+    "overall": {
+      "n": 8198,
+      "engine_mae": 1.9428868093309644,
+      "persistence_mae": 1.6961191117927854,
+      "engine_rmse": 2.9622072460575124,
+      "persistence_rmse": 2.6294540048082116,
+      "engine_better": 2998,
+      "persistence_better": 5067,
+      "ties": 133,
+      "direction_hits": 3619,
+      "direction_n": 8198,
+      "decline_n": 4117,
+      "decline_hits": 1925
+    },
+    "by_history": {
+      "6": {
+        "n": 8218,
+        "engine_mae": 2.8752717985195297,
+        "persistence_mae": 1.6971342107831031,
+        "engine_rmse": 4.416858493430036,
+        "persistence_rmse": 2.631329716296256,
+        "engine_better": 2197,
+        "persistence_better": 5853,
+        "ties": 168,
+        "direction_hits": 3412,
+        "direction_n": 8218,
+        "decline_n": 4130,
+        "decline_hits": 1775
+      },
+      "12": {
+        "n": 8208,
+        "engine_mae": 2.11795612133591,
+        "persistence_mae": 1.6959621717964746,
+        "engine_rmse": 3.237793845462029,
+        "persistence_rmse": 2.628613989726607,
+        "engine_better": 2766,
+        "persistence_better": 5299,
+        "ties": 143,
+        "direction_hits": 3528,
+        "direction_n": 8208,
+        "decline_n": 4121,
+        "decline_hits": 1850
+      },
+      "18": {
+        "n": 8198,
+        "engine_mae": 1.9428868093309644,
+        "persistence_mae": 1.6961191117927854,
+        "engine_rmse": 2.9622072460575124,
+        "persistence_rmse": 2.6294540048082116,
+        "engine_better": 2998,
+        "persistence_better": 5067,
+        "ties": 133,
+        "direction_hits": 3619,
+        "direction_n": 8198,
+        "decline_n": 4117,
+        "decline_hits": 1925
+      }
+    },
+    "step_minutes": 10,
+    "lead_hours": 1.0,
+    "n_series": 8198,
+    "n_ponds": 11,
+    "verdict": "在 11 口塘、8198 个样本上（目标点互不重叠，回看窗口之间有重叠，故有效独立样本数更少），预测 **1 小时后的溶氧**，线性外推 MAE 1.943 mg/L，持久性基线 1.696 mg/L——外推**差于**基线 14.5%，点预测不该采信，只能当趋势提示用。",
+    "sources": [
+      "IoTPond10",
+      "IoTPond11",
+      "IoTPond12",
+      "IoTPond2",
+      "IoTPond3",
+      "IoTPond4",
+      "IoTPond6",
+      "IoTPond7",
+      "IoTPond8",
+      "IoTPond9",
+      "IoTpond1"
+    ]
+  },
+  "vision": {
+    "model": "yolov8-fish.pt",
+    "task": "classify",
+    "classes": [
+      {
+        "key": "healthy",
+        "zh": "健康鱼"
+      },
+      {
+        "key": "gill_rot",
+        "zh": "烂鳃"
+      },
+      {
+        "key": "bacterial_hemorrhage",
+        "zh": "细菌性出血"
+      },
+      {
+        "key": "saprolegniasis",
+        "zh": "水霉"
+      }
+    ],
+    "dataset": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls",
+    "identity_rule": "文件名主干去重后的 931 张不同照片；自建 60/20/20 分层切分",
+    "hyperparams": {
+      "epochs": 60,
+      "imgsz": 224,
+      "batch": 32,
+      "device": "0",
+      "seed": 0
+    },
+    "test_size": 186,
+    "top1_accuracy": 0.9301,
+    "macro_f1": 0.9302,
+    "mAP50_weak_fullframe": 0.9288,
+    "mAP50_caveat": "弱监督全图框口径：每张图真值框与预测框都是整图，类别正确即 IoU=1.0≥0.5，因此该值等价于按置信度排序的分类 AP 均值，**不衡量病灶定位**。数据集没有任何检测框标注，真正的定位 mAP 无法计算。",
+    "per_class": {
+      "healthy": {
+        "support": 45,
+        "precision": 0.8627,
+        "recall": 0.9778,
+        "f1": 0.9167
+      },
+      "gill_rot": {
+        "support": 46,
+        "precision": 0.9167,
+        "recall": 0.9565,
+        "f1": 0.9362
+      },
+      "bacterial_hemorrhage": {
+        "support": 48,
+        "precision": 0.9773,
+        "recall": 0.8958,
+        "f1": 0.9348
+      },
+      "saprolegniasis": {
+        "support": 47,
+        "precision": 0.9767,
+        "recall": 0.8936,
+        "f1": 0.9333
+      }
+    },
+    "confusion": {
+      "healthy": {
+        "healthy": 44,
+        "gill_rot": 1,
+        "bacterial_hemorrhage": 0,
+        "saprolegniasis": 0
+      },
+      "gill_rot": {
+        "healthy": 1,
+        "gill_rot": 44,
+        "bacterial_hemorrhage": 0,
+        "saprolegniasis": 1
+      },
+      "bacterial_hemorrhage": {
+        "healthy": 4,
+        "gill_rot": 1,
+        "bacterial_hemorrhage": 43,
+        "saprolegniasis": 0
+      },
+      "saprolegniasis": {
+        "healthy": 2,
+        "gill_rot": 2,
+        "bacterial_hemorrhage": 1,
+        "saprolegniasis": 42
+      }
+    },
+    "misclassified_samples": [
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\healthy\\Healthy Fish (82).jpg",
+        "true": "healthy",
+        "pred": "gill_rot",
+        "conf": 0.963
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\gill_rot\\Bacterial gill disease (12).jpeg",
+        "true": "gill_rot",
+        "pred": "saprolegniasis",
+        "conf": 0.6893
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\gill_rot\\Bacterial gill disease (14).jpeg",
+        "true": "gill_rot",
+        "pred": "healthy",
+        "conf": 0.5962
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (126).jpg",
+        "true": "bacterial_hemorrhage",
+        "pred": "healthy",
+        "conf": 0.8819
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (225).jpg",
+        "true": "bacterial_hemorrhage",
+        "pred": "gill_rot",
+        "conf": 0.9394
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (28).jpg",
+        "true": "bacterial_hemorrhage",
+        "pred": "healthy",
+        "conf": 0.6984
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (4).jpeg",
+        "true": "bacterial_hemorrhage",
+        "pred": "healthy",
+        "conf": 0.7225
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\bacterial_hemorrhage\\Bacterial diseases - Aeromoniasis (8).jpg",
+        "true": "bacterial_hemorrhage",
+        "pred": "healthy",
+        "conf": 0.949
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (132).jpg",
+        "true": "saprolegniasis",
+        "pred": "gill_rot",
+        "conf": 0.5002
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (180).jpg",
+        "true": "saprolegniasis",
+        "pred": "gill_rot",
+        "conf": 0.8974
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (181).jpg",
+        "true": "saprolegniasis",
+        "pred": "bacterial_hemorrhage",
+        "conf": 0.8729
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (25).jpg",
+        "true": "saprolegniasis",
+        "pred": "healthy",
+        "conf": 0.5981
+      },
+      {
+        "image": "D:\\设置\\项目\\Agent\\project\\data\\derived\\fish_disease_4cls\\test\\saprolegniasis\\Fungal diseases Saprolegniasis (53).jpg",
+        "true": "saprolegniasis",
+        "pred": "healthy",
+        "conf": 0.6952
+      }
+    ]
+  },
+  "distributions": {
+    "engine_score": {
+      "count": 3183,
+      "min": 0.0,
+      "p25": 0.0,
+      "median": 29.55,
+      "p75": 57.47,
+      "max": 100.0,
+      "mean": 31.637
+    }
+  }
+}

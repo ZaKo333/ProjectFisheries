@@ -1,0 +1,483 @@
+==============================================================================
+一、OpenAPI 端点清单（GET /openapi.json）
+==============================================================================
+
+POST   /api/v1/assess    []
+       摘要：融合评估（水质 + 鱼体图片 → 风险等级 / 告警 / 养殖建议）
+       请求体(application/json)：AssessRequest
+       响应 200：Successful Response -> AssessResponse
+       响应 422：Validation Error -> HTTPValidationError
+
+POST   /api/v1/chat    []
+       摘要：知识库问答（RAG）
+       请求体(application/json)：ChatRequest
+       响应 200：Successful Response -> ChatResponse
+       响应 422：Validation Error -> HTTPValidationError
+
+GET    /api/v1/config/thresholds    []
+       摘要：阈值、权重与红线规则（供前端展示判定依据）
+       响应 200：Successful Response -> ThresholdResponse
+
+GET    /api/v1/config/tools    []
+       摘要：工具契约（OpenAI function calling 原生格式）
+       响应 200：Successful Response -> ToolSchemasResponse
+
+GET    /api/v1/health    []
+       摘要：健康检查
+       响应 200：Successful Response -> HealthResponse
+
+POST   /api/v1/ingest/image    []
+       摘要：上传鱼体图片并立即识别
+       请求体(multipart/form-data)：Body_ingest_image_api_v1_ingest_image_post
+       响应 200：Successful Response -> IngestImageResponse
+       响应 422：Validation Error -> HTTPValidationError
+
+POST   /api/v1/ingest/sensor    []
+       摘要：追加传感器读数到会话缓冲（内存态）
+       请求体(application/json)：IngestSensorRequest
+       响应 200：Successful Response -> IngestSensorResponse
+       响应 422：Validation Error -> HTTPValidationError
+
+GET    /api/v1/ponds/{pond_id}/history    []
+       摘要：评估历史（内存态，进程重启即失效）
+       路径/查询参数：pond_id (path, 必填)
+       路径/查询参数：limit (query, 可选)
+       响应 200：Successful Response -> HistoryResponse
+       响应 422：Validation Error -> HTTPValidationError
+
+GET    /api/v1/ponds/{pond_id}/readings    []
+       摘要：读取会话缓冲里的读数
+       路径/查询参数：pond_id (path, 必填)
+       路径/查询参数：limit (query, 可选)
+       响应 200：Successful Response -> object
+       响应 422：Validation Error -> HTTPValidationError
+
+POST   /api/v1/tools/call    []
+       摘要：直接调用工具（跳过 LLM 决策，便于调试与前端联调）
+       请求体(application/json)：ToolCallRequest
+       响应 200：Successful Response -> ToolResultResponse
+       响应 422：Validation Error -> HTTPValidationError
+
+==============================================================================
+二、关键响应模型的字段（名字必须逐字对上）
+==============================================================================
+
+AssessRequest:
+    pond_id: str  [可选]
+    species: Literal  [可选]
+    readings: list[fisheries.tools.water_risk.WaterQualityPoint] | None  [可选]
+    use_buffer: bool  [可选]
+    image_path: str | None  [可选]
+    upload_id: str | None  [可选]
+    mock_source: Literal  [可选]
+    use_knowledge: bool | None  [可选]
+    question: str | None  [可选]
+    include_trace: bool  [可选]
+    include_knowledge_block: bool  [可选]
+
+AssessResponse:
+    pond_id: str  [必填]
+    risk_level: Literal  [必填]
+    fused_score: float  [必填]
+    reason: str  [必填]
+    headline: str  [可选]
+    advisories: list  [可选]
+    observation_window: str  [可选]
+    confidence_note: str  [可选]
+    report: fisheries.agent.orchestrator.AdvisorReport | None  [可选]
+    alerts: list  [可选]
+    evidence: list  [可选]
+    water: dict[str, typing.Any] | None  [可选]
+    vision: dict[str, typing.Any] | None  [可选]
+    fusion: dict[str, typing.Any] | None  [可选]
+    references: list  [可选]
+    knowledge_summary: dict  [可选]
+    knowledge_block: str  [可选]
+    trace: list  [可选]
+    llm_backends: dict  [可选]
+    degraded_mode: bool  [可选]
+    degraded_reasons: list  [可选]
+    elapsed_seconds: float  [可选]
+
+ToolCallRequest:
+    tool: Literal  [必填]
+    arguments: dict  [可选]
+
+ToolResultResponse:
+    tool: str  [必填]
+    elapsed_seconds: float  [必填]
+    result: dict  [必填]
+
+SensorReadingIn:
+    timestamp: datetime.datetime | None  [可选]
+    water_temp: float  [必填]
+    ph: float  [必填]
+    dissolved_oxygen: float  [必填]
+    ammonia_n: float  [必填]
+    nitrite_n: float | None  [可选]
+
+IngestSensorRequest:
+    pond_id: str  [可选]
+    readings: list  [必填]
+    replace: bool  [可选]
+
+IngestSensorResponse:
+    pond_id: str  [必填]
+    accepted: int  [必填]
+    buffered_total: int  [必填]
+    first_timestamp: str | None  [可选]
+    last_timestamp: str | None  [可选]
+
+IngestImageResponse:
+    upload_id: str  [必填]
+    filename: str  [必填]
+    size_bytes: int  [必填]
+    content_type: str | None  [可选]
+    stored_path: str  [必填]
+    vision: dict  [必填]
+
+ChatRequest:
+    query: str  [必填]
+    k: int  [可选]
+    category: Optional  [可选]
+    disease: Optional  [可选]
+    answer_with_llm: bool  [可选]
+
+ChatResponse:
+    query: str  [必填]
+    answer: str  [必填]
+    answer_is_raw_retrieval: bool  [可选]
+    chunks: list  [可选]
+    backend: str  [可选]
+    warnings: list  [可选]
+
+ChatChunkOut:
+    chunk_id: str  [必填]
+    title: str  [必填]
+    heading_text: str  [必填]
+    text: str  [必填]
+    category: str  [必填]
+    disease: str | None  [可选]
+    verified: bool  [必填]
+    score: float  [必填]
+    dense_score: float | None  [可选]
+    sparse_score: float | None  [可选]
+    matched_by: list  [可选]
+    citation_keys: list  [可选]
+
+HistoryResponse:
+    pond_id: str  [必填]
+    total: int  [必填]
+    items: list  [可选]
+
+HealthResponse:
+    status: Literal  [必填]
+    version: str  [必填]
+    server_time: str  [必填]
+    uptime_seconds: float  [必填]
+    tools: dict  [可选]
+    llm_backends: dict  [可选]
+    knowledge: dict  [可选]
+    notes: list  [可选]
+
+ThresholdResponse:
+    species: list  [必填]
+    weights: dict  [必填]
+    effective_note: str  [必填]
+    profiles: dict  [必填]
+    redlines: dict  [必填]
+    action_thresholds: dict  [必填]
+    extrapolation_horizon_hours: float  [必填]
+    min_reliable_points: int  [必填]
+    persistence_cap: float  [必填]
+    disclaimer: str  [必填]
+
+ToolSchemasResponse:
+    tools: list  [必填]
+
+AdvisoryOut:
+    priority: int  [必填]
+    target: str  [必填]
+    action: str  [必填]
+    timing: str  [必填]
+
+AlertOut:
+    code: str  [必填]
+    level: str  [必填]
+    title: str  [必填]
+    detail: str  [必填]
+
+EvidenceOut:
+    source: str  [必填]
+    code: str  [必填]
+    label: str  [必填]
+    value: float | None  [可选]
+    unit: str | None  [可选]
+
+TraceStepOut:
+    step: int  [必填]
+    kind: str  [必填]
+    title: str  [必填]
+    detail: str  [可选]
+    data: dict  [可选]
+
+WaterQualityPoint:
+    timestamp: datetime.datetime | None  [可选]
+    water_temp: float  [必填]
+    ph: float  [必填]
+    dissolved_oxygen: float  [必填]
+    ammonia_n: float  [必填]
+    nitrite_n: float | None  [可选]
+
+AdvisorReport:
+    risk_level: str  [必填]
+    headline: str  [可选]
+    alerts: list  [可选]
+    water_actions: list  [可选]
+    disease_actions: list  [可选]
+    observation_window: str  [可选]
+    confidence_note: str  [可选]
+
+==============================================================================
+三、工具层枚举与常量
+==============================================================================
+
+[water_risk] 工具名: water_risk_predict
+  RISK_LEVELS: ['正常', '预警', '高危']
+  ACTION_THRESHOLDS:
+    dissolved_oxygen: ((3.0, '危险线'), (1.5, '泛塘临界值'))
+    ammonia_n: ((1.0, '红线'),)
+    nitrite_n: ((0.5, '红线'),)
+  REDLINE: {"DO_REDLINE": 1.5, "NH3_REDLINE": 1.0, "NO2_REDLINE": 0.5, "PH_LOW_REDLINE": 5.5, "PH_HIGH_REDLINE": 9.5, "DO_CRASH_DROP": 2.0, "DO_CRASH_WINDOW_H": 3.0}
+  MIN_RELIABLE_POINTS = 24
+  MAX_EXTRAPOLATION_HOURS = 12.0
+  SCORE_CRITICAL = 70.0 ; SCORE_WARNING = 40.0
+  SPECIES_PROFILES keys: ['鲤科', '罗非鱼', '虾蟹']
+  BASE_WEIGHTS: {"dissolved_oxygen": 0.35, "ammonia_n": 0.2, "nitrite_n": 0.15, "ph": 0.12, "water_temp": 0.1}
+
+  WaterRiskOutput 字段:
+    tool: str  [可选]
+    status: Literal  [可选]
+    pond_id: str  [可选]
+    risk_level: Literal  [必填]
+    risk_score: float  [必填]
+    horizon_hours: int  [必填]
+    extrapolation_horizon_hours: float  [必填]
+    species: str  [必填]
+    degradation_summary: str  [必填]
+    limiting_factor: str | None  [可选]
+    limiting_factor_label: str | None  [可选]
+    projected_do_alert_eta_hours: float | None  [可选]
+    projected_do_alert_threshold: float | None  [可选]
+    projected_do_alert_label: str | None  [可选]
+    exceeded_indicators: list  [可选]
+    rule_hits: list  [可选]
+    redline_hits: list  [可选]
+    severity_map: dict  [可选]
+    effective_weights: dict  [可选]
+    trends: dict  [可选]
+    projections: dict  [可选]
+    data_quality: fisheries.tools.water_risk.DataQuality | None  [可选]
+    degraded_mode: bool  [可选]
+    projection_method: str  [可选]
+    error_code: str | None  [可选]
+    error_message: str | None  [可选]
+
+  DataQuality 字段:
+    n_points: int  [必填]
+    interval_minutes: int  [必填]
+    interval_source: Literal  [必填]
+    span_hours: float  [必填]
+    missing_indicators: list  [可选]
+    warnings: list  [可选]
+
+  water_risk.py 里出现的全大写字符串字面量（规则码候选）：
+    COMPUTE_FAILED
+    DO_BELOW_OPTIMAL
+    DO_CRASH_DROP
+    DO_CRASH_TREND
+    DO_CRASH_WINDOW_H
+    DO_REDLINE
+    DO_REDLINE_PROJECTED
+    DO_TREND_DOWN_FAST
+    INVALID_INPUT
+    NH3N_ABOVE_WARNING
+    NH3N_TREND_UP_FAST
+    NH3_REDLINE
+    NO2N_ABOVE_WARNING
+    NO2N_TREND_UP_FAST
+    NO2_REDLINE
+    PH_FLUCTUATION_HIGH
+    PH_HIGH_REDLINE
+    PH_LOW_REDLINE
+    PH_OUT_OF_OPTIMAL
+    PH_REDLINE
+    TEMP_FLUCTUATION_HIGH
+    TEMP_OUT_OF_OPTIMAL
+    UNIONIZED_AMMONIA_RISK
+
+[fish_disease] 工具名: fish_disease_detect
+  DISEASE_LABELS: ['烂鳃', '出血', '水霉', '健康', '其他']
+  LABEL_META:
+    烂鳃: {'group': '细菌性', 'severity_weight': 0.85}
+    出血: {'group': '细菌性', 'severity_weight': 0.9}
+    水霉: {'group': '真菌性', 'severity_weight': 0.7}
+    其他: {'group': '其他', 'severity_weight': 0.75}
+    健康: {'group': '健康', 'severity_weight': 0.0}
+  LOW_CONFIDENCE_THRESHOLD = 0.6
+  fish_disease.py 错误码：
+    IMAGE_NOT_FOUND
+    NOT_A_FILE
+    UNSUPPORTED_IMAGE
+
+[definitions] TOOL_SCHEMAS:
+  water_risk_predict: required=['readings']
+      pond_id: string — 池塘/塘口编号，用于在多塘场景下区分告警来源，例如 'POND-03'。未知时填 'unknown'。
+      readings: array — 按时间升序排列的水质记录数组，至少 3 条，建议 ≥24 条（约 1 天，1 小时/条）。每条至少包含 water_te
+      interval_minutes: integer — 相邻两条记录的采样间隔（分钟）。若每条记录都带 timestamp，本参数会被自动推断值覆盖。
+      horizon_hours: integer — 预测窗口长度（小时），表示'未来多久内会不会出问题'。默认 72 小时（3 天）。
+      species: string — 养殖品种，决定阈值分组。鲤科（草鱼/鲫鱼/鲤鱼等）、罗非鱼、虾蟹（南美白对虾/河蟹等）。不确定时用默认值 '鲤科'。
+  fish_disease_detect: required=['image_path']
+      image_path: string — 鱼体图片的本地绝对路径（如 'D:\\data\\fish\\gill_01.jpg'）或 http(s) 图片 URL
+      conf_threshold: number — 最低置信度阈值。低于该值仍会返回结果，但会将 is_low_confidence 置为 true。
+      top_k: integer — 返回概率最高的前 K 个类别，用于展示模型的犹豫程度。
+
+==============================================================================
+四、融合层枚举
+==============================================================================
+W_WATER = 0.6 ; W_VISION = 0.4
+SCORE_CRITICAL = 70.0 ; SCORE_WARNING = 40.0
+SEVERE_DISEASE_WEIGHT = 0.85 ; SEVERE_DISEASE_MIN_CONF = 0.7
+DISEASE_MIN_SEVERITY_FOR_WARNING = 0.7
+DISEASE_MIN_CONF_FOR_WARNING = 0.4
+SYNERGY_RULES:
+    SYN_BACTERIAL_ON_WARNING
+    SYN_NITROGEN_WITH_DISEASE
+    SYN_LOW_DO_WITH_GILL
+    SYN_SAPRO_ON_COLD
+
+FusionResult 字段:
+    risk_level: Literal  [必填]
+    fused_score: float  [必填]
+    weighted_score: float  [可选]
+    score_floor: float | None  [可选]
+    level_floors: list  [可选]
+    water_score: float | None  [可选]
+    vision_score: float | None  [可选]
+    effective_weights: dict  [可选]
+    synergy_score: float  [可选]
+    synergy_hits: list  [可选]
+    alerts: list  [可选]
+    evidence: list  [可选]
+    reason: str  [必填]
+    modalities: list  [可选]
+    failed_modalities: dict  [可选]
+    degraded_mode: bool  [可选]
+
+Evidence 字段:
+    source: Literal  [必填]
+    code: str  [必填]
+    label: str  [必填]
+    value: float | str | None  [可选]
+    unit: str  [可选]
+
+Alert 字段:
+    code: str  [必填]
+    level: Literal  [必填]
+    title: str  [必填]
+    detail: str  [必填]
+
+==============================================================================
+五、Agent 层输出结构
+==============================================================================
+Advisory 字段:
+    priority: int  [必填]
+    target: str  [必填]
+    action: str  [必填]
+    timing: str  [可选]
+
+AdvisorReport 字段:
+    risk_level: str  [必填]
+    headline: str  [可选]
+    alerts: list  [可选]
+    water_actions: list  [可选]
+    disease_actions: list  [可选]
+    observation_window: str  [可选]
+    confidence_note: str  [可选]
+
+AgentInput 字段:
+    pond_id: str  [可选]
+    species: str  [可选]
+    water_readings: list[dict[str, typing.Any]] | None  [可选]
+    image_path: str | None  [可选]
+    question: str | None  [可选]
+    mock_source: str  [可选]
+    force_mock_llm: bool  [可选]
+    use_knowledge: bool | None  [可选]
+
+TraceStep 字段:
+    step: int  [必填]
+    kind: Literal  [必填]
+    title: str  [必填]
+    detail: str  [可选]
+    data: dict[str, typing.Any] | None  [可选]
+
+AgentResult 字段:
+    pond_id: str  [必填]
+    risk_level: str  [必填]
+    fused_score: float  [必填]
+    reason: str  [必填]
+    alerts: list  [可选]
+    advisories: list  [可选]
+    headline: str  [可选]
+    observation_window: str  [可选]
+    confidence_note: str  [可选]
+    evidence: list  [可选]
+    water: dict[str, typing.Any] | None  [可选]
+    vision: dict[str, typing.Any] | None  [可选]
+    fusion: dict  [可选]
+    knowledge_block: str  [可选]
+    references: list  [可选]
+    knowledge_summary: dict  [可选]
+    report: dict  [可选]
+    trace: list  [可选]
+    llm_backends: dict  [可选]
+    degraded_mode: bool  [可选]
+    degraded_reasons: list  [可选]
+    elapsed_seconds: float  [可选]
+    prompt_lang: str  [可选]
+    translation_backend: str  [可选]
+    translation_notes: list  [可选]
+
+MAX_ROUNDS = 6
+
+==============================================================================
+六、环境变量
+==============================================================================
+
+api/deps.py:
+    FISHERIES_API_ALLOW_LOCAL_PATH
+    FISHERIES_API_BUFFER_MAX
+    FISHERIES_API_HISTORY_MAX
+    FISHERIES_API_MAX_UPLOAD_MB
+    FISHERIES_API_UPLOAD_DIR
+    FISHERIES_VISION_WEIGHTS
+
+webui/runner.py:
+    FISHERIES_DISABLE_KNOWLEDGE
+
+webui/app.py:
+    FISHERIES_WEB_HOST
+    FISHERIES_WEB_OPEN_BROWSER
+    FISHERIES_WEB_PORT
+    FISHERIES_WEB_SHARE
+
+agent/llm.py:
+    FISHERIES_LLM_
+    FISHERIES_LLM_PROVIDER
+
+agent/translate.py:
+    FISHERIES_LLM_
+    FISHERIES_PROMPT_LANG
+    FISHERIES_TRANSLATOR_
+    FISHERIES_TRANSLATOR_MODE

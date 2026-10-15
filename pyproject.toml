@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "projectfisheries"
+version = "0.1.0"
+description = "ProjectFisheries —— 水产养殖智能监测与决策 Agent"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+# 只做推理（加载 models/yolov8-fish.pt）时够用；要自己训练权重装下面的 train。
+vision = ["ultralytics>=8.2"]
+# 训练病害识别四分类权重（scripts/train_yolo_fish.py），见 docs/模型训练说明.md。
+# ⚠ torch 的 cu128 wheel 不在 PyPI 上，必须显式指定官方索引：
+#     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# 额外依赖里没法写 index-url，所以这里只声明版本，索引由命令给。
+# Blackwell（sm_120，如 RTX 50 系）必须用 cu128，否则一推理就报
+# "no kernel image is available for execution"。
+train = ["torch>=2.7", "torchvision>=0.22", "ultralytics>=8.2"]
+data = ["pandas>=2.2", "numpy>=1.26"]
+# 数据集按需导入（`python scripts/fetch_datasets.py pull`）才需要。
+# 工程默认不带数据集：仓库里只有代码，1.37 GB 的原始数据放在工程外。
+datasets = ["kagglehub>=0.3"]
+# 现场演示页。必须 >=6.0：Gradio 6 把 theme / css / js / head 从
+# Blocks() 挪到了 launch()，5.x 上这样写会 TypeError。
+webui = ["gradio>=6.0"]
+# 离线回译（D12）：把 AQUA-7B 的整句英文译成中文，不联网、不需要 key。
+# 权重不在 PyPI 上，用 `python scripts/fetch_translate_model.py` 下到
+# models/translate/。没装这个 extra 也能跑，只是回译退回受控词表，
+# 自由长句会整条退回中文模板（D12 的收益拿不到）。
+# ⚠ transformers 必须 >=4.44：更早的版本不支持这里用的 Marian 加载路径。
+# ⚠ 不要固定到 5.x 之前——实测装的 5.19.0 可用；transformers 5 把
+#    AutoModelForSeq2SeqLM 的返回类型改了，但 .generate() 接口没变。
+translate = ["transformers>=4.44", "sentencepiece>=0.2", "sacremoses>=0.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# --------------------------------------------------------------------------- #
+# pytest 配置：让 tests/ 下可以直接 import fisheries，无需安装包
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

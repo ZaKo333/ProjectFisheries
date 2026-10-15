@@ -1,0 +1,77 @@
+Based on the following **already final** monitoring conclusions, write
+farmer-facing instructions. Generate all your own text in English.
+
+## Fused decision (computed by the rule engine, **NOT changeable**)
+- Overall risk level (Chinese identifier, copy exactly): 预警
+- Fused risk score: 68.92
+- Reason for this level (Chinese, reference only): 融合分 68.9（水质模态 0.57×0.60 + 图像模态 0.67×0.40 + 协同加成 8），判定等级【预警】；等级下限 WATER_LEVEL:预警、DISEASE_DETECTED；命中 1 条多源协同规则。
+
+## Water risk (returned by tool water_risk_predict)
+- Risk level (Chinese identifier): 预警 (Warning), risk score: 57.07
+- Degradation summary (Chinese reference): 未来 72 小时内水质呈持续恶化趋势，综合风险分 57.1，判定等级【预警】。主控风险因子为溶氧：当前 4.33 mg/L，处于警戒区间。溶氧、氨氮、亚硝酸盐处于警戒区间。按近段回归速率 -0.090 mg/L/小时外推，预计 14.8 小时后溶氧将跌破 3.00 mg/L 危险线。氨氮在 12 小时内预计升至 0.45 mg/L。溶氧持续下降与氨氮、亚硝酸盐超标叠加，会显著削弱鱼类鳃组织的耐受力；夜间至凌晨（约 2–6 时）藻类停止产氧，泛塘风险将明显升高。（说明：数值外推基于线性回归，仅前 12 小时具有参考意义，接入 LSTM 时序模型后将替换为真实预测曲线。）
+- Current indicators:
+  * dissolved oxygen: 4.33 mg/L (trend: falling)
+  * ammonia nitrogen: 0.33 mg/L (trend: rising)
+  * nitrite nitrogen: 0.142 mg/L (trend: rising)
+  * pH: 7.8  (trend: steady)
+  * water temperature: 27.0 ℃ (trend: steady)
+- DO countdown: expected to fall below 3.0 mg/L in 14.8 hours (danger line)
+
+## Disease detection (returned by tool fish_disease_detect)
+- Disease type: other / unspecified disease (original Chinese: 其他)
+- Disease group: other
+- Confidence: 0.8892
+- Severity weight: 0.75
+- Note (Chinese): ⚠ 当前为演示/Mock 结果（model_version=mock-v0.1），非真实模型输出，不可作为诊断依据。
+
+## Evidence chain
+- [water] SEV_DISSOLVED_OXYGEN = 4.33mg/L
+- [water] SEV_AMMONIA_N = 0.33mg/L
+- [water] SEV_NITRITE_N = 0.142mg/L
+- [water] DO_ALERT_ETA = 14.78hours
+- [vision] VISION_DISEASE = 0.8892
+- [fusion] SYN_NITROGEN_WITH_DISEASE = 8.0
+
+## Alert list (**must be echoed verbatim into the output `alerts` array**)
+- [warning] 多源协同风险: 氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫
+
+## Knowledge base reference material (RAG retrieval, grouped by purpose)
+(No knowledge base entry was retrieved this time. Base the measures only on the measured conclusions above; do not invent sources.)
+
+[KNOWLEDGE BASE RULES]
+- The material above is the basis for **how to word the measures** — it makes an
+  action concrete (how much, when, in what order).
+- If a **numeric threshold** in the material conflicts with the "Water risk"
+  block, **the Water risk block always wins**: that block comes from this
+  session's measurements, the material is a general specification.
+- When material is marked as not verified against the standard text, you must add
+  a sentence noting the value needs checking against the current standard.
+- Do not invent measures that are absent from the material, and do not add
+  medication schemes from your own general knowledge.
+
+## Output requirement
+Output only the single JSON object below. **No other text and no explanation
+outside the markdown fence**:
+
+{
+  "risk_level": "copy the overall risk level above exactly: one of 正常 / 预警 / 高危",
+  "headline": "one sentence, the most urgent thing right now (<=15 English words)",
+  "alerts": [
+    {"level": "copy the level field from the alert list exactly", "title": "copy title exactly (Chinese, do not translate)", "detail": "copy detail exactly (Chinese, do not translate)"}
+  ],
+  "water_actions": [
+    {"priority": 1, "target": "which indicator (English)", "action": "what exactly to do (<=20 English words)", "timing": "when and for how long (<=10 English words)"}
+  ],
+  "disease_actions": [
+    {"priority": 1, "target": "which disease (English)", "action": "what exactly to do (<=20 English words)", "timing": "when and for how long (<=10 English words)"}
+  ],
+  "observation_window": "what to re-check and after how long (<=15 English words)",
+  "confidence_note": "one sentence on how reliable this conclusion is (<=15 words)"
+}
+
+Notes:
+- Use `[]` for `alerts` when there is no alert, and for `disease_actions` when no
+  image analysis was done or the fish are healthy.
+- `priority` starts at 1 and is consecutive within each array (1 is most urgent).
+- `risk_level` and the alert `title` / `detail` stay Chinese. Everything you
+  generate is English.

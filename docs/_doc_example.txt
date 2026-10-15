@@ -1,0 +1,22 @@
+==============================================================================
+请求体（压缩成一行，便于粘贴）
+==============================================================================
+{"pond_id":"demo-pond-1","species":"鲤科","readings":[{"timestamp":"2026-10-13T08:00:00","water_temp":26.9,"ph":8.05,"dissolved_oxygen":6.42,"ammonia_n":0.1,"nitrite_n":0.05},{"timestamp":"2026-10-13T09:00:00","water_temp":27.1,"ph":8.06,"dissolved_oxygen":6.35,"ammonia_n":0.108,"nitrite_n":0.053},{"timestamp":"2026-10-13T10:00:00","water_temp":27.4,"ph":8.06,"dissolved_oxygen":6.28,"ammonia_n":0.116,"nitrite_n":0.055},{"timestamp":"2026-10-13T11:00:00","water_temp":27.8,"ph":8.07,"dissolved_oxygen":6.18,"ammonia_n":0.124,"nitrite_n":0.058},{"timestamp":"2026-10-13T12:00:00","water_temp":28.3,"ph":8.07,"dissolved_oxygen":6.05,"ammonia_n":0.132,"nitrite_n":0.061},{"timestamp":"2026-10-13T13:00:00","water_temp":28.8,"ph":8.08,"dissolved_oxygen":5.92,"ammonia_n":0.14,"nitrite_n":0.064},{"timestamp":"2026-10-13T14:00:00","water_temp":29.2,"ph":8.08,"dissolved_oxygen":5.8,"ammonia_n":0.148,"nitrite_n":0.067},{"timestamp":"2026-10-13T15:00:00","water_temp":29.4,"ph":8.09,"dissolved_oxygen":5.71,"ammonia_n":0.156,"nitrite_n":0.07},{"timestamp":"2026-10-13T16:00:00","water_temp":29.3,"ph":8.09,"dissolved_oxygen":5.66,"ammonia_n":0.164,"nitrite_n":0.073},{"timestamp":"2026-10-13T17:00:00","water_temp":29.0,"ph":8.09,"dissolved_oxygen":5.6,"ammonia_n":0.172,"nitrite_n":0.076},{"timestamp":"2026-10-13T18:00:00","water_temp":28.5,"ph":8.1,"dissolved_oxygen":5.48,"ammonia_n":0.18,"nitrite_n":0.079},{"timestamp":"2026-10-13T19:00:00","water_temp":28.1,"ph":8.1,"dissolved_oxygen":5.31,"ammonia_n":0.188,"nitrite_n":0.083},{"timestamp":"2026-10-13T20:00:00","water_temp":27.8,"ph":8.11,"dissolved_oxygen":5.12,"ammonia_n":0.196,"nitrite_n":0.087},{"timestamp":"2026-10-13T21:00:00","water_temp":27.5,"ph":8.11,"dissolved_oxygen":4.94,"ammonia_n":0.205,"nitrite_n":0.091},{"timestamp":"2026-10-13T22:00:00","water_temp":27.3,"ph":8.11,"dissolved_oxygen":4.79,"ammonia_n":0.214,"nitrite_n":0.095},{"timestamp":"2026-10-13T23:00:00","water_temp":27.1,"ph":8.12,"dissolved_oxygen":4.68,"ammonia_n":0.224,"nitrite_n":0.099},{"timestamp":"2026-10-14T00:00:00","water_temp":26.9,"ph":8.12,"dissolved_oxygen":4.6,"ammonia_n":0.235,"nitrite_n":0.104},{"timestamp":"2026-10-14T01:00:00","water_temp":26.8,"ph":8.12,"dissolved_oxygen":4.55,"ammonia_n":0.247,"nitrite_n":0.109},{"timestamp":"2026-10-14T02:00:00","water_temp":26.7,"ph":8.12,"dissolved_oxygen":4.52,"ammonia_n":0.26,"nitrite_n":0.114},{"timestamp":"2026-10-14T03:00:00","water_temp":26.6,"ph":8.13,"dissolved_oxygen":4.49,"ammonia_n":0.274,"nitrite_n":0.119},{"timestamp":"2026-10-14T04:00:00","water_temp":26.6,"ph":8.13,"dissolved_oxygen":4.46,"ammonia_n":0.289,"nitrite_n":0.124},{"timestamp":"2026-10-14T05:00:00","water_temp":26.7,"ph":8.13,"dissolved_oxygen":4.42,"ammonia_n":0.305,"nitrite_n":0.13},{"timestamp":"2026-10-14T06:00:00","water_temp":26.9,"ph":8.14,"dissolved_oxygen":4.36,"ammonia_n":0.322,"nitrite_n":0.136},{"timestamp":"2026-10-14T07:00:00","water_temp":27.2,"ph":8.14,"dissolved_oxygen":4.28,"ammonia_n":0.34,"nitrite_n":0.142}],"image_path":null,"upload_id":null,"mock_source":"hash","use_knowledge":null,"question":"","include_trace":false,"include_knowledge_block":false}
+
+==============================================================================
+实测结果
+==============================================================================
+ok           = True
+risk_level   = 预警
+fused_score  = 57.07
+headline     = 【预警】溶氧开始不对，今天盯紧点。
+reason       = 融合分 57.1（水质模态 0.57×1.00），判定等级【预警】，本次仅有水质单模态输入，权重已归一化；等级下限 WATER_LEVEL:预警。
+n_alerts     = 0
+n_water_actions   = 2
+  - P1 [溶氧（水里的氧气）] 增氧机一直开着别停，后半夜最容易缺氧。 @12.6 小时后会掉到 3.0，之前必须开机
+  - P2 [氨氮、亚硝酸盐] 停料 2–3 天，换掉两三成水，撒芽孢杆菌。 @今天开始，两天后复测
+observation_window = 6 小时后复测溶氧和氨氮，明天看鱼有没有好转。
+confidence_note    = 依据：水质 24 点。不确定：结论含 12.0 小时外推；水质工具处于降级模式。复核：建议人工核对水质原始数据。
+fusion: weighted=57.07 fused=57.07 floor=None floors=['WATER_LEVEL:预警'] weights={'water': 1.0}
+water.limiting_factor = dissolved_oxygen / 溶氧
+water.projected_do_alert_eta_hours = 12.6

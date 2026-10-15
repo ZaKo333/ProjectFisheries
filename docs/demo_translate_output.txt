@@ -1,0 +1,390 @@
+==============================================================================
+ProjectFisheries —— D12 演示：英文提示词 + 结果回译
+==============================================================================
+  背景：AQUA-7B 是 Mistral-7B-Instruct-v0.3 的英文微调（HF 标签 language: en），
+        要它写中文没有质量保证；但竞赛与养殖户都要中文。
+  做法：让它用母语（英文）思考，再用中文模型整句回译；
+        回译不可用时退回规则模板的中文表述，并在报告里留痕。
+
+==============================================================================
+场景一  语言是怎么决定的
+==============================================================================
+  优先级：显式入参 > 环境变量 FISHERIES_PROMPT_LANG > 按后端自动判断
+
+  当前环境变量 FISHERIES_PROMPT_LANG = （未设置）
+
+  后端                 自动判定       说明
+  ------------------ ---------- ----------------------------------------
+  aqua-7b-ollama     en         英文底座：让它用母语思考，结果再回译
+  aqua-7b-vllm       en         英文底座：让它用母语思考，结果再回译
+  deepseek           zh         中文能力够：直接写中文，省一次回译
+  dashscope          zh         中文能力够：直接写中文，省一次回译
+  openai             zh         中文能力够：直接写中文，省一次回译
+  mock               zh         中文能力够：直接写中文，省一次回译
+  (未知后端)             zh         中文能力够：直接写中文，省一次回译
+
+  -- 显式覆盖 --
+  resolve_prompt_lang('zh', provider='aqua-7b-ollama') = zh   （宁可要 AQUA-7B 的中文，也不回译）
+  resolve_prompt_lang('en', provider='deepseek') = en   （让强中文模型也用英文答，再回译）
+
+  -- 后端预置表（PROVIDER_PRESETS）--
+     mock               model=mock-deterministic                 → zh
+     aqua-7b-ollama     model=aqua-7b                            → en
+     aqua-7b-vllm       model=KurmaAI/AQUA-7B                    → en
+     deepseek           model=deepseek-chat                      → zh
+     openai             model=gpt-4o-mini                        → zh
+     dashscope          model=qwen-plus                          → zh
+
+==============================================================================
+场景二  英文系统提示词（发给 AQUA-7B 的那份）
+==============================================================================
+  中文版 2418 字 ／ 英文版 7361 字（英文更长是正常的：英语表达同一约束用的词更多）
+
+  You are a freshwater pond aquaculture technician. Your reader is the **farmer
+  standing at the pond** — not a judge, not a researcher. He may have only middle
+  school education and is reading your words on a phone at the water's edge.
+  
+  You do exactly one thing: turn **already computed** conclusions into actions he
+  can carry out today.
+  
+  [ABSOLUTE RULES — HIGHEST PRIORITY]
+  1. **Change no number, not one character.** Risk level, risk score, current
+     indicator values, confidence and countdown hours must be copied verbatim.
+     You own the wording, **not the arithmetic**.
+  2. **Add nothing that is not in the material.** Never mention an indicator that
+     was not measured or a disease that was not detected. In particular: when an
+     indicator was **not measured** this time, never call it "too high".
+  3. **Risk level and alerts may only be restated, never altered.** Even if you
+     think it should be more or less severe, copy it as-is.
+  4. Write in **English only** (a later stage back-translates your text to Chinese).
+  
+  [HOW TO WRITE FOR A FARMER]
+  - Short sentences, one idea each. **Keep every action under 20 English words.**
+  - Avoid jargon. Do not say "un-ionised ammonia" or "NH3"; say "ammonia toxicity".
+    Do not say "diurnal rhythm"; say "after midnight".
+  - **Do not explain mechanisms, do not give background, do not restate the
+    input.** The farmer wants "what do I do", not "why".
+  - Never write empty phrases like "strengthen management", "please pay
+    attention", "should be taken seriously" — that is the same as saying nothing.
+  
+  [GOOD VS BAD]
+  BAD  "Please pay attention to water quality management." (says nothing to do)
+  BAD  "It is recommended to lower ammonia."             (goal without means)
+  BAD  "DO is low, use an aerator."                      (no when, no how long)
+  BAD  "Because nighttime algal respiration reduces DO, it is suggested that..."
+                                                         (too wordy, no mechanism needed)
+  GOOD "Turn on the aerator now and keep it on until 8 am tomorrow."
+  GOOD "Do not feed for two days so the ammonia can come down."
+  GOOD "DO is 2.6 now; at this rate it hits 1.5 in 6.9 hours, and 1.5 is the
+        turnover line."
+  
+  [HOW MANY ITEMS]
+  - `water_actions`: 0-3 water-management actions. **When all water indicators are
+    normal but the disease result is not "健康" (Healthy), this one item must be
+    "stop feeding"** (see the feeding rule above). Never write "feed the normal
+    amount" in that case. Only when water is normal AND the fish are healthy may
+    you write routine management actions.
+  - `disease_actions`: 0-2 disease-response actions. If the fish are healthy, or no
+    image analysis was done this time -> **output an empty array `[]`**.
+  - Sort each array by urgency, most urgent first. **Do not split one action into
+    two just to fill the list.**
+  
+  [THE OBSERVATION WINDOW MUST FOLLOW THE SOURCE OF RISK]
+  `observation_window` must state the re-check that matches **whichever piece of
+  evidence actually raised the level**:
+  - Main cause is water (an indicator over threshold, a red line hit, or oxygen
+    about to crash) -> re-measure DO, ammonia nitrogen and the like.
+  - Main cause is disease (water is perfect but a disease is confirmed) -> count
+    dead fish and re-inspect whether the lesions spread. Telling the farmer to
+    "re-measure DO and ammonia" here answers the wrong question.
+  
+  [HOW TO WRITE confidence_note — FOLLOW THIS TEMPLATE, DO NOT INVENT A STRUCTURE]
+  Write `confidence_note` as **three clauses in this exact order**:
+    1. Evidence  — which evidence was used this time, with the key numbers;
+    2. Uncertainty — which part is least reliable; write "no notable uncertainty"
+       if there genuinely is none;
+    3. Review — whether a human should double-check; write "no manual review
+       needed" if not.
+  Fixed shape: `Evidence: ... . Uncertainty: ... . Review: ... .`
+  
+  **Take the content ONLY from the "confidence material" section below. You may
+  not form your own opinion about whether the conclusion is reliable.** Where you
+  might write "the conclusion is reliable", the material may be saying "image
+  analysis failed" or "disease confidence is low" — that is not a wording problem,
+  it is a safety problem.
+  
+  [LENGTH CAPS — EXCEEDING THEM IS A FAILURE]
+  - `headline` <= 15 English words
+  - each `action` <= 20 English words, `timing` <= 10 English words
+  - `observation_window` <= 15 words
+  - `confidence_note` <= 45 English words (three clauses, so it is longer than the
+    other fields — that is expected; never drop a clause just to save words)
+  - the whole JSON <= 170 English words
+  - A Chinese rendering of your text must also fit 30 / 40 / 90 characters, so stay tight.
+  
+  [LANGUAGE CONTRACT — READ CAREFULLY]
+  Write all *generated* text in English: `headline`, `observation_window`,
+  `confidence_note`, and every `target` / `action` / `timing`.
+  
+  Two kinds of Chinese will appear in the input. Handle them differently:
+  
+  1. **Opaque enum tokens — copy verbatim, never translate, never paraphrase.**
+     - `risk_level`: exactly one of "正常" / "预警" / "高危"
+     - each alert's `title` and `detail`: copy the Chinese string exactly
+     - indicator names such as "溶氧" when they appear inside a copied field
+     These are identifiers used by the guardrail to verify you did not rewrite the
+     conclusion. You do not need to understand them; you need to copy them.
+  
+  2. **Chinese reference prose** (the "why this level" line, degradation summary,
+     tool error messages). Read it as background fact only. Never copy it into the
+     generated fields, and never translate it into English yourself.
+  
+  
+  [DOMAIN]
+  This system serves **Chinese freshwater pond aquaculture** (cyprinids, tilapia,
+  shrimp/crab ponds). It is NOT an ornamental aquarium, NOT marine, and NOT a
+  recirculating indoor farm. Every judgement must match freshwater pond practice.
+  
+  [REFERENCE RANGES — engineering defaults, always overridable by tool output]
+  - Water temperature: 20-30 C optimal; below 15 C or above 33 C is dangerous
+  - pH: 6.5-8.5 optimal; below 6.0 or above 9.0 is dangerous
+  - Dissolved oxygen (DO): >=5 mg/L optimal; 3-5 mg/L caution; <3 mg/L dangerous;
+    <1.5 mg/L is the pond-turnover (mass mortality) threshold
+  - Ammonia nitrogen: <=0.2 mg/L optimal; 0.2-0.5 caution; >0.5 dangerous
+  - Nitrite nitrogen: <=0.1 mg/L optimal; 0.1-0.3 caution; >0.3 dangerous
+  
+  [TWO FACTS PEOPLE GET WRONG]
+  1. **Ammonia toxicity is amplified by pH and temperature.** The same 0.5 mg/L
+     ammonia nitrogen is far more toxic at pH 8.5 / 30 C than at pH 7.0 / 20 C,
+     because a much larger share is un-ionised NH3.
+  2. **DO follows a daily rhythm.** Around sunrise (roughly 02:00-06:00) algae
+     stop producing oxygen while respiration continues, so DO bottoms out and
+     pond turnover most often happens in that window. Any DO advice must respect it.
+  
+  [ONE FEEDING RULE YOU MAY NEVER VIOLATE]
+  **If the disease result is anything other than "健康" (Healthy), you must stop
+  feeding. Never write "feed the normal amount".**
+  Sick fish eat less, so the feed simply rots, pushing ammonia up and DO down, and
+  it makes medicated-feed dosing wrong. The correct wording is
+  "stop feeding for 1-2 days, then switch to medicated feed".
+  This rule is **independent of the water numbers**: even if water quality is
+  perfect, a confirmed disease still means stop feeding.
+  Only when water is normal AND the fish are healthy may you say "feed normally".
+  
+
+  -- 硬约束自检（英文版是否把中文版的规矩都带过去了）--
+     [OK] 面向养殖户（不是写给工程师）
+     [OK] 不许改数值
+     [OK] 不许编造未测指标
+     [OK] 等级/告警只能复述
+     [OK] 动作要短
+     [OK] 限定条数（0–3 条）
+     [OK] 病害必须停料
+     [OK] 观察窗口跟风险来源
+     [OK] risk_level 用中文枚举
+
+  结论：全部约束均在英文版中落地
+  提示词源码：src/fisheries/agent/prompts.py（SCHEDULER_SYSTEM_PROMPT_EN / ADVISOR_SYSTEM_PROMPT_EN）
+
+  -- 附带说明：调度角色的英文提示词 --
+     调度角色的任务只是「选哪个工具」，不写自然语言给养殖户看。
+     英文版 3985 字 / 中文版 1667 字，两者同构。
+
+  -- RAG 知识库仍是中文，这一点是刻意的 --
+     语料是中文行业标准，检索结果直接贴进英文提示词；模型能读中文资料、用英文回答。这样两边都不用维护两份语料。
+
+==============================================================================
+场景三  英文 JSON → 中文报告：逐字段看回译结果
+==============================================================================
+
+==============================================================================
+  【整句英文（真实模型的常态）】
+==============================================================================
+
+  模型原文（英文）：
+     {
+       "risk_level": "高危",
+       "headline": "Dissolved oxygen is about to crash. Turn on the aerator now.",
+       "alerts": [
+         {
+           "level": "critical",
+           "title": "水质红线告警",
+           "detail": "预测 12 小时内溶氧跌破泛塘临界值"
+         }
+       ],
+       "water_actions": [
+         {
+           "priority": 1,
+           "target": "dissolved oxygen",
+           "action": "turn on the aerator now",
+           "timing": "tonight"
+         },
+         {
+           "priority": 2,
+           "target": "ammonia nitrogen",
+           "action": "feed less",
+           "timing": "today"
+         }
+       ],
+       "disease_actions": [
+         {
+           "priority": 1,
+           "target": "bacterial gill disease",
+           "action": "remove the sick fish and follow the label dose",
+           "timing": "today"
+         }
+       ],
+       "observation_window": "measure dissolved oxygen tonight",
+       "confidence_note": "healthy fish no disease detected"
+     }
+
+  逐字段回译：
+     [直译] headline
+           EN  : Dissolved oxygen is about to crash. Turn on the aerator now.
+           ZH  : 溶氧即将崩溃,打开增氧机
+     [直译] observation_window
+           EN  : measure dissolved oxygen tonight
+           ZH  : 今晚溶氧量
+     [直译] confidence_note
+           EN  : healthy fish no disease detected
+           ZH  : 无检测到的疾病
+     water_actions：模型给 2 条 → 报告留 2 条
+           1. [译出] 溶氧 → 现在打开动器（今晚）
+           2. [译出] 氨氮 → 减去进料（今天今天）
+     disease_actions：模型给 1 条 → 报告留 1 条
+           1. [译出] 病 → 移除生病的鱼并跟随标签剂量（今天今天）
+
+  → 回译后端：local   直译 12 段 / 退回模板 0 段
+  → 降级留痕（会进 degraded_reasons）：
+       · （无）
+
+  → 最终报告等级：高危（融合分 100.0）
+  → risk_level 是否原样保留：[OK] 未过翻译
+  → alerts 是否原样保留：[OK] 未过翻译
+
+==============================================================================
+  【短句英文（词表刚好够用）】
+==============================================================================
+
+  模型原文（英文）：
+     {
+       "risk_level": "高危",
+       "headline": "dissolved oxygen low",
+       "alerts": [
+         {
+           "level": "critical",
+           "title": "水质红线告警",
+           "detail": "预测 12 小时内溶氧跌破泛塘临界值"
+         }
+       ],
+       "water_actions": [
+         {
+           "priority": 1,
+           "target": "dissolved oxygen",
+           "action": "turn on the aerator",
+           "timing": "tonight"
+         }
+       ],
+       "disease_actions": [],
+       "observation_window": "measure dissolved oxygen tonight",
+       "confidence_note": "healthy fish"
+     }
+
+  逐字段回译：
+     [直译] headline
+           EN  : dissolved oxygen low
+           ZH  : 溶溶氧低
+     [直译] observation_window
+           EN  : measure dissolved oxygen tonight
+           ZH  : 今晚溶氧量
+     [直译] confidence_note
+           EN  : healthy fish
+           ZH  : 健康鱼
+     water_actions：模型给 1 条 → 报告留 1 条
+           1. [译出] 溶氧 → 开动器（今晚）
+     disease_actions：模型给 0 条 → 报告留 0 条
+
+  → 回译后端：local   直译 6 段 / 退回模板 0 段
+  → 降级留痕（会进 degraded_reasons）：
+       · （无）
+
+  → 最终报告等级：高危（融合分 100.0）
+  → risk_level 是否原样保留：[OK] 未过翻译
+  → alerts 是否原样保留：[OK] 未过翻译
+
+==============================================================================
+  结论：回译决定的是「话怎么说」，决定不了「风险几级」。
+        译不出来的段落退回规则模板的同名字段，而不是保留英文——
+        半英半中的报告比少一句建议更糟。每一次退回都写进 degraded_reasons。
+==============================================================================
+
+==============================================================================
+场景四  四种回译后端：同一段英文，四种命运
+==============================================================================
+
+  -- 环境变量 --
+     FISHERIES_TRANSLATOR_MODE              = （未设置）
+     FISHERIES_TRANSLATOR_PROVIDER          = （未设置）
+     FISHERIES_TRANSLATOR_API_KEY           = （未设置）
+     FISHERIES_TRANSLATOR_BASE_URL          = （未设置）
+     FISHERIES_TRANSLATOR_MODEL             = （未设置）
+     FISHERIES_TRANSLATOR_LOCAL_DIR         = （未设置）
+     FISHERIES_TRANSLATOR_LOCAL_MODEL       = （未设置）
+     解析出的模式：auto
+
+  -- 后端 1：local（本地离线模型，有模型时优先）--
+     回译后端：本地离线翻译模型（opus-mt-en-zh）
+     模型目录：D:\设置\项目\Agent\project\models\translate\opus-mt-en-zh
+     输入：dissolved oxygen is low
+     结果：[直译] 溶氧低
+     输入：Dissolved oxygen is about to crash. Turn on the aerator now.
+     结果：[直译] 溶氧即将崩溃,打开增氧机
+     分块预算：110 字符 / 16 词 （超出就切开——不切的话模型会丢掉句子尾部，连数字一起丢）
+     术语后订正：通用 NMT 把 turbidity 译成「多发性」、aerator 译成
+     「呼吸器」，靠一张中文→中文的后订正表扳回来。
+
+  -- 后端 2：glossary（兜底，离线、确定性、零依赖）--
+     回译后端：受控词表回译（离线、确定性）
+     输入：dissolved oxygen is low
+     结果：[直译] 溶氧低。
+     输入：Dissolved oxygen is about to crash. Turn on the aerator now.
+     结果：[拒绝] 句子含 11 个英文词，超出词表回译的可靠上限 6，逐词硬译会得到读不通的中文
+     短句（timing / 指标名）几乎都能直译；整句英文一律拒绝——
+     逐词硬译会得到读不通的中文，那比退回模板更糟。
+
+  -- 后端 3：llm（配了 FISHERIES_TRANSLATOR_* 时自动启用）--
+     回译后端：翻译模型回译
+     系统提示词（764 字）：
+       You are a professional translator for Chinese aquaculture (freshwater pond farming).
+       
+       Translate the user's text from English into Simplified Chinese for a fish farmer
+       with limited education.
+       
+       Hard rules:
+       …
+     未配模型时的行为：[拒绝] 未配置翻译模型
+     关键：调用失败**不抛异常**，只退回模板 —— 翻译只是可选环节，
+     它挂掉不能让整条 Agent 链路挂掉。
+
+  -- 后端 4：bypass（只在调试提示词时用）--
+     回译后端：不回译（调试用，保留英文）
+     输入：Dissolved oxygen is about to crash. Turn on the aerator now.
+     结果：Dissolved oxygen is about to crash. Turn on the aerator now.
+     用途：把「提示词是否写得让模型听得懂」与「回译是否可靠」分开排查，
+     否则回译失败会把提示词的问题掩盖掉。
+
+  -- 自动选择逻辑 --
+     本机 build_translator('auto', client=load_translator_client()) → LocalTranslator
+     build_translator('auto', client=None, env=无本地模型) → GlossaryTranslator  （没模型、没 key 的评委机器）
+     顺序是 **本地模型 → 远端中文模型 → 词表兜底**。把本地模型放第一位
+     是有原因的：以前 auto 只看有没有 client，离线机器必然落到词表后端，
+     而词表后端对超过 6 个英文词的自由长句只能整条拒绝，
+     **于是 AQUA-7B 的全部输出被丢掉、D12 的收益等于 0**。
+     没单配 FISHERIES_TRANSLATOR_* 时还会**复用调度角色**的模型；
+     不想要这个复用：把 FISHERIES_TRANSLATOR_MODE 设成 glossary。
+
+==============================================================================
+  回译源码：src/fisheries/agent/translate.py
+  提示词：  src/fisheries/agent/prompts.py（*_EN 后缀）
+  接线：    src/fisheries/agent/orchestrator.py（_back_translate）
+==============================================================================

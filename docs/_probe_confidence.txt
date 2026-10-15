@@ -1,0 +1,32 @@
+
+===== 水质预警 + 烂鳃 0.86 + 一条未核对资料 =====
+[facts] {"risk_level": "预警", "modalities": ["water", "vision"], "failed_modalities": [], "degraded_mode": false, "water_ok": true, "water_points": 24, "water_interval_minutes": 60, "water_enough": true, "water_extrapolation_hours": 12.0, "water_degraded": false, "vision_ok": true, "vision_disease": "烂鳃", "vision_confidence": 0.86, "vision_low_confidence": false, "knowledge_chunks": 3, "knowledge_unverified": 1}
+[zh] 依据：水质 24 点 + 图片检出烂鳃（把握 0.86）。不确定：结论含 12.0 小时外推；引用 3 条资料中 1 条未与标准原文核对。复核：建议尽快补测一次水质。
+[en] Evidence: 24 water points + image detected bacterial gill disease (0.86). Uncertainty: conclusion extrapolates 12.0 hours ahead; 1 of 3 references not checked against the standard text. Review: re-measure the water soon.
+
+[zh block]
+- 依据：水质 24 点 + 图片检出烂鳃（把握 0.86）
+- 不确定：结论含 12.0 小时外推；引用 3 条资料中 1 条未与标准原文核对
+- 复核：建议尽快补测一次水质
+句式固定为：依据：…。不确定：…。复核：…。
+
+[en block]
+- Evidence: 24 water points + image detected bacterial gill disease (0.86)
+- Uncertainty: conclusion extrapolates 12.0 hours ahead; 1 of 3 references not checked against the standard text
+- Review: re-measure the water soon
+Fixed shape: Evidence: ... . Uncertainty: ... . Review: ... .
+
+===== 水质正常、点数充足、无病害输入 =====
+[facts] {"risk_level": "正常", "modalities": ["water"], "failed_modalities": [], "degraded_mode": false, "water_ok": true, "water_points": 48, "water_interval_minutes": 60, "water_enough": true, "water_extrapolation_hours": 0.0, "water_degraded": false, "vision_ok": false, "vision_disease": null, "vision_confidence": null, "vision_low_confidence": false, "knowledge_chunks": 0, "knowledge_unverified": 0}
+[zh] 依据：水质 48 点。不确定：无明显不确定项。复核：无需人工复核。
+[en] Evidence: 48 water points. Uncertainty: no notable uncertainty. Review: no manual review needed.
+
+===== 水质只有 12 点、工具降级、图像分析失败 =====
+[facts] {"risk_level": "预警", "modalities": ["water"], "failed_modalities": ["vision"], "degraded_mode": false, "water_ok": true, "water_points": 12, "water_interval_minutes": 30, "water_enough": false, "water_extrapolation_hours": 4.0, "water_degraded": true, "vision_ok": false, "vision_disease": null, "vision_confidence": null, "vision_low_confidence": false, "knowledge_chunks": 0, "knowledge_unverified": 0}
+[zh] 依据：水质 12 点。不确定：图像分析失败；水质仅 12 点（少于 24 点），趋势偏弱等。复核：建议人工重做图像分析。
+[en] Evidence: 12 water points. Uncertainty: image analysis failed; only 12 water points (fewer than 24); the trend is weak etc. Review: a human should re-run the image analysis.
+
+===== 只有图片、病害置信度偏低 =====
+[facts] {"risk_level": "预警", "modalities": ["vision"], "failed_modalities": [], "degraded_mode": false, "water_ok": false, "water_points": null, "water_interval_minutes": null, "water_enough": null, "water_extrapolation_hours": null, "water_degraded": false, "vision_ok": true, "vision_disease": "水霉", "vision_confidence": 0.45, "vision_low_confidence": true, "knowledge_chunks": 0, "knowledge_unverified": 0}
+[zh] 依据：仅鱼体图片（无水质时序）。不确定：病害置信度偏低（0.45），需人工复核。复核：建议人工复看图片。
+[en] Evidence: image only (no water time series). Uncertainty: disease confidence is low (0.45); human review needed. Review: a human should re-check the photo.

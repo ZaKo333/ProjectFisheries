@@ -1,0 +1,188 @@
+==============================================================================
+ProjectFisheries —— 后端接口（FastAPI）演示
+==============================================================================
+  说明：用 TestClient 在进程内跑完整 HTTP 链路，不需要先起 uvicorn。
+        上传目录指向系统临时目录，不会往仓库里堆文件。
+
+==============================================================================
+场景一  服务自检与配置（/health + /config/*）
+==============================================================================
+
+[GET /api/v1/health]
+  status      = degraded
+  version     = 0.1.0
+  tools       = 
+      · water_risk_predict: rule-baseline（阈值规则 + 线性外推；LSTM 待接入）
+      · fish_disease_detect: mock（ultralytics 未安装 / 权重未就绪，输出带 degraded_mode=true）
+  knowledge   = status=ready chunks=119 backend=chroma(119 块) + bm25(119 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）
+  note        · 已开启「按服务器路径读图」（FISHERIES_API_ALLOW_LOCAL_PATH=1），便于演示与内网联调；公网部署请关闭并改用 /api/v1/ingest/image 上传。
+
+  ⚠ status=degraded 是**如实上报**：图像模型尚未训练，工具走 mock 兜底。
+
+[GET /api/v1/config/thresholds]
+  species     = ['鲤科', '罗非鱼', '虾蟹']
+  weights     = {'dissolved_oxygen': 0.35, 'ammonia_n': 0.2, 'nitrite_n': 0.15, 'ph': 0.12, 'water_temp': 0.1}
+  redlines    = {'DO_REDLINE': 1.5, 'NH3_REDLINE': 1.0, 'NO2_REDLINE': 0.5, 'PH_LOW_REDLINE': 5.5, 'PH_HIGH_REDLINE': 9.5, 'DO_CRASH_DROP': 2.0, 'DO_CRASH_WINDOW_H': 3.0}
+  溶氧倒计时线 = [{'value': 3.0, 'label': '危险线'}, {'value': 1.5, 'label': '泛塘临界值'}]
+  外推上限     = 12.0 小时（线性外推只报这么远）
+
+[GET /api/v1/config/tools]  —— 导出的 function-calling schema
+  · water_risk_predict  必填=['readings']
+  · fish_disease_detect  必填=['image_path']
+
+==============================================================================
+场景二  核心链路 /api/v1/assess（水质时序 + 鱼体图片）
+==============================================================================
+
+  请求：24 条恶化读数（溶氧 6.2→2.6）+ 真实烂鳃图片
+
+  HTTP 200
+  risk_level  = 高危    fused_score = 100.0
+  headline    = 【高危】溶氧出问题了，马上处理。
+  reason      = 融合分 100.0（水质模态 1.00×0.60 + 图像模态 0.73×0.40 + 协同加成 35），判定等级【高危】；命中水质红线 DO_REDLINE_PROJECTED；检出高致病性病害；等级下限 DISEAS…
+
+  告警 5 条：
+    [critical] 水质红线告警：触发规则 DO_REDLINE_PROJECTED，需立即人工干预并启动应急预案。
+    [critical] 高致病性病害告警：检出烂鳃（严重度 0.85，置信度 0.86），即使水质正常也需立即隔离处置。
+    [critical] 多源协同风险：水质已达预警及以上，同时检出细菌性病害，细菌繁殖条件与宿主抵抗力下降叠加
+    [critical] 多源协同风险：氨氮或亚硝酸盐超警戒，同时检出任何病害，毒物与病原双重胁迫
+    [critical] 多源协同风险：溶氧处于低位/预测将持续下降，同时检出烂鳃，鳃组织摄氧能力已受损
+
+  建议（水质 3 条 / 病害 1 条）：
+    1. [溶氧快跌破泛塘线] 全部增氧机马上开，停料，换掉 1/3 水，撒增氧剂。（立刻做，至少守 6 小时）
+    2. [溶氧（水里的氧气）] 增氧机一直开着别停，后半夜最容易缺氧。（7.0 小时后会掉到 1.5，之前必须开机）
+    3. [氨氮、亚硝酸盐] 停料 2–3 天，换掉两三成水，撒芽孢杆菌。（今天开始，两天后复测）
+    1. [烂鳃（把握 0.8598）] 捞走病鱼单独养，按说明书撒药，同时送检。（今天内做完）
+  复查窗口    = 6 小时后复测溶氧和氨氮，明天看鱼有没有好转。
+
+  引用的规范依据（RAG 检索 8 条）：
+    · 《应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应》> 0. 总原则（未核对标准原文）
+    · 《水质调控操作手册——增氧、换水、调水、底改》> 2. 溶解氧偏低（最紧急） > 2.1 分级响应（未核对标准原文）
+    · 《细菌性烂鳃病——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.4 第四步：环境调控（同步进行）（未核对标准原文）
+    · 《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 2. 投喂率：随水温变化（未核对标准原文）
+    · 《应急处置预案——泛塘、急性中毒、鱼病暴发的分钟级响应》> 1. 泛塘（严重缺氧）——最高优先级 > 1.2 立即动作（按顺序，不要跳步）（未核对标准原文）
+    · 《水质调控操作手册——增氧、换水、调水、底改》> 1. 调控总则：先救急，再治本（未核对标准原文）
+    · 《细菌性烂鳃病——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）（未核对标准原文）
+    · 《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（未核对标准原文）
+
+  知识库：backend=chroma(119 块) + bm25(119 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维） chunks=8 purposes={'应急处置': 2, '水质调控': 2, '病害处置': 2, '投料管理': 2}
+    ⚠ 检索到的知识条目全部标注为『未与标准原文核对』，引用时必须提示需人工复核。
+
+  → 结论：一次 HTTP 请求就拿到「等级 + 告警 + 处置 + 依据 + 轨迹」，
+     且依据可追溯到具体小节，不是模型凭空说的。
+
+==============================================================================
+场景三  传感器缓冲（/ingest/sensor → /readings → /assess 不带 readings）
+==============================================================================
+
+[POST /api/v1/ingest/sensor]  分批上报 24 条读数
+  第 1 批 HTTP 200 → {'pond_id': 'P02', 'accepted': 12, 'buffered_total': 12, 'first_timestamp': '2026-05-11T00:00:00', 'last_timestamp': '2026-05-11T11:00:00'}
+  第 2 批 HTTP 200 → {'pond_id': 'P02', 'accepted': 12, 'buffered_total': 24, 'first_timestamp': '2026-05-11T00:00:00', 'last_timestamp': '2026-05-11T23:00:00'}
+
+[GET /api/v1/ponds/P02/readings?limit=3]
+  total       = 24
+  最新 3 条    = [{'timestamp': '2026-05-11T21:00:00', 'water_temp': 26.0, 'ph': 7.6, 'dissolved_oxygen': 6.4, 'ammonia_n': 0.1, 'nitrite_n': 0.04}, {'timestamp': '2026-05-11T22:00:00', 'water_temp': 26.0, 'ph': 7.6, 'dissolved_oxygen': 6.4, 'ammonia_n': 0.1, 'nitrite_n': 0.04}, {'timestamp': '2026-05-11T23:00:00', 'water_temp': 26.0, 'ph': 7.6, 'dissolved_oxygen': 6.4, 'ammonia_n': 0.1, 'nitrite_n': 0.04}]
+
+[POST /api/v1/assess]  不传 readings，让服务从缓冲里取
+  HTTP 200 → risk_level=正常 fused=0.0
+  → 水质平稳，等级应为「正常」，说明缓冲里的 24 条真的被用上了。
+
+[POST /api/v1/assess]  缓冲里没有的塘口
+  HTTP 409 → pond_id='P-NOT-EXIST' 的会话缓冲里没有读数；请先 POST /api/v1/ingest/sensor，或直接在 readings 里传数据。
+
+==============================================================================
+场景四  图片上传（/ingest/image）
+==============================================================================
+
+[POST /api/v1/ingest/image]  真图（Bacterial gill disease (100).jpg）
+  HTTP 200
+  upload_id   = 56f122d2cac9433ba30f557580530fc4
+  stored_path = C:\Users\ZAKO3333\AppData\Local\Temp\fisheries_demo_ahucggjs\uploads\56f122d2cac9433ba30f557580530fc4.jpg
+  识别结果     = 烂鳃 （置信度 0.8528，degraded=True）
+  → 图像模型未训练，此处走 mock（默认 hash 播种，与文件夹名无关），
+     所以这张烂鳃图被随机判成了「烂鳃」。
+     模型到位后同一接口返回真实推理结果，接口契约不变。D:\设置\项目\Agent\project\.venv\Lib\site-packages\fastapi\routing.py:360: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+  return await dependant.call(**values)
+D:\设置\项目\Agent\project\.venv\Lib\site-packages\fastapi\routing.py:360: StarletteDeprecationWarning: 'HTTP_413_REQUEST_ENTITY_TOO_LARGE' is deprecated. Use 'HTTP_413_CONTENT_TOO_LARGE' instead.
+  return await dependant.call(**values)
+D:\设置\项目\Agent\project\.venv\Lib\site-packages\fastapi\telemetry\_api.py:244: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+  return function(**arguments)
+
+  → 文件名由服务端 uuid 生成，客户端传的 Bacterial gill disease (100).jpg 不落盘，
+     路径穿越在源头就不成立。
+
+[POST /api/v1/assess]  用 upload_id（推荐姿势：不暴露服务器路径）
+  HTTP 200 → 高危 / 100.0
+
+[POST /api/v1/ingest/image]  假图（扩展名合法、内容不是图片）
+  HTTP 422 → {'error_code': 'UNSUPPORTED_IMAGE', 'error_message': '无法识别的图片格式（支持 jpeg/png/webp/bmp/gif）。请确认文件未损坏，且不是被重命名过的其他类型文件。'}
+  → 扩展名只做粗筛，真格式由工具的魔数校验判定。
+
+[POST /api/v1/ingest/image]  扩展名不在白名单
+  HTTP 415 → 不支持的扩展名 .txt；仅接受 .bmp、.gif、.jpeg、.jpg、.png、.webp
+
+[POST /api/v1/ingest/image]  超过 10 MB 上限
+  HTTP 413 → 文件超过 10 MB 上限
+  → 失败的上传不会在磁盘留下垃圾文件（见 tests/unit/test_api.py）。
+
+==============================================================================
+场景五  知识库问答（/chat）与工具直调（/tools/call）
+==============================================================================
+
+[POST /api/v1/chat]  溶氧低于多少要开增氧机  
+  HTTP 200  answer_is_raw_retrieval=True
+    · [0.992] 《水质调控操作手册——增氧、换水、调水、底改》> 2. 溶解氧偏低（最紧急） > 2.1 分级响应  ⚠未核对
+    · [0.954] 《水质调控操作手册——增氧、换水、调水、底改》> 2. 溶解氧偏低（最紧急） > 2.3 增氧机的开机时机（重要）  ⚠未核对
+    · [0.942] 《淡水池塘养殖水质指标阈值与分级》> 2. 溶解氧（最关键的指标） > 2.3 溶解氧分级与对应处置  ⚠未核对
+    ⚠ 返回的 3/3 条知识条目标注为『未与标准原文核对』，引用其数值时需人工复核现行标准。
+
+[POST /api/v1/chat]  水霉病怎么处理  {'disease': '水霉', 'category': '病害'}
+  HTTP 200  answer_is_raw_retrieval=True
+    · [0.977] 《水霉病（肤霉病）——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.3 第三步：伤口处理与内服（第 2 – 5 天）  ⚠未核对
+    · [0.977] 《水霉病（肤霉病）——症状识别、发病条件与处置方案》> 3. 处置方案 > 3.1 第一步：消除应激源（最关键的步骤）  ⚠未核对
+    · [0.968] 《水霉病（肤霉病）——症状识别、发病条件与处置方案》> 2. 典型症状（用于人工核对图像识别结果） > 2.3 与"细菌性溃疡/赤皮病"的鉴别  ⚠未核对
+    ⚠ 返回的 3/3 条知识条目标注为『未与标准原文核对』，引用其数值时需人工复核现行标准。
+
+  → 未配大模型时接口**不编回答**，直接把检索原文交出来并置
+     answer_is_raw_retrieval=True：让调用方分得清「模型说的」和「系统查到的」。
+
+[POST /api/v1/tools/call]  跳过 LLM 直调工具
+  HTTP 200 → water_risk_predict / 高危 / 100.0
+
+[POST /api/v1/tools/call]  参数写错 —— 传了不存在的参数名
+  HTTP 422 → 工具参数不合法：water_risk_predict() got an unexpected keyword argument 'pond'…
+  → 工具签名不认识 `pond`，直接 422 把真实原因回给调用方。
+
+[POST /api/v1/tools/call]  参数类型不对 —— readings 不是列表
+  HTTP 200
+  tool   = water_risk_predict
+  result = status=error error_code=INVALID_INPUT
+  → 这里**故意**返回 200：工具的契约是「出错也不抛异常」，
+     而是返回 status=error + 人话错误信息，
+     这样 Agent 循环不会因为一次脏输入断链。
+
+==============================================================================
+场景六  契约护栏（这些才是把 demo 变成系统的东西）
+==============================================================================
+
+[字段拼错] dissolved_oxygen 写成 dissolved_oxyen
+  HTTP 422 → Extra inputs are not permitted
+  → 契约是 extra="forbid"：拼错**报错**，而不是静默当成
+     「没传溶氧」再算出一个没有溶氧的风险分。
+
+[读数太少] 只传 2 条
+  HTTP 422 → List should have at least 3 items after validation, not 2
+  → 少于 3 条直接拒绝：否则工具会在样本不足时降级，
+     调用方看到的是一个基于空水质的「正常」——假结论比报错更危险。
+
+[未知 upload_id]
+  HTTP 404 → 未知的 upload_id='deadbeef'；请先 POST /api/v1/ingest/image
+
+[两模态都没给]
+  HTTP 422 → 水质时序数据与鱼体图片至少要提供一项（readings / image_path / upload_id）
+
+==============================================================================
+  结论：接口层不重新实现业务逻辑——它只做四件事：
+        校验入参、调用已实现的工具/Agent、把结果转成稳定契约、
+        把异常转成明确的 HTTP 状态码。
+==============================================================================

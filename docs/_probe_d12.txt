@@ -1,0 +1,28 @@
+-- describe_backends() --
+  scheduler      : scheduler: MockLLM（确定性离线模式）
+  advisor        : advisor: MockLLM（确定性离线模式）
+  prompt_lang    : zh
+  translator     : 回译后端：本地离线翻译模型（opus-mt-en-zh）
+
+-- 提示词语言判定（未显式指定时） --
+  mock             -> zh
+  aqua-7b-ollama   -> en
+  aqua-7b-vllm     -> en
+  deepseek         -> zh
+  dashscope        -> zh
+  openai           -> zh
+
+-- 显式覆盖优先于自动判定 --
+  explicit=zh  provider=aqua-7b-ollama   -> zh
+  explicit=zh  provider=deepseek         -> zh
+  explicit=en  provider=aqua-7b-ollama   -> en
+  explicit=en  provider=deepseek         -> en
+
+-- 环境变量覆盖 --
+  FISHERIES_PROMPT_LANG=en     -> en
+  FISHERIES_PROMPT_LANG=zh     -> zh
+  FISHERIES_PROMPT_LANG=bogus  -> zh
+
+-- 本机回译后端（无 API key、离线） --
+  client     : None
+  translator : 回译后端：本地离线翻译模型（opus-mt-en-zh）

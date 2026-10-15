@@ -1,0 +1,11 @@
+{
+  "collection": "fisheries_knowledge",
+  "embedder": "fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+  "dim": 512,
+  "n_docs": 9,
+  "n_chunks": 150,
+  "n_tables": 52,
+  "total_chars": 42530,
+  "fingerprint": "51e68fed18b4ffc1",
+  "built_at": "2026-10-15T17:44:29+0800"
+}

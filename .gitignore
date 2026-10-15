@@ -1,0 +1,58 @@
+# ===========================================================================
+# ProjectFisheries —— 版本控制排除清单
+#
+# 原则：仓库里只放「人写的」和「改不动的」东西。
+#       凡是能由脚本重新生成、或体积大到不该进仓库的，一律排除；
+#       换一台机器跑一次对应脚本即可复原（见 README §1）。
+# ===========================================================================
+
+# --- Python 运行环境 -------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- 模型权重与下载缓存 -----------------------------------------------------
+# models/ 整体不进仓库（约 400 MB）。换机器时按下述方式复原：
+#   · models/fastembed/          → 首次检索时由 fastembed 自动下载（约 91 MB）
+#   · models/translate/          → python scripts/fetch_translate_model.py（约 315 MB）
+#   · models/pretrained/         → 训练脚本自动放置的官方预训练权重
+#   · models/yolov8-fish.pt      → python scripts/train_yolo_fish.py 训练产出
+# 没有这些文件时程序会优雅降级（YOLO 落回模板、回译落回受控词表），
+# 但 RAG 检索需要 fastembed 缓存，首次运行请保证联网。
+models/
+
+# --- 数据 -------------------------------------------------------------------
+# 原始数据集（约 1.37 GB）按设计放在工程外，通过环境变量或
+# data/datasets/ 引入；下列内容均由 scripts/ 生成，不进仓库。
+data/derived/
+data/uploads/
+data/datasets/
+data/dataset_index.json
+
+# 保留 data/ 目录本身（data/datasets/ 是约定的导入位置）
+!data/.gitkeep
+
+# --- 开发期临时产物（不是交付内容）------------------------------------------
+# 根目录下的探针脚本只是调试残留，不属于工程组成
+/_probe*.py
+
+# --- 编辑器 / 操作系统 ------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+desktop.ini

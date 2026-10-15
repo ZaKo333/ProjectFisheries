@@ -1,0 +1,1582 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ProjectFisheries Agent API",
+    "description": "水产养殖智能监测与决策 Agent 的后端接口。\n\n链路：数据校验 → 水质时序风险预测 → 鱼体病害识别 → 多源融合决策 → RAG 检索规范依据 → 输出风险等级 / 告警 / 养殖建议。\n\n**免责声明**：水质指标的标准限值部分已对到 GB 11607-1989（渔业水质标准，现行）原文（2026-10-15 核验），但本项目的警戒线 / 危险线 / 红线是在标准之上的工程扩展，措施亦为工程默认值；正式使用前须由有资质的水产技术人员复核；本服务输出不构成用药指令。",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "健康检查",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assess": {
+      "post": {
+        "summary": "融合评估（水质 + 鱼体图片 → 风险等级 / 告警 / 养殖建议）",
+        "operationId": "assess_api_v1_assess_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/call": {
+      "post": {
+        "summary": "直接调用工具（跳过 LLM 决策，便于调试与前端联调）",
+        "operationId": "call_tool_api_v1_tools_call_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolCallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/sensor": {
+      "post": {
+        "summary": "追加传感器读数到会话缓冲（内存态）",
+        "operationId": "ingest_sensor_api_v1_ingest_sensor_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestSensorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestSensorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ponds/{pond_id}/readings": {
+      "get": {
+        "summary": "读取会话缓冲里的读数",
+        "operationId": "get_readings_api_v1_ponds__pond_id__readings_get",
+        "parameters": [
+          {
+            "name": "pond_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pond Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Readings Api V1 Ponds  Pond Id  Readings Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/image": {
+      "post": {
+        "summary": "上传鱼体图片并立即识别",
+        "operationId": "ingest_image_api_v1_ingest_image_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_ingest_image_api_v1_ingest_image_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestImageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "summary": "知识库问答（RAG）",
+        "operationId": "chat_api_v1_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ponds/{pond_id}/history": {
+      "get": {
+        "summary": "评估历史（内存态，进程重启即失效）",
+        "operationId": "get_history_api_v1_ponds__pond_id__history_get",
+        "parameters": [
+          {
+            "name": "pond_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pond Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/thresholds": {
+      "get": {
+        "summary": "阈值、权重与红线规则（供前端展示判定依据）",
+        "operationId": "get_thresholds_api_v1_config_thresholds_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThresholdResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/tools": {
+      "get": {
+        "summary": "工具契约（OpenAI function calling 原生格式）",
+        "operationId": "get_tools_api_v1_config_tools_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolSchemasResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdvisorReport": {
+        "properties": {
+          "risk_level": {
+            "type": "string",
+            "title": "Risk Level"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "default": ""
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            },
+            "type": "array",
+            "title": "Alerts",
+            "description": "告警信息"
+          },
+          "water_actions": {
+            "items": {
+              "$ref": "#/components/schemas/Advisory"
+            },
+            "type": "array",
+            "title": "Water Actions",
+            "description": "水质调控建议"
+          },
+          "disease_actions": {
+            "items": {
+              "$ref": "#/components/schemas/Advisory"
+            },
+            "type": "array",
+            "title": "Disease Actions",
+            "description": "病害处置方案"
+          },
+          "observation_window": {
+            "type": "string",
+            "title": "Observation Window",
+            "default": ""
+          },
+          "confidence_note": {
+            "type": "string",
+            "title": "Confidence Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "risk_level"
+        ],
+        "title": "AdvisorReport",
+        "description": "面向养殖户的最终建议报告 —— 建议角色提示词要求大模型输出的结构。\n\n四个业务块与用户约定一致：**综合风险等级 / 告警信息 / 病害处置方案 / 水质调控建议**。\n\n``risk_level`` 与 ``alerts`` 虽然由大模型**复述**（这样输出的 JSON 自身完整、\n可以直接给前端或塞进演示），但 :meth:`AquacultureAgent._report_from_parsed`\n会用融合层的确定性结果**强制回填**，并把不一致记进推理轨迹。\n让模型复述不是为了信它，而是为了能**检出**它试图改动等级——\n这是\"融合决策不交给 LLM\"这条原则的可观测化。"
+      },
+      "Advisory": {
+        "properties": {
+          "priority": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Priority"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "针对的指标或问题"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "具体措施"
+          },
+          "timing": {
+            "type": "string",
+            "title": "Timing",
+            "description": "时间窗或频次",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "priority",
+          "target",
+          "action"
+        ],
+        "title": "Advisory",
+        "description": "一条可落地的养殖建议。"
+      },
+      "AdvisoryOut": {
+        "properties": {
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "timing": {
+            "type": "string",
+            "title": "Timing"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "priority",
+          "target",
+          "action",
+          "timing"
+        ],
+        "title": "AdvisoryOut"
+      },
+      "Alert": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "title": "Level"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "level",
+          "title",
+          "detail"
+        ],
+        "title": "Alert",
+        "description": "一条告警。结构化输出，可直接送短信/看板。"
+      },
+      "AlertOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "level",
+          "title",
+          "detail"
+        ],
+        "title": "AlertOut"
+      },
+      "AssessRequest": {
+        "properties": {
+          "pond_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Pond Id",
+            "description": "池塘编号",
+            "default": "unknown"
+          },
+          "species": {
+            "type": "string",
+            "enum": [
+              "鲤科",
+              "罗非鱼",
+              "虾蟹"
+            ],
+            "title": "Species",
+            "description": "养殖品种，决定阈值档位",
+            "default": "鲤科"
+          },
+          "readings": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WaterQualityPoint"
+                },
+                "type": "array",
+                "maxItems": 20000,
+                "minItems": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readings",
+            "description": "水质时序读数，按时间升序。至少 3 条（趋势回归的硬下限）；不传则只做图像模态。上限 20000 条 ≈ 14 天的一分钟采样。"
+          },
+          "use_buffer": {
+            "type": "boolean",
+            "title": "Use Buffer",
+            "description": "为 True 且未传 readings 时，改用 /ingest/sensor 累积的会话缓冲。（内存态，进程重启即失效，仅用于演示与联调）",
+            "default": false
+          },
+          "image_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Path",
+            "description": "服务器本地图片路径。生产环境应关闭，见 allow_local_path。"
+          },
+          "upload_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Id",
+            "description": "先调 /ingest/image 拿到 upload_id，再在这里引用（推荐做法）"
+          },
+          "mock_source": {
+            "type": "string",
+            "enum": [
+              "hash",
+              "folder_hint"
+            ],
+            "title": "Mock Source",
+            "description": "仅图像模型未训练（mock 兜底）时生效。hash=按文件内容确定性随机；folder_hint=从文件夹名取标签以稳定触发协同规则，仅用于链路联调。",
+            "default": "hash"
+          },
+          "use_knowledge": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Knowledge",
+            "description": "是否做 RAG 检索；None=按服务默认配置"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question",
+            "description": "可选的自然语言补充问题"
+          },
+          "include_trace": {
+            "type": "boolean",
+            "title": "Include Trace",
+            "description": "是否返回完整推理轨迹",
+            "default": true
+          },
+          "include_knowledge_block": {
+            "type": "boolean",
+            "title": "Include Knowledge Block",
+            "description": "是否返回实际注入建议提示词的知识块原文。保留它是为了让前端/评委能直接看到建议的依据，而不只是相信「接了 RAG」。",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AssessRequest",
+        "description": "核心评估请求：融合水质时序 + 鱼体图片，产出风险等级与养殖建议。"
+      },
+      "AssessResponse": {
+        "properties": {
+          "pond_id": {
+            "type": "string",
+            "title": "Pond Id"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "正常",
+              "预警",
+              "高危"
+            ],
+            "title": "Risk Level"
+          },
+          "fused_score": {
+            "type": "number",
+            "title": "Fused Score"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "default": ""
+          },
+          "advisories": {
+            "items": {
+              "$ref": "#/components/schemas/AdvisoryOut"
+            },
+            "type": "array",
+            "title": "Advisories"
+          },
+          "observation_window": {
+            "type": "string",
+            "title": "Observation Window",
+            "default": ""
+          },
+          "confidence_note": {
+            "type": "string",
+            "title": "Confidence Note",
+            "default": ""
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdvisorReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/AlertOut"
+            },
+            "type": "array",
+            "title": "Alerts"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceOut"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "water": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Water"
+          },
+          "vision": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision"
+          },
+          "fusion": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fusion"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "References"
+          },
+          "knowledge_summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Knowledge Summary"
+          },
+          "knowledge_block": {
+            "type": "string",
+            "title": "Knowledge Block",
+            "default": ""
+          },
+          "trace": {
+            "items": {
+              "$ref": "#/components/schemas/TraceStepOut"
+            },
+            "type": "array",
+            "title": "Trace"
+          },
+          "llm_backends": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Llm Backends"
+          },
+          "degraded_mode": {
+            "type": "boolean",
+            "title": "Degraded Mode",
+            "default": false
+          },
+          "degraded_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Degraded Reasons"
+          },
+          "elapsed_seconds": {
+            "type": "number",
+            "title": "Elapsed Seconds",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pond_id",
+          "risk_level",
+          "fused_score",
+          "reason"
+        ],
+        "title": "AssessResponse",
+        "description": "融合评估结果。字段名与 ``AgentResult`` 保持一致，便于前端与 CLI 共用一套理解。"
+      },
+      "Body_ingest_image_api_v1_ingest_image_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "鱼体图片"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_ingest_image_api_v1_ingest_image_post"
+      },
+      "ChatChunkOut": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "heading_text": {
+            "type": "string",
+            "title": "Heading Text"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "disease": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disease"
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "dense_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dense Score"
+          },
+          "sparse_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sparse Score"
+          },
+          "matched_by": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched By"
+          },
+          "citation_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Citation Keys"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "title",
+          "heading_text",
+          "text",
+          "category",
+          "verified",
+          "score"
+        ],
+        "title": "ChatChunkOut"
+      },
+      "ChatRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 2,
+            "title": "Query"
+          },
+          "k": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "K",
+            "default": 5
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "水质",
+                  "病害",
+                  "投料",
+                  "应急",
+                  "标准"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "disease": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "烂鳃",
+                  "出血",
+                  "水霉",
+                  "其他"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disease"
+          },
+          "answer_with_llm": {
+            "type": "boolean",
+            "title": "Answer With Llm",
+            "description": "是否让建议角色大模型基于检索结果组织回答。未配置大模型时本参数无效，会直接返回检索原文。",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "ChatRequest",
+        "description": "知识库问答。"
+      },
+      "ChatResponse": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "answer_is_raw_retrieval": {
+            "type": "boolean",
+            "title": "Answer Is Raw Retrieval",
+            "default": false
+          },
+          "chunks": {
+            "items": {
+              "$ref": "#/components/schemas/ChatChunkOut"
+            },
+            "type": "array",
+            "title": "Chunks"
+          },
+          "backend": {
+            "type": "string",
+            "title": "Backend",
+            "default": ""
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "answer"
+        ],
+        "title": "ChatResponse"
+      },
+      "EvidenceOut": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "code",
+          "label"
+        ],
+        "title": "EvidenceOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "server_time": {
+            "type": "string",
+            "title": "Server Time"
+          },
+          "uptime_seconds": {
+            "type": "number",
+            "title": "Uptime Seconds"
+          },
+          "tools": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Tools"
+          },
+          "llm_backends": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Llm Backends"
+          },
+          "knowledge": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Knowledge"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "server_time",
+          "uptime_seconds"
+        ],
+        "title": "HealthResponse"
+      },
+      "HistoryResponse": {
+        "properties": {
+          "pond_id": {
+            "type": "string",
+            "title": "Pond Id"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssessResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pond_id",
+          "total"
+        ],
+        "title": "HistoryResponse"
+      },
+      "IngestImageResponse": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "stored_path": {
+            "type": "string",
+            "title": "Stored Path"
+          },
+          "vision": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Vision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "upload_id",
+          "filename",
+          "size_bytes",
+          "stored_path",
+          "vision"
+        ],
+        "title": "IngestImageResponse"
+      },
+      "IngestSensorRequest": {
+        "properties": {
+          "pond_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Pond Id",
+            "default": "unknown"
+          },
+          "readings": {
+            "items": {
+              "$ref": "#/components/schemas/WaterQualityPoint"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Readings",
+            "description": "至少 1 条"
+          },
+          "replace": {
+            "type": "boolean",
+            "title": "Replace",
+            "description": "True=覆盖原有缓冲而非追加",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "readings"
+        ],
+        "title": "IngestSensorRequest",
+        "description": "追加传感器读数到会话缓冲。"
+      },
+      "IngestSensorResponse": {
+        "properties": {
+          "pond_id": {
+            "type": "string",
+            "title": "Pond Id"
+          },
+          "accepted": {
+            "type": "integer",
+            "title": "Accepted"
+          },
+          "buffered_total": {
+            "type": "integer",
+            "title": "Buffered Total"
+          },
+          "first_timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Timestamp"
+          },
+          "last_timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Timestamp"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pond_id",
+          "accepted",
+          "buffered_total"
+        ],
+        "title": "IngestSensorResponse"
+      },
+      "ThresholdResponse": {
+        "properties": {
+          "species": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Species"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Weights"
+          },
+          "effective_note": {
+            "type": "string",
+            "title": "Effective Note"
+          },
+          "profiles": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Profiles"
+          },
+          "redlines": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Redlines"
+          },
+          "action_thresholds": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Action Thresholds"
+          },
+          "extrapolation_horizon_hours": {
+            "type": "number",
+            "title": "Extrapolation Horizon Hours"
+          },
+          "min_reliable_points": {
+            "type": "integer",
+            "title": "Min Reliable Points"
+          },
+          "persistence_cap": {
+            "type": "number",
+            "title": "Persistence Cap"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "species",
+          "weights",
+          "effective_note",
+          "profiles",
+          "redlines",
+          "action_thresholds",
+          "extrapolation_horizon_hours",
+          "min_reliable_points",
+          "persistence_cap",
+          "disclaimer"
+        ],
+        "title": "ThresholdResponse",
+        "description": "阈值与权重的只读视图——让前端能直接展示「判定依据」。"
+      },
+      "ToolCallRequest": {
+        "properties": {
+          "tool": {
+            "type": "string",
+            "enum": [
+              "water_risk_predict",
+              "fish_disease_detect"
+            ],
+            "title": "Tool"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool"
+        ],
+        "title": "ToolCallRequest",
+        "description": "直接调用某个工具（跳过 LLM 决策），用于调试与前端联调。"
+      },
+      "ToolResultResponse": {
+        "properties": {
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "elapsed_seconds": {
+            "type": "number",
+            "title": "Elapsed Seconds"
+          },
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool",
+          "elapsed_seconds",
+          "result"
+        ],
+        "title": "ToolResultResponse"
+      },
+      "ToolSchemasResponse": {
+        "properties": {
+          "tools": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Tools"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tools"
+        ],
+        "title": "ToolSchemasResponse"
+      },
+      "TraceStepOut": {
+        "properties": {
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "step",
+          "kind",
+          "title"
+        ],
+        "title": "TraceStepOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WaterQualityPoint": {
+        "properties": {
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp",
+            "description": "采样时间，ISO 8601；缺失时按 interval_minutes 等间隔处理"
+          },
+          "water_temp": {
+            "type": "number",
+            "title": "Water Temp",
+            "description": "水温 ℃"
+          },
+          "ph": {
+            "type": "number",
+            "title": "Ph",
+            "description": "pH 值"
+          },
+          "dissolved_oxygen": {
+            "type": "number",
+            "title": "Dissolved Oxygen",
+            "description": "溶解氧 mg/L"
+          },
+          "ammonia_n": {
+            "type": "number",
+            "title": "Ammonia N",
+            "description": "氨氮（以 N 计）mg/L"
+          },
+          "nitrite_n": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nitrite N",
+            "description": "亚硝酸盐氮 mg/L；探头缺失时为 None，该指标不参与打分"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "water_temp",
+          "ph",
+          "dissolved_oxygen",
+          "ammonia_n"
+        ],
+        "title": "WaterQualityPoint",
+        "description": "单条水质采样记录。\n\nExamples:\n    >>> p = WaterQualityPoint(water_temp=28.4, ph=8.1,\n    ...                       dissolved_oxygen=2.6, ammonia_n=0.62, nitrite_n=0.15)\n    >>> p.dissolved_oxygen\n    2.6"
+      }
+    }
+  }
+}
