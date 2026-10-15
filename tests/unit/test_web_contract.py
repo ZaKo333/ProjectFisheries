@@ -118,6 +118,30 @@ def emitted_codes(func) -> set[str]:
     return set(re.findall(r'hits\.append\(\s*"([A-Z][A-Z0-9_]{3,})"', inspect.getsource(func)))
 
 
+#: 后端写 ``error_code`` 的四种写法，少覆盖一种就漏掉一整层。
+_ERROR_CODE_PATTERNS = (
+    r'_error\(\s*\w+\s*,\s*"([A-Z][A-Z0-9_]{3,})"',          # _error(path, "UNSUPPORTED_IMAGE", msg)
+    r'error_code["\']?\s*[=:]\s*"([A-Z][A-Z0-9_]{3,})"',      # error_code="INVALID_INPUT" / "error_code": "TOOL_CRASHED"
+    r'error_code["\']?\s*,\s*"([A-Z][A-Z0-9_]{3,})"',         # result.get("error_code", "UNKNOWN")
+    r'error_code["\']?\s*\)\s*or\s*"([A-Z][A-Z0-9_]{3,})"',   # water.get("error_code") or "UNKNOWN"
+)
+
+
+def backend_error_codes() -> set[str]:
+    """从 ``src/fisheries/`` 全树抠出所有可能写进 ``error_code`` 的码。
+
+    这里**不写死任何一张表**。上一版只铺开了图像工具那一层、另外几个码靠手抄，
+    结果是水质工具或调度层再加一个新码（比如 ``TIMEOUT``）时测试照样绿，
+    界面上却开始显示英文 —— 正好是本次要修的那类缺陷的翻版。
+    """
+    codes: set[str] = set()
+    for path in (PROJECT_ROOT / "src" / "fisheries").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for pattern in _ERROR_CODE_PATTERNS:
+            codes |= set(re.findall(pattern, text))
+    return codes
+
+
 # --------------------------------------------------------------------------- #
 # 1. 静态托管
 # --------------------------------------------------------------------------- #
@@ -199,20 +223,15 @@ class TestDictContract:
     def test_disease_groups_cover_every_label(self) -> None:
         assert js_object_keys(_read(DICT_JS), "DISEASE_GROUPS") == set(DISEASE_LABELS)
 
-    def test_tool_error_codes_cover_every_layer(self) -> None:
-        """图像工具 / 水质工具 / 调度层三种错误码都可能落到界面上。"""
-        from fisheries.tools import fish_disease
-
-        # 图像工具的码是在调用点当第二实参传进去的（`_error(path, "CODE", msg)`），
-        # 不是 append 出来的，所以这里扫 `_error(...)` 的调用点。
-        backend = set(
-            re.findall(r'_error\(\s*\w+\s*,\s*"([A-Z][A-Z0-9_]{3,})"', inspect.getsource(fish_disease))
-        )
-        backend |= {"INVALID_INPUT", "COMPUTE_FAILED"}
-        backend |= {"UNKNOWN_TOOL", "BAD_ARGUMENTS", "TOOL_CRASHED", "DUPLICATE_CALL"}
+    def test_tool_error_codes_match_the_backend_exactly(self) -> None:
+        """图像工具 / 水质工具 / 调度层 / 兜底默认值 —— 四种来源一个不漏。"""
+        backend = backend_error_codes()
+        assert len(backend) >= 8, f"只抠到 {len(backend)} 个码，正则大概失配了：{sorted(backend)}"
         frontend = js_object_keys(_read(DICT_JS), "TOOL_ERRORS")
-        missing = {c for c in backend if c not in frontend}
-        assert not missing, f"这些错误码在界面上会显示成英文：{sorted(missing)}"
+        assert frontend == backend, (
+            f"界面上会显示成英文：{sorted(backend - frontend)}；"
+            f"后端从不发、可以删掉：{sorted(frontend - backend)}"
+        )
 
     def test_severity_labels_cover_the_three_levels(self) -> None:
         assert js_object_keys(_read(DICT_JS), "SEVERITY_LABEL") == {"0", "0.5", "1"}
