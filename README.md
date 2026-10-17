@@ -176,7 +176,7 @@ python scripts/setup_env.py --skip-kb           # 先不建向量库，只想看
 python scripts/setup_env.py --skip-datasets     # 不要数据集（省 1.4 GB 与几分钟）
 python scripts/setup_env.py --dataset-mirror https://你的地址/fish-datasets
 python scripts/setup_env.py --recreate          # 删掉 .venv 重建
-python scripts/setup_env.py --extras api,rag,dev --python C:\Python313\python.exe
+python scripts/setup_env.py --extras api,rag,dev --python "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"   # 换成自己的解释器
 ```
 
 | 参数 | 作用 |
@@ -303,7 +303,7 @@ python scripts/fetch_datasets.py --fetch all
 ```bash
 # ① 找一台已经把数据导好的机器，把 data/datasets 里的目录打成 zip
 python scripts/pack_dataset_mirror.py --all          # 产出 dist/mirror/*.zip + manifest.json
-python scripts/pack_dataset_mirror.py --name fish_disease --out D:\share
+python scripts/pack_dataset_mirror.py --name fish_disease --out dist\share
 
 # ② 把 dist/mirror 整个目录传到任意静态托管（对象存储、公司内网、Nginx 都行）
 #    上传后应该能直接访问 https://你的地址/fish-datasets/manifest.json
@@ -323,7 +323,7 @@ python scripts/fetch_datasets.py --fetch all
 * **打包是字节可复现的**：同一份数据重复打包得到同一个 `sha256`（zip 内时间戳固定
   为 1980-01-01），校验值可以放心抄进文档。
 * 单个数据集也可以只用本地路径或 `file://` 当源，离线演示够用：
-  `set FISHERIES_DATASET_MIRROR=D:\share`。
+  `set FISHERIES_DATASET_MIRROR=dist\share`（相对工程根目录）。
 * 镜像里没有的（比如那 2 份本地本来就没有的），`--fetch` 会明确说「两条路都不通」，
   不会静默跳过。
 
@@ -347,8 +347,8 @@ python scripts/fetch_datasets.py --weights --verify             # 重新算一�
 
 ```bash
 # 在一台权重已就绪的机器上，把权重原样复制（不压缩）到 dist/mirror/weights/
-python scripts/pack_dataset_mirror.py --weights --skip-datasets --out D:\share
-# 把 D:\share\weights\ 整个传上静态托管，然后换台机器指过去
+python scripts/pack_dataset_mirror.py --weights --skip-datasets --out dist\share
+# 把 dist\share\weights\ 整个传上静态托管，然后换台机器指过去
 set FISHERIES_WEIGHTS_MIRROR=https://你的地址/fish-weights
 python scripts/fetch_datasets.py --fetch-weights all
 ```
