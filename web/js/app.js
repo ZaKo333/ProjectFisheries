@@ -607,7 +607,7 @@
               <div class="mt-1">${`<span class="badge ${groupBadge}">${esc(group)}</span>`} <span class="badge badge-muted">严重度权重 ${fmt(vision.severity_weight, 2)}</span></div>
             </div>
             <div>
-              <div class="small muted">置信度</div>
+              <div class="small muted">置信度 <span style="opacity:.7">（仅在这 4 类之间比较）</span></div>
               <div style="font-size:26px;font-weight:800;font-family:var(--mono)">${pct(vision.confidence)}</div>
             </div>
           </div>

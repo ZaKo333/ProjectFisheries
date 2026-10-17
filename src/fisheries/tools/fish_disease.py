@@ -115,6 +115,16 @@ MOCK_SOURCE_DEFAULT = "hash"
 _MOCK_HINT_TAG = "+folder_hint"
 LOW_CONFIDENCE_THRESHOLD = 0.60
 
+#: 真实模型是「烂鳃/出血/水霉/健康」四类闭集分类器，**没有"非鱼类"这一类**。
+#: softmax 必须把这四类的概率归一，因此任何一张图都会得到一个"最高的那一类"
+#: 和一个看起来很硬的置信度——包括完全不是鱼的设计海报（实测被判「健康」0.9997，
+#: 水霉 0.0002、出血与烂鳃 0.0）。这句话跟着每一个真实模型结果走，
+#: 防止把 softmax 概率误读成"这张图确实是健康的鱼"。
+CLOSED_SET_CAVEAT = (
+    "⚠ 本模型只在鱼类病害图片上训练，不判断「图片里是不是鱼」；"
+    "非鱼类图片同样会被归入上述四类，此时结论没有意义。"
+)
+
 #: 权重目录（工程根下的 models/）。
 _MODELS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "models"
@@ -473,6 +483,10 @@ def fish_disease_detect(
         )
     else:
         note = f"检出{LB_GROUP.get(top_label, '')}{top_label}特征，建议结合水质数据综合研判。"
+
+    # 四类闭集分类器对"这张图不是鱼"没有任何表达能力，真实模型结果必须带这句声明
+    if not degraded:
+        note += CLOSED_SET_CAVEAT
 
     if is_low_conf:
         note += f" 置信度 {confidence:.2f} 偏低（阈值 {max(conf_threshold, LOW_CONFIDENCE_THRESHOLD):.2f}），建议补拍清晰照片或人工复核。"
