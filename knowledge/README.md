@@ -149,6 +149,8 @@ knowledge/
 
 ## 4. 入库流程
 
+仓库**不含** `chroma/`（见 §3），克隆下来第一次必须先构建一次；之后只有语料改动了才需要重建。
+
 ```powershell
 cd <工程>
 $env:PYTHONPATH = "$PWD\src"

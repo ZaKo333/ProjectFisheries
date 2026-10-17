@@ -373,8 +373,19 @@ class TestRealGbkConsole:
         assert "UnicodeEncodeError" not in result.stderr
 
     def test_build_knowledge_base_check_does_not_crash(self) -> None:
-        """``scripts/selftest.py`` 的第 3 步就是这条命令（`运行自检.bat` 现在只转发）。"""
+        """``scripts/selftest.py`` 的第 3 步就是这条命令（`运行自检.bat` 现在只转发）。
+
+        向量库不入库（见 ``.gitignore``），所以全新克隆上这条命令会以退出码 1
+        报「未构建」——那是正常状态，不是崩溃。本用例只管控制台编码：无论库
+        建没建，都不许抛 ``UnicodeEncodeError``，也不许甩栈。
+        """
         result = _run_under_gbk("build_knowledge_base.py", "--check")
-        assert result.returncode == 0, f"stderr:\n{result.stderr}"
         assert "UnicodeEncodeError" not in result.stderr
-        assert "语料状态" in result.stdout
+        assert "Traceback" not in result.stderr
+        if result.returncode == 0:
+            assert "语料状态" in result.stdout
+        else:
+            # 未构建时必须明确告诉用户下一步跑什么，而不是只给一个非零退出码
+            out = result.stdout + result.stderr
+            assert "未构建" in out
+            assert "build_knowledge_base.py" in out

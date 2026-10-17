@@ -75,6 +75,13 @@ def step_optional_deps() -> None:
 
 def step_knowledge_base() -> bool:
     print("  [3/5] 检查知识库索引")
+    # 向量库不入库（.gitignore 里），全新克隆第一次跑自检时它本来就不存在。
+    # 这是「还没构建」而不是「坏了」，不该让整个自检失败；但也不能闷声跳过，
+    # 得把下一步该跑什么说清楚。库存在却和语料对不上，才是真失败。
+    if not (PROJECT_ROOT / "knowledge" / "chroma" / "fisheries_manifest.json").exists():
+        print("        [跳过] 向量库尚未构建（构建前知识问答不可用，其余功能正常）")
+        print("        构建: python scripts/build_knowledge_base.py")
+        return True
     rc = _run([PY, "scripts/build_knowledge_base.py", "--check"])
     if rc != 0:
         print(f"        [失败] 知识库检查退出码 {rc}")

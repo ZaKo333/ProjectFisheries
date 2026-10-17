@@ -34,6 +34,17 @@ htmlcov/
 # 但 RAG 检索需要 fastembed 缓存，首次运行请保证联网。
 models/
 
+# --- 知识库向量库 -----------------------------------------------------------
+# Chroma 的持久化产物，由 scripts/build_knowledge_base.py 从 knowledge/corpus/
+# 构建。它是二进制、约 2 MB，内容每次构建都会变，放进仓库只会给每次提交带上
+# 一块 review 不了的噪声 delta。克隆后先在工程根跑一次：
+#   python scripts/build_knowledge_base.py           # 首次构建（会下向量模型）
+#   python scripts/build_knowledge_base.py --check   # 只校验，不重建
+knowledge/chroma/
+
+# 标准原文 PDF 只在核验语料时用过，不入库（见 knowledge/README.md §3）
+knowledge/corpus/raw/
+
 # --- 数据 -------------------------------------------------------------------
 # 原始数据集（约 1.37 GB）按设计放在工程外，通过环境变量或
 # data/datasets/ 引入；下列内容均由 scripts/ 生成，不进仓库。

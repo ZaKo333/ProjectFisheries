@@ -192,11 +192,13 @@ python -m pip install -e ".[rag,api]"
 | `models/yolov8-fish.pt` 病害识别权重 | ≈ 3 MB | 本仓库**不附带**，需自行训练（见 [docs/模型训练说明.md](docs/模型训练说明.md)）。缺失时图像工具自动落回兜底并在响应里标 `degraded_mode=true` |
 | `models/translate/` 离线回译模型 | ≈ 315 MB | 可选，`python scripts/fetch_translate_model.py` |
 
-**向量库是随仓库分发的**（`knowledge/chroma/`），所以克隆下来就能直接检索，
-并且可以立刻自检一致性：
+**向量库不随仓库分发**（`knowledge/chroma/` 在 `.gitignore` 里）：它是约 2 MB 的
+二进制产物，每次构建内容都会变，进仓库只会给每次提交带上一块 review 不了的 delta。
+克隆下来**先构建一次**，之后只有语料改动了才需要重建：
 
 ```bash
-python scripts/build_knowledge_base.py --check
+python scripts/build_knowledge_base.py           # 首次构建（会下载向量模型）
+python scripts/build_knowledge_base.py --check   # 只校验一致性，不重建
 ```
 
 ### 3.4 三个常用命令
@@ -580,7 +582,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ├── knowledge/
 │   ├── README.md            # 语料可信度声明与组织约定（★ 先读这个）
 │   ├── corpus/              # 9 篇种子语料
-│   └── chroma/              # 向量库产物（随仓库分发，可重建）
+│   └── chroma/              # 向量库产物（gitignore，构建脚本重建）
 ├── templates/               # 12 个内置水质场景模板（可重建）
 ├── web/                     # 前端页面（纯原生 HTML/CSS/JS，由接口同源托管在 /app）
 ├── examples/
@@ -687,8 +689,8 @@ mAP@0.5 走的是**弱监督全图框**口径，**不衡量病灶定位能力**�
 
 ### 12.7 首次运行需要联网下载向量模型
 
-向量库随仓库分发，但**向量化模型不随仓库分发**（约 91 MB）。
-首次检索会自动下载；纯离线部署请预先联网跑一次，或把模型预置到 `models/fastembed/`。
+向量库与**向量化模型都不随仓库分发**（模型约 91 MB）。克隆后第一次构建知识库时会
+自动下载向量模型；纯离线部署请预先联网跑一次，或把模型预置到 `models/fastembed/`。
 
 ---
 
