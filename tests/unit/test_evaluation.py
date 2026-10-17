@@ -1575,13 +1575,16 @@ class TestProjections:
         item = do_trend.PondDoSeries("P1#5", "P1", (1.0, 2.0, 2.5), target=3.0)
         assert do_trend.persistence_next(item) == 2.5
 
-    def test_engine_next_is_last_plus_slope_times_lead(self) -> None:
+    def test_engine_next_is_the_hybrid_baseline(self) -> None:
         lags = tuple(1.0 + 0.1 * i for i in range(18))
         item = do_trend.PondDoSeries("P1#17", "P1", lags, target=3.3)
-        # 每点 0.1、步长 10 分钟 → 斜率 0.6 / 小时。
-        assert do_trend.engine_next(item, step_minutes=10, lead_hours=1.0) == pytest.approx(3.3)
-        assert do_trend.engine_next(item, step_minutes=10, lead_hours=2.0) == pytest.approx(3.9)
-        assert do_trend.engine_next(item, step_minutes=60, lead_hours=1.0) == pytest.approx(2.8)
+        # 锚点 = 最近 3 点均值 2.6；每点 0.1、步长 10 分钟 → 短期斜率 0.6 / 小时。
+        # 修正量 = 0.05 × 0.6 × 1 小时 = 0.03，大于 HYBRID_MIN_DELTA，所以是 2.63。
+        assert do_trend.engine_next(item, step_minutes=10, lead_hours=1.0) == pytest.approx(2.63)
+        assert do_trend.engine_next(item, step_minutes=10, lead_hours=2.0) == pytest.approx(2.66)
+        # 步长 60 分钟时斜率只有 0.1 / 小时 → 修正量 0.005 < HYBRID_MIN_DELTA，
+        # 低于读数分辨率，自动回退成纯持久性（返回锚点本身）。
+        assert do_trend.engine_next(item, step_minutes=60, lead_hours=1.0) == pytest.approx(2.6)
 
     def test_engine_next_needs_two_lags(self) -> None:
         item = do_trend.PondDoSeries("P1#0", "P1", (1.0,), target=2.0)
@@ -1590,20 +1593,28 @@ class TestProjections:
 
 
 class TestScoreSeries:
-    def test_linear_ramp_favours_the_engine(self) -> None:
+    def test_linear_ramp_now_lags_by_the_anchor_window(self) -> None:
+        """干净斜坡上混合基线会落后一个锚点窗口——这是平滑换来的代价。
+
+        实测（11 口塘 8198 个样本）真实溶氧的噪声远大于趋势，平滑净赚 +9.8%；
+        斜坡只是把代价单独放大出来的极端情形。钉住它，免得以后有人以为
+        引擎还能把趋势外推出去，或者悄悄把阻尼调回 1。
+        """
         by_pond = {"P1": make_do_series("P1", 40, per_point=0.1)}
         series = list(do_trend.iter_do_series(by_pond, history_points=6, lead_points=6))
         score = do_trend.score_series(series, step_minutes=10, lead_hours=1.0)
 
         assert score.n == 5
-        assert score.engine_mae == pytest.approx(0.0)   # 完全落在同一条直线上
-        assert score.engine_rmse == pytest.approx(0.0)
+        # 真值往前 0.6；锚点 = 最近 3 点的中点 = 已落后 0.1，加上 0.03 的修正 → 误差 0.67。
+        assert score.engine_mae == pytest.approx(0.67)
+        assert score.engine_rmse == pytest.approx(0.67)
         assert score.persistence_mae == pytest.approx(0.6)
-        assert score.improvement_pct == pytest.approx(100.0)
-        assert score.engine_better == 5
-        assert score.persistence_better == 0
+        assert score.improvement_pct == pytest.approx(-11.67, abs=0.01)
+        assert score.engine_better == 0
+        assert score.persistence_better == 5
         assert score.ties == 0
-        assert score.win_rate == pytest.approx(1.0)
+        assert score.win_rate == pytest.approx(0.0)
+        # 方向仍然判对：趋势项没被删掉，只是被压小了。
         assert score.direction_hits == 5
         assert score.direction_accuracy == pytest.approx(1.0)
         assert score.decline_n == 0
@@ -1678,7 +1689,7 @@ class TestDoTrendReport:
             n_ponds=2,
         )
         text = report_obj.verdict()
-        assert "外推优于基线 50.0%" in text
+        assert "优于基线 50.0%" in text
         assert "1 小时后" in text
 
     def test_verdict_worse_than_baseline(self) -> None:
@@ -1688,7 +1699,7 @@ class TestDoTrendReport:
             n_ponds=1,
         )
         text = report_obj.verdict()
-        assert "外推**差于**基线 50.0%" in text
+        assert "**差于**基线 50.0%" in text
         assert "点预测不该采信" in text
 
     def test_verdict_tie(self) -> None:
@@ -1733,7 +1744,10 @@ class TestEvaluateDoTrend:
         assert trend.by_history[6].n == 5
         assert trend.by_history[12].n == 4
         assert trend.by_history[18].n == 3
-        assert "外推优于基线" in trend.verdict()
+        # 合成斜坡上混合基线会落后一个锚点窗口（见 test_linear_ramp_now_lags_by_the_anchor_window），
+        # 所以这里只钉住措辞与数字来自同一处，不假设胜负。
+        assert "混合基线 MAE" in trend.verdict()
+        assert "持久性基线" in trend.verdict()
 
     def test_history_choices_are_capped_by_history_points(self) -> None:
         by_pond = {"P1": make_do_series("P1", 40)}

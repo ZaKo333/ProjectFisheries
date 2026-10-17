@@ -251,7 +251,7 @@ class AppState:
         else:
             vision = "mock（ultralytics 未安装 / 权重未就绪，输出带 degraded_mode=true）"
         return {
-            "water_risk_predict": "rule-baseline（阈值规则 + 线性外推；LSTM 待接入）",
+            "water_risk_predict": "rule-baseline（阈值规则 + 混合基线外推；LSTM 待接入）",
             "fish_disease_detect": vision,
         }
 

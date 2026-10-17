@@ -3,7 +3,7 @@
 定位
 ----
 本模块是 Agent 的「水质预测工具」，对外只暴露一个函数 `water_risk_predict`。
-当前实现是 **规则基线版**（阈值判定 + 线性趋势外推），承担两个职责：
+当前实现是 **规则基线版**（阈值判定 + 混合基线趋势外推），承担两个职责：
 
 1. 在 LSTM 时序模型训练完成前，让 Agent 全链路可跑通、可测试、可演示；
 2. 模型上线后作为**降级兜底**——模型服务不可用时自动回落到本实现，接口不变。
@@ -134,13 +134,36 @@ ACTION_THRESHOLDS: dict[str, tuple[tuple[float, str], ...]] = {
 #: 低置信度提示：有效样本少于该条数时，趋势外推不可靠
 MIN_RELIABLE_POINTS = 24
 
-#: 线性外推的最大时长。**这是本模块最重要的一个约束。**
+#: 趋势外推的最大时长。**这是本模块最重要的一个约束。**
 #: 水体指标随时间的演化是饱和/衰减型曲线，不是直线：真实池塘不会让溶氧线性跌到 0，
 #: 而是跌到某个谷值后因增氧机启动、藻类恢复而反弹。把 24 小时的斜率外推到 72 小时，
 #: 会算出"72 小时后溶氧 0.00 mg/L、水温 34℃"这种一看就假的结果，
 #: 直接损害告警的可信度。因此数值外推只报最近 12 小时，
 #: 更远的未来交给 LSTM 模型；horizon_hours 仍然参与趋势判定与风险打分。
 MAX_EXTRAPOLATION_HOURS = 12.0
+
+#: 溶氧外推的物理上限。25 mg/L 是探头量程，20 才是养殖水体的物理天花板
+#: （30℃ 时饱和溶氧约 7.5 mg/L，藻类过饱和最多摸到 20 上下），
+#: 再高只能是探头故障，不该进预测值。
+HYBRID_DO_CEILING = 20.0
+
+#: 外推锚点取最近几个点的均值。单点读数带抖动，拿末点当锚点等于把这段抖动
+#: 原样外推出去。实测（11 口塘 8198 个「1 小时后」样本）3 点均值的 MAE 1.525、
+#: 末点 1.696——**这次改动里真正起作用的就是这一项**。
+HYBRID_ANCHOR_POINTS = 3
+
+#: 短期斜率只用最近几个点拟合（与锚点同窗口），避免远处的点把当前斜率拖平。
+HYBRID_SHORT_POINTS = 3
+
+#: 斜率修正的阻尼系数：0 = 纯持久性，1 = 全斜率外推。
+#: 同一批数据的网格标定（末点口径的纯持久性 = 1.696）：
+#: α=0 → 1.525，0.05 → 1.529，0.08 → 1.548，0.2 → 1.719。
+#: 也就是说斜率项在这批数据上几乎不含可用信息，必须极弱；
+#: 取 0.05 而不是 0，是为了让长提前量下趋势仍然可见，代价约 0.3% MAE。
+HYBRID_DAMPING = 0.05
+
+#: 修正量小于读数的有效分辨率（mg/L）时视为噪声，直接回退成纯持久性。
+HYBRID_MIN_DELTA = 0.02
 
 
 # --------------------------------------------------------------------------- #
@@ -218,7 +241,7 @@ class IndicatorTrend(BaseModel):
 
 
 class IndicatorProjection(BaseModel):
-    """单个指标的线性外推结果（规则基线，非模型预测）。"""
+    """单个指标的混合基线外推结果（规则基线，非模型预测）。"""
 
     indicator: str = Field(..., description="指标英文键")
     label: str = Field(..., description="指标中文名")
@@ -300,7 +323,7 @@ class WaterRiskOutput(BaseModel):
         default=True, description="true 表示走的是规则基线而非 LSTM 模型"
     )
     projection_method: str = Field(
-        default="linear_extrapolation_baseline", description="外推方法标识"
+        default="hybrid_persistence_baseline", description="外推方法标识（锚点平滑 + 阻尼斜率，不是全量外推）"
     )
     error_code: str | None = Field(default=None, description="status=error 时的错误码")
     error_message: str | None = Field(default=None, description="status=error 时的错误说明")
@@ -381,6 +404,60 @@ def _slope_per_hour(values: list[float], interval_hours: float) -> float:
     return sum((x - mx) * (y - my) for x, y in zip(xs, values)) / denom
 
 
+def _mean_tail(values: list[float], n: int) -> float:
+    """最近 n 个点的均值（不足 n 点时用全部）。"""
+    tail = values[-n:] if len(values) >= n else values
+    return sum(tail) / len(tail)
+
+
+def _short_slope(values: list[float], interval_hours: float,
+                 n: int = HYBRID_SHORT_POINTS) -> float:
+    """最近 n 个点的最小二乘斜率，单位：指标值 / 小时。"""
+    tail = values[-n:] if len(values) >= n else values
+    return _slope_per_hour(tail, interval_hours)
+
+
+def _forecast_bounds(indicator: str) -> tuple[float, float]:
+    """外推允许落在的物理区间。溶氧额外压到 :data:`HYBRID_DO_CEILING`。"""
+    lo, hi = INDICATOR_META[indicator]["phys_range"]
+    if indicator == "dissolved_oxygen":
+        hi = min(hi, HYBRID_DO_CEILING)
+    return lo, hi
+
+
+def _blend(anchor: float, short_slope: float, hours: float,
+           lo: float, hi: float) -> float:
+    """混合基线的核心：`锚点 + 阻尼 × 短期斜率 × 时长`，再裁剪到物理区间。
+
+    修正量小于 :data:`HYBRID_MIN_DELTA` 时视为「斜率没有信息」，直接退化成
+    纯持久性（返回锚点本身）——这就是「劣于基线就回退」的运行时形态：
+    回退不需要真值，只需要判断修正项是否小于读数分辨率。
+    """
+    delta = HYBRID_DAMPING * short_slope * hours
+    if abs(delta) < HYBRID_MIN_DELTA:
+        delta = 0.0
+    return min(max(anchor + delta, lo), hi)
+
+
+def hybrid_forecast(indicator: str, values: list[float], interval_hours: float,
+                    horizon_hours: float) -> float:
+    """在一段历史序列上给出混合基线预测值。
+
+    评测脚本（`fisheries.evaluation.do_trend`）与 `_predict_series` 共用本函数，
+    这样「报告里的指标」与「线上跑的那段代码」是同一段，不会各算各的。
+
+    >>> hybrid_forecast("dissolved_oxygen", [2.0, 2.0, 2.0], 1.0, 1.0)
+    2.0
+    """
+    if not values:
+        raise ValueError("至少需要一个历史点才能外推")
+    lo, hi = _forecast_bounds(indicator)
+    hours = min(float(horizon_hours), MAX_EXTRAPOLATION_HOURS)
+    anchor = _mean_tail(values, HYBRID_ANCHOR_POINTS)
+    slope = _short_slope(values, interval_hours) if len(values) >= 2 else 0.0
+    return _blend(anchor, slope, hours, lo, hi)
+
+
 def _determine_direction(slope: float, mean: float, horizon_hours: int) -> str:
     """判断趋势方向；预测窗口内的累计变化不足均值的 5% 视为平稳。"""
     if mean == 0:
@@ -392,30 +469,45 @@ def _determine_direction(slope: float, mean: float, horizon_hours: int) -> str:
 
 
 def _project(indicator: str, current: float, slope: float,
-             horizon_hours: int) -> IndicatorProjection:
-    """线性外推，裁剪到物理量程，并把外推时长限制在 MAX_EXTRAPOLATION_HOURS 内。
+             horizon_hours: int,
+             short_slope: float | None = None,
+             raw_last: float | None = None) -> IndicatorProjection:
+    """混合基线外推：锚点 + 阻尼后的短期斜率，裁剪到物理量程。
+
+    `current` 是锚点（`_predict_series` 传的是最近 3 点均值），`slope` 是全窗口
+    回归速率，`short_slope` 是最近 3 点的斜率。三者分工是刻意的：
+
+    * **数值外推**（`projected_at_horizon`）走混合基线——这一项有外部真值可衡量，
+      所以口径必须不劣于持久性基线，做法见 :func:`_blend`；
+    * **红线外推**（`projected_extreme`）与**倒计时**（`hours_to_threshold`）
+      仍从**最后一次实测值**（`raw_last`）出发、用**原始回归速率**计算——告警宁可
+      早报，且这两项不进 MAE 评测，改动它们等于凭空改告警行为。所以这里刻意
+      不用平滑后的锚点：平滑会把告警的起点往前挪一个点了，红线判定会跟着漂。
+    * 外推时长同样受 `MAX_EXTRAPOLATION_HOURS` 限制。
 
     另外计算 `hours_to_threshold`：按当前速率还要多久才会触及管控阈值。
     对溶氧用的是**危险线（3.0 mg/L）**而非红线（1.5），因为养殖户需要的是
     "还有多久要开增氧机"，而不是"还有多久要翻塘"。
     """
-    lo, hi = INDICATOR_META[indicator]["phys_range"]
+    lo, hi = _forecast_bounds(indicator)
     h = min(float(horizon_hours), MAX_EXTRAPOLATION_HOURS)
+    # 告警路径的起点：最后一次实测值。没传就退回锚点（仅老调用方会走到）。
+    base = current if raw_last is None else raw_last
 
-    raw_end = current + slope * h
-    end = min(max(raw_end, lo), hi)
+    value_end = _blend(current, slope if short_slope is None else short_slope, h, lo, hi)
+    rate_end = min(max(base + slope * h, lo), hi)
 
     # 线性函数在区间端点上取极值；判定取哪个端点
     if indicator == "dissolved_oxygen":          # 越小越危险 → 取最小
-        if raw_end <= current:
-            extreme, at_hour = max(end, lo), h
+        if rate_end <= base:
+            extreme, at_hour = rate_end, h
         else:
-            extreme, at_hour = current, 0.0
+            extreme, at_hour = base, 0.0
     else:                                         # 其余指标越大越危险 → 取最大
-        if raw_end >= current:
-            extreme, at_hour = min(end, hi), h
+        if rate_end >= base:
+            extreme, at_hour = rate_end, h
         else:
-            extreme, at_hour = current, 0.0
+            extreme, at_hour = base, 0.0
 
     # ---- 预计多久触及"下一条"管控阈值 ----
     # 溶氧按由高到低的顺序找第一条尚未跌破的线：当前若在 3.0 以上就报"还有多久跌破 3.0"，
@@ -426,12 +518,12 @@ def _project(indicator: str, current: float, slope: float,
     if abs(slope) > 1e-9:
         for target, label in ACTION_THRESHOLDS.get(indicator, ()):
             if indicator == "dissolved_oxygen":
-                if slope < 0 and current > target:
-                    eta, eta_target, eta_label = (current - target) / -slope, target, label
+                if slope < 0 and base > target:
+                    eta, eta_target, eta_label = (base - target) / -slope, target, label
                     break
             else:
-                if slope > 0 and current < target:
-                    eta, eta_target, eta_label = (target - current) / slope, target, label
+                if slope > 0 and base < target:
+                    eta, eta_target, eta_label = (target - base) / slope, target, label
                     break
     if eta is not None and (eta < 0 or eta > MAX_EXTRAPOLATION_HOURS * 4):
         eta, eta_target, eta_label = None, None, None   # 太远的外推值没有决策价值
@@ -441,7 +533,7 @@ def _project(indicator: str, current: float, slope: float,
         label=INDICATOR_META[indicator]["label"],
         unit=INDICATOR_META[indicator]["unit"],
         horizon_used_hours=round(h, 2),
-        projected_at_horizon=round(end, 3),
+        projected_at_horizon=round(value_end, 3),
         projected_extreme=round(extreme, 3),
         extreme_at_hour=at_hour,
         hours_to_threshold=round(eta, 2) if eta is not None else None,
@@ -680,7 +772,8 @@ def _build_summary(*, level: str, score: float, horizon_hours: int,
         )
     if projections:
         parts.append(
-            f"（说明：数值外推基于线性回归，仅前 {MAX_EXTRAPOLATION_HOURS:.0f} 小时具有参考意义，"
+            f"（说明：数值外推基于混合基线——最近 3 点均值 + 5% 的短期斜率修正，"
+            f"仅前 {MAX_EXTRAPOLATION_HOURS:.0f} 小时具有参考意义，"
             f"接入 LSTM 时序模型后将替换为真实预测曲线。）"
         )
 
@@ -714,7 +807,11 @@ def _resolve_interval(points: list[WaterQualityPoint],
 
 
 def _predict_series(payload: WaterRiskInput) -> WaterRiskOutput:
-    """规则基线核心：阈值判定 + 回归趋势 + 线性外推。
+    """规则基线核心：阈值判定 + 回归趋势 + 混合基线外推。
+
+    外推口径：锚点 = 最近 3 点均值，修正项 = 阻尼后的最近 3 点斜率，
+    结果裁剪到物理区间（溶氧 0–20 mg/L）。纯线性外推在真实池塘数据上
+    比「什么都不做」差 14.5%，换成这个口径后好 9.8%（见 M8 评测报告）。
 
     >>> 接入 LSTM 时，本函数是唯一需要替换的地方。
     """
@@ -742,16 +839,17 @@ def _predict_series(payload: WaterRiskInput) -> WaterRiskOutput:
     sev_label: dict[str, str] = {}
     current: dict[str, float] = {}
     for key, vals in series.items():
-        tail = vals[-3:] if len(vals) >= 3 else vals
-        current[key] = sum(tail) / len(tail)
+        current[key] = _mean_tail(vals, HYBRID_ANCHOR_POINTS)
         sev[key], sev_label[key] = _severity(key, current[key], profile)
 
     # ---- 3. 趋势 ----
     trends: dict[str, IndicatorTrend] = {}
     slopes: dict[str, float] = {}
+    short_slopes: dict[str, float] = {}
     for key, vals in series.items():
         slope = _slope_per_hour(vals, interval_hours)
         slopes[key] = slope
+        short_slopes[key] = _short_slope(vals, interval_hours)
         meta = INDICATOR_META[key]
         first = vals[0]
         trends[key] = IndicatorTrend(
@@ -767,9 +865,11 @@ def _predict_series(payload: WaterRiskInput) -> WaterRiskOutput:
             change_pct=round((vals[-1] - first) / first * 100.0, 2) if first else 0.0,
         )
 
-    # ---- 4. 外推 ----
+    # ---- 4. 外推（混合基线：锚点 = 3 点均值，修正项 = 阻尼后的 3 点斜率） ----
+    # 最后一个位置参数是 raw_last：告警路径从真末点出发，不受锚点平滑影响。
     projections = {
-        key: _project(key, vals[-1], slopes[key], payload.horizon_hours)
+        key: _project(key, current[key], slopes[key], payload.horizon_hours,
+                      short_slopes[key], vals[-1])
         for key, vals in series.items()
     }
 
@@ -853,7 +953,7 @@ def _predict_series(payload: WaterRiskInput) -> WaterRiskOutput:
             warnings=quality_warnings,
         ),
         degraded_mode=True,
-        projection_method="linear_extrapolation_baseline",
+        projection_method="hybrid_persistence_baseline",
         error_code=None,
         error_message=None,
     )

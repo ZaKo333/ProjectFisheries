@@ -20,9 +20,9 @@
 
 - **历史**：过去 `history_points` 个点（默认 18 点 = 3 小时）的溶氧。
 - **真值**：`lead_points` 个点之后（默认 6 点 = 1 小时）的溶氧。
-- **引擎口径**：`末点 + slope_per_hour × lead_hours`，斜率由
-  `water_risk._slope_per_hour` 最小二乘拟合——**直接复用引擎自己的函数**，
-  保证量的是已交付的那段代码，不是复现品。这正是引擎 `_project` 在做的事。
+- **引擎口径**：混合基线 `锚点(近 3 点均值) + HYBRID_DAMPING × 短期斜率 × lead_hours`，
+  裁剪到 0–20 mg/L。刻意**直接调用线上那个 `water_risk.hybrid_forecast`**，
+  保证量的是已交付的那段代码，不是复现品——这正是引擎 `_project` 在做的事。
 - **基线口径**：持久性预测（persistence），即 `next = last`。
   这是时间序列预测的默认基线；一个趋势模型如果在一步预测上连「什么都不做」
   都赢不了，那它的价值就只在方向提示，不在点预测。
@@ -41,7 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator, Mapping, Sequence
 
-from ..tools.water_risk import _slope_per_hour
+from ..tools.water_risk import _slope_per_hour, hybrid_forecast
 from .ponds import PondSample
 
 __all__ = [
@@ -139,16 +139,16 @@ def engine_next(
     step_minutes: int = DEFAULT_STEP_MINUTES,
     lead_hours: float,
 ) -> float:
-    """引擎的预测：`末点 + 最小二乘斜率 × 提前量`。
+    """引擎的预测：混合基线（近 3 点均值锚点 + 阻尼后的近 3 点斜率，裁到 0–20）。
 
-    刻意调用 `water_risk._slope_per_hour` 而不是在这里重写一遍最小二乘——
+    刻意直接调用线上那个 `water_risk.hybrid_forecast`，而不是在这里重写一遍——
     否则量的是「我复现的算法」，不是「线上跑的那段代码」。
     """
     if item.n_lags < 2:
         raise ValueError("至少需要 2 个历史点才能拟合斜率")
-    interval_hours = step_minutes / 60.0
-    slope = _slope_per_hour(list(item.lags), interval_hours)
-    return item.last + slope * lead_hours
+    return hybrid_forecast(
+        "dissolved_oxygen", list(item.lags), step_minutes / 60.0, lead_hours
+    )
 
 
 def persistence_next(item: PondDoSeries) -> float:
@@ -303,14 +303,14 @@ class DoTrendReport:
             f"预测 **{self.lead_hours:g} 小时后的溶氧**"
         )
         numbers = (
-            f"线性外推 MAE {self.overall.engine_mae:.3f} mg/L，"
+            f"混合基线 MAE {self.overall.engine_mae:.3f} mg/L，"
             f"持久性基线 {self.overall.persistence_mae:.3f} mg/L"
         )
         if gap > 1.0:
-            return f"{head}，{numbers}——外推优于基线 {gap:.1f}%。"
+            return f"{head}，{numbers}——优于基线 {gap:.1f}%。"
         if gap < -1.0:
             return (
-                f"{head}，{numbers}——外推**差于**基线 {abs(gap):.1f}%，"
+                f"{head}，{numbers}——**差于**基线 {abs(gap):.1f}%，"
                 f"点预测不该采信，只能当趋势提示用。"
             )
         return f"{head}，{numbers}——两者基本打平（相差 {abs(gap):.1f}%）。"

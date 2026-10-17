@@ -27,7 +27,7 @@ from fisheries.tools.fish_disease import (
     RAW_CLASS_TO_LABEL,
     _mock_scores,
 )
-from fisheries.tools.water_risk import SPECIES_PROFILES, _severity
+from fisheries.tools.water_risk import SPECIES_PROFILES, _severity, hybrid_forecast
 
 # --------------------------------------------------------------------------- #
 # 测试夹具
@@ -289,6 +289,54 @@ class TestWaterRiskRobustness:
     def test_pond_id_passthrough(self):
         out = water_risk_predict(make_series(24), pond_id="POND-07")
         assert out["pond_id"] == "POND-07"
+
+
+class TestHybridForecast:
+    """溶氧外推换成混合基线后必须守住的四条约束。
+
+    1. 锚点是最近 3 点均值（平滑，不是末点）；
+    2. 斜率只做弱修正（HYBRID_DAMPING=0.05），不是全量外推；
+    3. 结果不出溶氧的物理边界 0~20 mg/L；
+    4. 修正量小于读数分辨率时回退纯持久性；告警路径仍按原始回归速率算。
+    """
+
+    def test_anchor_is_the_mean_of_the_last_three_points(self):
+        # 末点是 10.0，锚点 = (5+5+10)/3 ≈ 6.667。horizon=1 时修正量只有
+        # 0.05 × 2.5/h × 1h = 0.125，所以预测值贴着 6.79，而不是末点 10。
+        series = make_series(6, dissolved_oxygen=5.0)
+        series[-1]["dissolved_oxygen"] = 10.0
+        out = water_risk_predict(series, interval_minutes=60, horizon_hours=1)
+        proj = out["projections"]["dissolved_oxygen"]
+        assert proj["projected_at_horizon"] == pytest.approx(6.79, abs=0.02)
+
+    def test_result_is_clipped_to_the_physical_range(self):
+        assert hybrid_forecast("dissolved_oxygen", [19.0, 19.5, 19.9], 1 / 6, 12.0) == 20.0
+        assert hybrid_forecast("dissolved_oxygen", [0.4, 0.2, 0.1], 1 / 6, 12.0) == 0.0
+
+    def test_negligible_correction_falls_back_to_persistence(self):
+        # 斜率 0.006/h → 修正 0.05 × 0.006 × 1 = 0.0003，低于 HYBRID_MIN_DELTA：
+        # 直接返回锚点本身（= 纯持久性口径），不引入看不见的抖动。
+        assert hybrid_forecast("dissolved_oxygen", [2.0, 2.0, 2.0, 2.006], 1.0, 1.0) == pytest.approx(2.002)
+        # 斜率 0.5/h 的修正 0.025 高于阈值 → 叠加在锚点 (2+2+3)/3 上。
+        assert hybrid_forecast("dissolved_oxygen", [2.0, 2.0, 2.0, 3.0], 1.0, 1.0) == pytest.approx(2.3583, abs=1e-4)
+
+    def test_alarm_path_still_uses_the_raw_rate(self):
+        """数值外推被阻尼，但极值与「还有几小时触线」必须保持原有速率。
+
+        否则把外推调温和的代价就是预警失灵——这是本次改造刻意保留的分叉。
+        """
+        series = make_series(24, dissolved_oxygen=6.0)
+        for i, point in enumerate(series):
+            point["dissolved_oxygen"] = 6.0 - 0.1 * i   # 每小时 -0.1
+        out = water_risk_predict(series, interval_minutes=60, horizon_hours=12)
+        proj = out["projections"]["dissolved_oxygen"]
+
+        # 末点 3.7，锚点 = 最近三点 (3.9+3.8+3.7)/3 = 3.8，阻尼后只掉 0.05 × 0.1 × 12 = 0.06
+        assert proj["projected_at_horizon"] == pytest.approx(3.74)
+        # 极值仍从真末点 3.7 按原始速率走：3.7 - 0.1 × 12 = 2.5（不受锚点平滑影响）
+        assert proj["projected_extreme"] == pytest.approx(2.5)
+        assert proj["hours_to_threshold"] is not None
+        assert 0 < proj["hours_to_threshold"] < 12
 
 
 # --------------------------------------------------------------------------- #
