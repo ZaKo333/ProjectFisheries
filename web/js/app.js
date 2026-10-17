@@ -596,6 +596,26 @@
   function visionSectionHTML(vision) {
     const group = dict.diseaseGroup(vision.disease_type);
     const groupBadge = vision.is_healthy ? "badge-ok" : group === "细菌性" ? "badge-danger" : group === "真菌性" ? "badge-warn" : "badge-info";
+    // is_fish === false：检测器一个鱼框都没给出。此时 disease_type / confidence 都是 null，
+    // 必须画成「未检测到鱼」，而不是「—」配一个空置信度——那会被误读成「模型没把握」。
+    const notFish = vision.is_fish === false;
+
+    const headline = notFish
+      ? `<div style="font-size:30px;font-weight:800">未检测到鱼</div>
+         <div class="mt-1"><span class="badge badge-warn">不判病害</span> <span class="badge badge-muted">鱼框 0 个</span></div>`
+      : `<div style="font-size:30px;font-weight:800">${esc(vision.disease_type || "—")}</div>
+         <div class="mt-1">${`<span class="badge ${groupBadge}">${esc(group)}</span>`} <span class="badge badge-muted">严重度权重 ${fmt(vision.severity_weight, 2)}</span></div>`;
+
+    const confBlock = notFish ? "" : `<div>
+              <div class="small muted">置信度 <span style="opacity:.7">（仅在这 4 类之间比较）</span></div>
+              <div style="font-size:26px;font-weight:800;font-family:var(--mono)">${pct(vision.confidence)}</div>
+            </div>`;
+
+    const lesionLine = (vision.detector_version && !notFish)
+      ? `<div class="small mt-2 muted">病灶定位：${vision.lesion_count || 0} 处${
+          vision.lesion_area_ratio != null ? `，合计约占鱼体面积 ${pct(vision.lesion_area_ratio)}` : ""
+        } <span style="opacity:.7">（${esc(vision.detector_version)}）</span></div>`
+      : "";
 
     let html = `<div class="grid grid-2">
       <div class="card"><div class="card-head"><h3 class="card-title">识别结果</h3>
@@ -603,19 +623,17 @@
         <div class="card-body">
           <div class="flex gap-12 wrap" style="align-items:center">
             <div>
-              <div style="font-size:30px;font-weight:800">${esc(vision.disease_type || "—")}</div>
-              <div class="mt-1">${`<span class="badge ${groupBadge}">${esc(group)}</span>`} <span class="badge badge-muted">严重度权重 ${fmt(vision.severity_weight, 2)}</span></div>
+              ${headline}
             </div>
-            <div>
-              <div class="small muted">置信度 <span style="opacity:.7">（仅在这 4 类之间比较）</span></div>
-              <div style="font-size:26px;font-weight:800;font-family:var(--mono)">${pct(vision.confidence)}</div>
-            </div>
+            ${confBlock}
           </div>
+          ${lesionLine}
+          ${notFish ? `<div class="alert-box warn mt-2">图片里没有找到鱼，所以不给病害结论。这可能是：不是鱼的照片、鱼占画面太小、太暗或被遮挡。请换一张鱼体清晰、占画面较大的照片。</div>` : ""}
           ${vision.is_low_confidence ? `<div class="alert-box warn mt-2">置信度偏低，建议人工复核，不要强行下结论。</div>` : ""}
           ${vision.degraded_mode ? `<div class="alert-box warn mt-1">当前为模拟输出（model_version=${esc(vision.model_version || "—")}），非真实模型结果。</div>` : ""}
         </div></div>
       <div class="card"><div class="card-head"><h3 class="card-title">模型犹豫程度（all_scores）</h3></div>
-        <div class="card-body"><div id="vision-scores"></div></div></div>
+        <div class="card-body">${notFish ? `<div class="muted small">这一步没有输出任何类别，也就没有「犹豫程度」可言——检测器给出的结论是「图里没有鱼」，不是「四类里挑了某一类」。</div>` : `<div id="vision-scores"></div>`}</div></div>
     </div>`;
     html += card("说明", `<div>${md.render(vision.note || "—")}</div>
       ${vision.raw_class ? `<div class="small mt-1">原始类别 raw_class：<span class="mono">${esc(vision.raw_class)}</span></div>` : ""}`);

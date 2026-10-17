@@ -30,6 +30,7 @@ htmlcov/
 #   · models/translate/          → python scripts/fetch_translate_model.py（约 315 MB）
 #   · models/pretrained/         → 训练脚本自动放置的官方预训练权重
 #   · models/yolov8-fish.pt      → python scripts/train_yolo_fish.py 训练产出
+#   · models/yolov8-fish-lesion-seg.pt → python scripts/train_lesion_seg.py 训练产出
 # 没有这些文件时程序会优雅降级（YOLO 落回模板、回译落回受控词表），
 # 但 RAG 检索需要 fastembed 缓存，首次运行请保证联网。
 models/

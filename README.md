@@ -233,6 +233,7 @@ python -m pip install -e ".[rag,api]"
 |---|---|---|
 | `models/fastembed/` 中文向量模型 | ≈ 91 MB | **首次检索时自动下载**。离线环境请先联网跑一次，或预先放进该目录 |
 | `models/yolov8-fish.pt` 病害识别权重 | ≈ 3 MB | 本仓库**不附带**，需自行训练（见 [docs/模型训练说明.md](docs/模型训练说明.md)）。缺失时图像工具自动落回兜底并在响应里标 `degraded_mode=true` |
+| `models/yolov8-fish-lesion-seg.pt` 病灶定位权重 | ≈ 6 MB | 本仓库**不附带**，`python scripts/train_lesion_seg.py` 训练产出（见 §12.4）。缺失时只是没有病灶数量/面积，病害结论照旧 |
 | `models/translate/` 离线回译模型 | ≈ 315 MB | 可选，`python scripts/fetch_translate_model.py` |
 
 **向量库不随仓库分发**（`knowledge/chroma/` 在 `.gitignore` 里）：它是约 2 MB 的
@@ -638,6 +639,8 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ├── data/                    # 运行期产物（不进版本库；datasets/ 是可选的数据集落点）
 ├── models/                  # 模型权重（不进版本库，见 §3.3）
 ├── scripts/                 # 全部 CLI：一键配置 / demo / 建库 / 建模板 / 取数据 / 训练 / 体检
+│   ├── build_lesion_dataset.py  # 清洗真实多边形标注 → fish_lesion_seg 数据集
+│   └── train_lesion_seg.py      # 训练 + 评估病灶分割模型（见 §12.4）
 ├── src/fisheries/
 │   ├── datasets.py          # 「数据集名字 → 磁盘位置」的唯一真相来源
 │   ├── console.py           # 控制台编码兜底
@@ -662,7 +665,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1111 项
+python -m pytest                     # 全部 1126 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -686,6 +689,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_console.py` | 27 | 编码兜底、符号降级、编码锁 |
 | `test_launchers.py` | 34 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
 | `test_setup_env.py` | 39 | 一键配置：版本门、extras 与 `pyproject` 一致、镜像与 pip 命令拼装 |
+| `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
 
@@ -719,28 +723,51 @@ python -m pytest tests/unit/test_agent.py -v
 池塘数据只有硝酸盐、没有亚硝酸盐，引擎的一级指标 `nitrite_n` 在这份数据上无法取值，
 评测时权重被重新归一化。**真实塘口亚硝酸盐超标的情况，这组评测看不到。**
 
-### 12.4 图像识别只有 4 类、没有病灶定位
+### 12.4 图像识别：病灶能定位了，但「这不是鱼」还判不了
 
-现状是 4 分类（烂鳃 / 出血 / 水霉 / 健康），留出集 Top-1 93.0%。
-mAP@0.5 走的是**弱监督全图框**口径，**不衡量病灶定位能力**。
-要真做检测需要先有框标注，而公开图集里一个框都没有，去重后只有 931 张不同照片，
-规模也偏小。**标注决定上限**，这比换模型更关键。
+**病害分类**是 4 分类（烂鳃 / 出血 / 水霉 / 健康），留出集 Top-1 93.0%。
 
-**它也不会说「这不是鱼」。** 4 类就是全集，softmax 必须把这四类归一，所以任何一张图都会
-得到一个「最高的那一类」和一个看起来很硬的置信度。实测：把一张设计海报（ImageNet 视角是
-`comic_book` 28% / `packet` 10% / `jigsaw_puzzle` 10%）喂进去，返回 **健康 0.9997**
-（水霉 0.0002、出血 0.0、烂鳃 0.0）。这不是模型「看错了」，是提问方式错了——它从来没被
-训练过回答「这是不是鱼」。现在真实模型的 `note` 会固定带上这句声明，界面上的「置信度」
-也标注为「仅在这 4 类之间比较」。
+**病灶定位**（新增，`models/yolov8-fish-lesion-seg.pt`）从一批真实多边形标注训练而来：
+203 张鱼图去重后 201 张（2 组完全重复已剔除），标注同时含两种格式——404 条实例多边形
+（`class x1 y1 … xn yn`）与 30 条轴对齐框（`class cx cy w h`），清洗脚本统一成多边形。
+两类：`0: fish` / `1: lesion`。训练 YOLOv8n-seg，80 轮 640px，单卡 RTX 5070 Laptop 约 25 分钟。
 
-补这个能力有两路，**都要数据**：
+| 留出集（38 张 / 82 个实例） | box | mask |
+|---|---|---|
+| mAP@0.5 | **0.969** | 0.969 |
+| mAP@0.5:0.95 | **0.789** | 0.778 |
 
-1. **加第 5 类「非鱼类」**：混入任意非鱼照片（几百张就够）重训，OOD 变成闭集内的事，最省事；
-2. **训练独立的「鱼/非鱼」二分类门**：先过门再判病，职责更清晰。
+按类拆：`fish` P 0.967 / R 0.974 / AP50 **0.990**；`lesion` P 0.864 / R 0.907 / AP50 **0.948** /
+AP50-95 0.667。真实鱼图上的表现也说得通：`1074.jpg` 病灶占鱼体 8.6%（肉眼可见侧腹溃烂）、
+`1076.jpg` 6.0%、`1079.jpg` 3 处合计 45.5%。工具返回 `lesion_count` / `lesion_area_ratio` /
+`lesions`（框坐标），界面写「病灶定位：N 处，合计约占鱼体面积 X%」。
 
-也试过用同目录的 `models/pretrained/yolov8n-cls.pt`（ImageNet-1k）做零成本门禁，**结论是不可用**：
-40 张真实鱼图的「水生动物类概率」中位数只有 0.34，阈值取 0.2 误拒 48%、取 0.5 误拒 60%，
-会把一半真实鱼图挡在门外。这条路只能靠重训，不能靠现成权重。
+**但「这是不是鱼」仍然判不了**，这是这份数据的天花板：201 张训练图**全是鱼**，
+一张非鱼负样本都没有，检测器根本没学过「背景长什么样」。实测那张设计海报照样得到
+**conf=0.830 的鱼框**，而 38 张真实鱼里最低的也有 **0.815**（中位 0.929）——
+**没有任何阈值能把两者分开**。所以门控 `fish_disease_detect(..., enable_gate=True)`
+虽然实现了（检测不到鱼框就返回「未检测到鱼」，`is_fish=False`，四个结论字段全空），
+但**默认关闭**：打开它只会给出一个假的「确认是鱼」。默认路径下 `is_fish` 恒为 `None`。
+
+也试过两条零成本替代，都不成立：
+
+1. **ImageNet 分类器看原图**：海报「水生动物类概率」合计 0.0023，看着能拦；但对 40 张真实鱼图
+   标定后中位数只有 0.34，阈值 0.2 误拒 48%、0.5 误拒 60%；
+2. **ImageNet 分类器看检测框裁图**：海报 0.0076，真实鱼 p25 已到 0.0095、中位 0.0914，
+   阈值 0.02 就误拒 37%。
+
+两条都只能靠重训，不能靠现成权重。
+
+**要真修，缺的只有数据**：几百张非鱼图片即可——海报、截图、风景、室内都行。放进源目录
+（`images/` 里同名文件 + `labels/` 里**空标签文件**；YOLO 里空标签就是「背景图」），然后：
+
+```bash
+python scripts/build_lesion_dataset.py --force   # 重新清洗 + 划分
+python scripts/train_lesion_seg.py --epochs 80   # 重新训练 + 评估
+```
+
+训练完成后把 `enable_gate` 的默认值改回 `True` 就有意义了。数据集怎么清洗、怎么划分、
+每张图的 sha256 记在哪里，见 `data/derived/fish_lesion_seg/info.json`。
 
 ### 12.5 会话缓冲是内存态
 

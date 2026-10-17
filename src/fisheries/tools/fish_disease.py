@@ -121,8 +121,7 @@ LOW_CONFIDENCE_THRESHOLD = 0.60
 #: 水霉 0.0002、出血与烂鳃 0.0）。这句话跟着每一个真实模型结果走，
 #: 防止把 softmax 概率误读成"这张图确实是健康的鱼"。
 CLOSED_SET_CAVEAT = (
-    "⚠ 本模型只在鱼类病害图片上训练，不判断「图片里是不是鱼」；"
-    "非鱼类图片同样会被归入上述四类，此时结论没有意义。"
+    "⚠ 分类器与病灶检测器都只在鱼类图片上训练，非鱼类图片同样会被归类并给出病灶框。"
 )
 
 #: 权重目录（工程根下的 models/）。
@@ -136,6 +135,32 @@ _WEIGHTS_CANDIDATES: tuple[str, ...] = ("yolov8-fish.pt", "fish_disease_cls.pt")
 
 #: 默认权重路径（对外文档与错误提示里引用的那一个）。
 DEFAULT_WEIGHTS_PATH = os.path.join(_MODELS_DIR, _WEIGHTS_CANDIDATES[0])
+
+#: 病灶实例分割权重（``scripts/train_lesion_seg.py`` 的产出）。
+#:
+#: 这是一个**两类的检测/分割**模型（``0: fish``、``1: lesion``），和上面的四类
+#: 分类器是两个不同的东西：
+#:
+#: - 分类器回答「属于哪一类」，它的 softmax 必须归一，所以**任何图都会有一个答案**；
+#: - 检测器回答「鱼在哪、病灶在哪」，它**可以什么都不输出**——这正是「这张图不是鱼」
+#:   所需要的表达能力。实测一张设计海报在分类器上是「健康 0.9997」，在检测器上是
+#:   0 个鱼框。
+LESION_WEIGHTS_CANDIDATES: tuple[str, ...] = ("yolov8-fish-lesion-seg.pt",)
+
+#: 默认病灶权重路径。
+DEFAULT_LESION_WEIGHTS_PATH = os.path.join(_MODELS_DIR, LESION_WEIGHTS_CANDIDATES[0])
+
+#: 鱼框的采纳阈值。低于它的框视为噪声，不认为「检测到鱼」。
+#: 取 0.35：验证集上病灶框的精确率 0.90 说明两类框都偏保守，
+#: 宁可对疑似图说「没检测到鱼」，也不要把海报认成鱼。
+FISH_GATE_CONF = 0.35
+
+#: 未检测到鱼时的提示语。
+NOT_A_FISH_NOTE = (
+    "未在图片中检测到鱼体，因此不判断病害。"
+    "可能原因：图片里不是鱼、鱼占画面太小、光线太暗或被遮挡。"
+    "请换一张鱼体清晰、占画面较大的照片。"
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -170,6 +195,23 @@ class FishDiseaseOutput(BaseModel):
     degraded_mode: bool = Field(..., description="true 表示走的是 mock 后端")
     image_meta: dict[str, Any] = Field(default_factory=dict, description="图片元信息")
     note: str = Field(default="", description="给 Agent / 用户看的一句话提示")
+    is_fish: bool | None = Field(
+        default=None,
+        description=(
+            "图片里是否检测到鱼。null 表示本机没有病灶检测权重、无法判断；"
+            "false 时 disease_type / confidence 一律为 null，不做任何病害结论"
+        ),
+    )
+    lesion_count: int = Field(default=0, description="检测到的病灶数量（需要病灶检测权重）")
+    lesion_area_ratio: float | None = Field(
+        default=None, description="病灶面积占鱼体面积的比例，0–1；无病灶或无权重时为 null"
+    )
+    lesions: list[dict[str, Any]] = Field(
+        default_factory=list, description="每个病灶的框与置信度（按面积降序，最多 5 个）"
+    )
+    detector_version: str | None = Field(
+        default=None, description="病灶检测权重文件名；null 表示没有跑检测器"
+    )
     error_code: str | None = Field(default=None, description="status=error 时的错误码")
     error_message: str | None = Field(default=None, description="status=error 时的错误说明")
 
@@ -349,6 +391,107 @@ def _yolo_predict(image_path: str, weights_path: str) -> tuple[str, dict[str, fl
     return top_label, agg, raw_top
 
 
+def _resolve_lesion_weights(weights_path: str | None = None) -> str | None:
+    """找到可用的病灶检测权重；没有就返回 None（此时没有病灶定位）。"""
+    if weights_path:
+        return weights_path if os.path.isfile(weights_path) else None
+    for name in LESION_WEIGHTS_CANDIDATES:
+        candidate = os.path.join(_MODELS_DIR, name)
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def detect_fish_lesions(
+    image_path: str,
+    weights_path: str,
+    conf: float = FISH_GATE_CONF,
+) -> dict[str, Any]:
+    """【底层】在图上检测「鱼体」与「病灶」，返回两者的框。
+
+    两件事分工：检测器回答「病灶在哪（多大）」，四类分类器回答「是哪一种病」。
+
+    **它现在还判断不了「这是不是鱼」**：训练集 201 张全是鱼，没有任何背景负样本，
+    所以那张设计海报同样会得到一个 conf=0.830 的鱼框（真实鱼 val 集最低 0.815），
+    分不开。要让它能拒绝非鱼类图片，必须补进「非鱼」负样本再重训。
+
+    Returns:
+        ``{"fish": [...], "lesion": [...], "image_size": [w, h]}``，
+        每个元素形如 ``{"confidence": 0.87, "box": [x1, y1, x2, y2], "area_ratio": 0.14}``。
+    """
+    from ultralytics import YOLO  # 延迟导入：未安装时不影响其他工具
+
+    _console.install()  # ultralytics 会改 stdout 编码
+    model = YOLO(weights_path)
+    result = model.predict(image_path, conf=conf, verbose=False)[0]
+    names: dict[int, str] = result.names  # type: ignore[assignment]
+
+    height, width = (float(v) for v in result.orig_shape)
+    total = max(width * height, 1.0)
+    fish: list[dict[str, Any]] = []
+    lesion: list[dict[str, Any]] = []
+
+    boxes = getattr(result, "boxes", None)
+    if boxes is not None and len(boxes) > 0:
+        for coords, score, cls in zip(
+            boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist()
+        ):
+            x1, y1, x2, y2 = (float(v) for v in coords)
+            item = {
+                "confidence": round(float(score), 4),
+                "box": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+                "area_ratio": round(max(x2 - x1, 0.0) * max(y2 - y1, 0.0) / total, 4),
+            }
+            if names.get(int(cls)) == "fish":
+                fish.append(item)
+            else:
+                lesion.append(item)
+
+    fish.sort(key=lambda it: it["area_ratio"], reverse=True)
+    lesion.sort(key=lambda it: it["area_ratio"], reverse=True)
+    return {"fish": fish, "lesion": lesion, "image_size": [int(width), int(height)]}
+
+
+def _not_a_fish(
+    image_path: str,
+    image_meta: dict[str, Any],
+    detection: dict[str, Any],
+    model_version: str,
+    detector_version: str,
+) -> dict[str, Any]:
+    """构造「图里没有鱼」的返回体。
+
+    **不给任何病害结论**：``disease_type`` / ``confidence`` / ``is_healthy`` /
+    ``severity_weight`` 全部为 null。这是与「四类里挑一个」最本质的区别——
+    以前一张海报也会得到「健康 0.9997」，现在它会得到「没检测到鱼」。
+    """
+    lesions = detection.get("lesion") or []
+    fish_area = sum(it["area_ratio"] for it in detection.get("fish") or [])
+    lesion_area = sum(it["area_ratio"] for it in lesions)
+    return FishDiseaseOutput(
+        tool="fish_disease_detect",
+        status="ok",
+        image_path=image_path,
+        disease_type=None,
+        disease_group=None,
+        confidence=None,
+        is_healthy=None,
+        severity_weight=None,
+        is_low_confidence=False,
+        all_scores={},
+        raw_class=None,
+        model_version=model_version,
+        degraded_mode=False,
+        image_meta={**image_meta, "image_size": detection.get("image_size")},
+        note=NOT_A_FISH_NOTE,
+        is_fish=False,
+        lesion_count=len(lesions),
+        lesion_area_ratio=(round(lesion_area / fish_area, 4) if fish_area > 0 else None),
+        lesions=lesions[:5],
+        detector_version=detector_version,
+    ).model_dump(mode="json")
+
+
 # --------------------------------------------------------------------------- #
 # 六、对外工具函数
 # --------------------------------------------------------------------------- #
@@ -360,6 +503,10 @@ def fish_disease_detect(
     weights_path: str | None = None,
     force_mock: bool = False,
     mock_source: str = MOCK_SOURCE_DEFAULT,
+    lesion_weights_path: str | None = None,
+    fish_conf: float = FISH_GATE_CONF,
+    enable_gate: bool = False,
+    enable_lesion: bool = True,
 ) -> dict[str, Any]:
     """【工具】鱼体病害图像识别。
 
@@ -382,6 +529,22 @@ def fish_disease_detect(
         （从文件名/目录名读标签）。**该参数不暴露给大模型**，只供开发期联调：
         模型权重尚未训练时，用它把「图像 → 病害 → 融合决策」这条链路先跑通。
         使用时返回值里会带 ``model_version="mock-v0.1+folder_hint"`` 且 note 明确标注。
+    lesion_weights_path : str | None
+        病灶检测（实例分割）权重路径；None 时自动找 ``models/yolov8-fish-lesion-seg.pt``。
+        找不到就**不做**「图里有没有鱼」的判断，行为与旧版一致。
+    fish_conf : float
+        鱼框采纳阈值，默认 0.35。低于它的框视为噪声。
+    enable_gate : bool
+        是否启用「先确认是鱼、再判病害」的前置门，**默认 False**。
+        关掉时``is_fish``恒为 None，四类分类器直接给答案。
+        之所以默认关：训练集 201 张里没有任何非鱼负样本，检测器学不到「背景」，
+        实测那张设计海报仍会得到 conf=0.830 的鱼框，而 38 张真实鱼的最低鱼框
+        置信度是 0.815 —— 两者分不开，开门只会给出一个假的「确认是鱼」。
+        补充几百张非鱼图片重训后，才能把默认值改成 True。
+    enable_lesion : bool
+        是否跑检测器补上病灶定位（数量/面积占比/框），**默认 True**。
+        与门控是两件事：病灶定位在真实鱼图上是有据的（val 38 张，
+        lesion AP50 0.948），即使不信任它的「有没有鱼」判断也值得保留。
 
     返回
     ----
@@ -425,6 +588,31 @@ def fish_disease_detect(
     # ---- 2. 选择后端 ----
     backend, weights = ("mock", None) if force_mock else _resolve_backend(weights_path)
 
+    # ---- 2.5 病灶检测器：定位病灶（可选地兼作「有没有鱼」的门） ----
+    # 检测器是两件事：(a) 在鱼身上找病灶框——这件事它做得好；
+    # (b) 判断图里有没有鱼——这件事它现在做不到（训练集没有负样本），
+    # 所以门控默认关闭，只保留 (a)。详见 enable_gate 的说明。
+    detection: dict[str, Any] | None = None
+    detector_weights: str | None = None
+    if (enable_gate or enable_lesion) and backend == "yolo" and weights:
+        detector_weights = _resolve_lesion_weights(lesion_weights_path)
+        if detector_weights:
+            try:
+                detection = detect_fish_lesions(display_path, detector_weights, conf=fish_conf)
+            except Exception:  # noqa: BLE001 —— 检测器不可用就退回「没有门」的旧行为
+                detection = None
+            else:
+                if enable_gate and not detection["fish"]:
+                    return _not_a_fish(
+                        display_path,
+                        image_meta,
+                        detection,
+                        model_version=(
+                            f"{os.path.basename(weights)}+{os.path.basename(detector_weights)}"
+                        ),
+                        detector_version=os.path.basename(detector_weights),
+                    )
+
     raw_class: str | None = None
     hint_used = False
     if backend == "yolo" and weights:
@@ -440,6 +628,10 @@ def fish_disease_detect(
         top_label, scores = _mock_scores(display_path, source=mock_source)
         model_version = MOCK_MODEL_VERSION
         degraded = True
+
+    # 结论同时依赖两个权重时，model_version 必须把两个都写出来，否则没法追溯
+    if detection is not None and detector_weights and not degraded:
+        model_version = f"{model_version}+{os.path.basename(detector_weights)}"
 
     # 标签提示只在降级（mock）路径上生效；真实 YOLO 推理成功时绝不读文件名
     hint_raw: str | None = None
@@ -463,7 +655,17 @@ def fish_disease_detect(
 
     is_low_conf = confidence < max(conf_threshold, LOW_CONFIDENCE_THRESHOLD)
 
-    # ---- 3. 生成提示语 ----
+    # ---- 4. 病灶定位（只有跑过检测器才有） ----
+    lesions: list[dict[str, Any]] = []
+    lesion_area_ratio: float | None = None
+    if detection is not None:
+        lesions = (detection.get("lesion") or [])[:5]
+        fish_area = sum(it["area_ratio"] for it in detection.get("fish") or [])
+        lesion_area = sum(it["area_ratio"] for it in detection.get("lesion") or [])
+        if fish_area > 0:
+            lesion_area_ratio = round(lesion_area / fish_area, 4)
+
+    # ---- 5. 生成提示语 ----
     if backend == "mock" or degraded:
         note = (
             f"⚠ 当前为演示/Mock 结果（model_version={model_version}），"
@@ -484,8 +686,22 @@ def fish_disease_detect(
     else:
         note = f"检出{LB_GROUP.get(top_label, '')}{top_label}特征，建议结合水质数据综合研判。"
 
-    # 四类闭集分类器对"这张图不是鱼"没有任何表达能力，真实模型结果必须带这句声明
     if not degraded:
+        if detection is not None:
+            if lesion_area_ratio:
+                note += (
+                    f" 检测到 {len(lesions)} 处病灶，"
+                    f"合计约占鱼体面积 {lesion_area_ratio:.1%}。"
+                )
+                if top_label == "健康":
+                    note += (
+                        " 分类器判「健康」但检测到了病灶区域，"
+                        "两者矛盾，建议人工复核。"
+                    )
+            elif top_label != "健康":
+                note += " 但未定位到明确病灶区域，建议人工复核。"
+        # 检测器兜不住非鱼类图片（训练集里没有任何负样本，实测海报仍得到 0.83
+        # 的鱼框），所以无论有没有病灶统计，这句免责都不能省。
         note += CLOSED_SET_CAVEAT
 
     if is_low_conf:
@@ -505,8 +721,21 @@ def fish_disease_detect(
         raw_class=raw_class,
         model_version=model_version,
         degraded_mode=degraded,
-        image_meta=image_meta,
+        image_meta=(
+            {**image_meta, "image_size": detection.get("image_size")}
+            if detection is not None
+            else image_meta
+        ),
         note=note,
+        is_fish=(True if (enable_gate and detection is not None) else None),
+        lesion_count=len(lesions),
+        lesion_area_ratio=lesion_area_ratio,
+        lesions=lesions,
+        detector_version=(
+            os.path.basename(detector_weights)
+            if detection is not None and detector_weights
+            else None
+        ),
     ).model_dump(mode="json")
 
 

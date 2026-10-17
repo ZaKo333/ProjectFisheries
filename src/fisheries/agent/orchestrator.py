@@ -823,7 +823,12 @@ class AquacultureAgent:
                  or (water or {}).get("projected_do_alert_eta_hours") is not None)
         )
         disease_visible = bool(
-            vision and vision.get("status") == "ok" and not vision.get("is_healthy")
+            vision
+            and vision.get("status") == "ok"
+            # is_fish=False 表示「图里没检测到鱼」：此时 disease_type 为 None，
+            # 不能当成「有病害」（旧代码只看 is_healthy，None 恰好是 falsy）。
+            and vision.get("is_fish") is not False
+            and not vision.get("is_healthy")
         )
 
         def add(store: list[Advisory], target: str, action: str, timing: str) -> None:
@@ -868,7 +873,12 @@ class AquacultureAgent:
                     "按常规量喂料，夜里开增氧机，早晚各巡塘一次。",
                     "照常做")
 
-        if vision and vision.get("status") == "ok" and not vision.get("is_healthy"):
+        if (
+            vision
+            and vision.get("status") == "ok"
+            and vision.get("is_fish") is not False
+            and not vision.get("is_healthy")
+        ):
             add(disease_actions,
                 f"{vision.get('disease_type')}（把握 {vision.get('confidence')}）",
                 "捞走病鱼单独养，按说明书撒药，同时送检。",

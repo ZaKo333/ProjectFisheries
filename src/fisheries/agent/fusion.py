@@ -222,6 +222,18 @@ def _vision_score(vision: dict[str, Any] | None) -> tuple[float | None, list[Evi
         return None, []
 
     ev: list[Evidence] = []
+    if vision.get("is_fish") is False:
+        # 「图里没检测到鱼」既不是健康也不是病害：不参与评分，只留一条证据说明原因。
+        # 少了这一条，下面的 severity_weight/confidence 都是 None，会算出「检出None」。
+        ev.append(
+            Evidence(
+                source="vision",
+                code="VISION_NOT_A_FISH",
+                label="图片中未检测到鱼体，病害这一路不参与评分",
+            )
+        )
+        return 0.0, ev
+
     if vision.get("is_healthy"):
         ev.append(Evidence(source="vision", code="VISION_HEALTHY", label="未检出明显病害特征"))
         return 0.0, ev
@@ -402,7 +414,12 @@ def fuse_assessment(water: dict[str, Any] | None = None,
 
     # ---- 严重病害单模态红线：够确信的高危病害直接升级 ----
     severe_disease = False
-    if vision and vision.get("status") == "ok" and not vision.get("is_healthy"):
+    if (
+        vision
+        and vision.get("status") == "ok"
+        and vision.get("is_fish") is not False
+        and not vision.get("is_healthy")
+    ):
         sw = float(vision.get("severity_weight") or 0.0)
         cf = float(vision.get("confidence") or 0.0)
         if sw >= SEVERE_DISEASE_WEIGHT and cf >= SEVERE_DISEASE_MIN_CONF:
