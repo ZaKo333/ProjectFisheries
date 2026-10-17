@@ -1,6 +1,6 @@
 """导出前端对接所需的全部机器可验证事实。
 
-输出：docs/_frontend_spec.txt
+输出：docs/fixtures/_frontend_spec.txt
 - OpenAPI 各端点的请求/响应模型字段
 - 工具层与融合层的全部枚举值（规则码 / 告警码 / 错误码 / 风险等级 / 病害标签）
 - 关键常量阈值
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "docs" / "_frontend_spec.txt"
+OUT = ROOT / "docs" / "fixtures" / "_frontend_spec.txt"
 
 sys.path.insert(0, str(ROOT / "src"))
 

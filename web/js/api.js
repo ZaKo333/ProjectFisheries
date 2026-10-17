@@ -135,7 +135,7 @@
       }
       const err = new Error(
         "连不上后端服务 " + describeBase() +
-        "。请先启动接口服务（双击 run-api.bat，或运行 python -m fisheries.api），" +
+        "。请先启动接口服务（双击 启动接口服务.bat，或运行 python -m fisheries.api），" +
         "确认真实地址后再点左下角「设置」核对。"
       );
       err.status = 0; err.isNetwork = true;

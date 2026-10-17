@@ -4,7 +4,7 @@
 ------------
 仓库里有两处会生成**入库的产物**：
 
-* ``scripts/probes/_make_api_samples.py`` → ``docs/_api_samples.json``
+* ``scripts/probes/_make_api_samples.py`` → ``docs/fixtures/_api_samples.json``
 * ``scripts/evaluate_water_rules.py``   → ``docs/_m8_metrics.json``
 
 它们必须满足同一条不变量：**同一份代码在任何机器上跑，产物逐字节相同**。
@@ -30,7 +30,7 @@
    所以这里是**按出现位置全局替换**，不是只认前缀。
 2. **必须同时认单反斜杠与双反斜杠两种写法。** 上面那层字符串化 JSON 里，
    每个反斜杠都翻倍了。只处理单反斜杠会漏掉它——数据集路径当初正是从这里
-   漏进 ``docs/_api_samples.json`` 的。
+   漏进 ``docs/fixtures/_api_samples.json`` 的。
 3. **前缀后面要挡住同名前缀的兄弟目录。** ``...\\project`` 不该把
    ``...\\project2`` 也吃掉。判据是「后面那个字符不能是字母数字、下划线、
    点或连字符」：``\\``、``/``、``"``、空白、串尾都是合法边界，而 ``2``

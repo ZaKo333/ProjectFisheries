@@ -3,7 +3,7 @@
 输出两份文件，**它们是「前端拿到的接口长什么样」的唯一真相来源**：
 
 * ``docs/openapi.json``        —— FastAPI 自动生成的机器可读规格（端点、模型、错误码）
-* ``docs/_api_samples.json``   —— 20 个真实响应的样例（含 4xx 错误响应）
+* ``docs/fixtures/_api_samples.json``   —— 20 个真实响应的样例（含 4xx 错误响应）
 
 两个文件都做了**可重现化**：时间、耗时、随机 id、落盘路径这类每次都会变的字段
 被换成固定占位符，所以重复运行产物逐字节一致，能进版本库、能 diff。业务字段
@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "docs" / "_api_samples.json"
+OUT = ROOT / "docs" / "fixtures" / "_api_samples.json"
 OPENAPI_OUT = ROOT / "docs" / "openapi.json"
 
 # 允许直接运行——这些探针原来是靠调用方先设 PYTHONPATH 才能跑。

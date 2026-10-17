@@ -33,12 +33,22 @@ import sys
 import pytest
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-REPO_PARENT = PROJECT_ROOT.parent
+
+
+LAUNCHER_DIR = PROJECT_ROOT / "scripts" / "bat"
+
+#: 根目录只留三个人能看懂的中文入口；真正的逻辑全在 scripts/bat/。
+ROOT_ENTRIES = {"一键配置环境.bat", "启动接口服务.bat", "运行自检.bat"}
 
 
 def _all_bat_files() -> list[pathlib.Path]:
-    """工程内 + 工程上一级的全部 .bat（启动器分布在两层）。"""
-    return sorted(set(PROJECT_ROOT.glob("*.bat")) | set(REPO_PARENT.glob("*.bat")))
+    """工程根 + scripts/bat/ 的全部 .bat（只看仓库自己带的）。
+
+    刻意**不扫工程上一级**：仓库是自包含的，克隆到哪个目录都不该改变测试数量。
+    以前扫上一级是为了兼容「仓库放在一个更大的工作目录里」的旧布局，结果克隆进
+    含其他 .bat 的目录时，参数化用例会凭空多出几项，文档里的计数也跟着对不上。
+    """
+    return sorted(set(PROJECT_ROOT.glob("*.bat")) | set(LAUNCHER_DIR.glob("*.bat")))
 
 
 def test_there_is_at_least_one_launcher() -> None:
@@ -74,13 +84,13 @@ def test_chinese_named_launchers_forward_to_ascii_core() -> None:
     转发靠 ``%~dp0run-api.bat`` 这种**纯 ASCII 路径**，不需要在文件里写中文。
     """
     for name in ("run-api.bat", "run-selftest.bat"):
-        core = PROJECT_ROOT / name
-        assert core.is_file(), f"缺少 {name}"
+        core = LAUNCHER_DIR / name
+        assert core.is_file(), f"缺少 scripts/bat/{name}"
         text = core.read_text(encoding="ascii")
         assert "chcp 65001" in text, f"{name} 应打开 UTF-8 代码页"
         assert "launcher" in text or "selftest.py" in text, f"{name} 没把中文输出交给 Python"
 
-    # 中文名入口 → 转发目标必须是 ASCII 名，且用 %~dp0 定位同目录
+    # 中文名入口 → 转发目标是 scripts\bat\ 下的 ASCII 名，用 %~dp0 定位
     forwards = {
         "\u542f\u52a8\u63a5\u53e3\u670d\u52a1.bat": "run-api.bat",
         "\u8fd0\u884c\u81ea\u68c0.bat": "run-selftest.bat",
@@ -89,7 +99,31 @@ def test_chinese_named_launchers_forward_to_ascii_core() -> None:
         path = PROJECT_ROOT / fname
         assert path.is_file(), f"缺少中文名入口 {fname}"
         text = path.read_text(encoding="ascii")
-        assert f'%~dp0{target}' in text, f"{fname} 应转发到 {target}"
+        forwarding = f'%~dp0scripts\\bat\\{target}'
+        assert forwarding in text, f"{fname} 应转发到 scripts/bat/{target}"
+
+
+def test_root_only_holds_the_three_human_entry_points() -> None:
+    """根目录不再堆 ASCII 启动器：留下三个中文入口就够了。"""
+    assert {p.name for p in PROJECT_ROOT.glob("*.bat")} == ROOT_ENTRIES
+
+
+@pytest.mark.parametrize("name", ["setup.bat", "run-api.bat", "run-selftest.bat"])
+def test_launchers_climb_back_to_the_project_root(name: str) -> None:
+    """逻辑搬进 scripts/bat/ 之后，.bat 必须自己 cd 回工程根。
+
+    否则 ``.venv\\Scripts\\python.exe`` 与 ``scripts\\selftest.py`` 全按
+    ``scripts\\bat\\`` 解析，双击直接找不到——「下载后即可用」就断了。
+    """
+    text = (LAUNCHER_DIR / name).read_text(encoding="ascii")
+    assert 'cd /d "%~dp0..\\.."' in text, f"{name} 没切回工程根"
+
+
+@pytest.mark.parametrize("name", ["run-api.bat", "run-selftest.bat"])
+def test_launchers_bootstrap_a_missing_venv(name: str) -> None:
+    """下载后直接双击也要能起来：缺 .venv 时先跑 setup，而不是报错退出。"""
+    text = (LAUNCHER_DIR / name).read_text(encoding="ascii")
+    assert 'call "%~dp0setup.bat"' in text, f"{name} 缺少自动配置环境的兜底"
 
 
 # --------------------------------------------------------------------------- #

@@ -22,7 +22,7 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SETUP_PATH = PROJECT_ROOT / "scripts" / "setup_env.py"
-SETUP_BAT = PROJECT_ROOT / "setup.bat"
+SETUP_BAT = PROJECT_ROOT / "scripts" / "bat" / "setup.bat"
 FORWARD_BAT = PROJECT_ROOT / "一键配置环境.bat"
 
 
@@ -253,4 +253,4 @@ class TestLaunchers:
 
     def test_forward_bat_delegates_to_setup(self) -> None:
         text = FORWARD_BAT.read_text(encoding="ascii")
-        assert 'call "%~dp0setup.bat" %*' in text
+        assert 'call "%~dp0scripts\\bat\\setup.bat" %*' in text

@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(SRC))
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。

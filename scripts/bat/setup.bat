@@ -2,7 +2,7 @@
 chcp 65001 >nul
 setlocal
 title ProjectFisheries - Environment Setup
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 rem ===========================================================================
 rem  KEEP THIS FILE PURE ASCII AND CRLF.

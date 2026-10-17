@@ -2,7 +2,7 @@
 chcp 65001 >nul
 setlocal
 title ProjectFisheries - API Service
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 rem ===========================================================================
 rem  API service launcher (double-click).
@@ -25,7 +25,19 @@ set "PYTHONIOENCODING=utf-8"
 set "FISHERIES_API_HOST=%HOST%"
 set "FISHERIES_API_PORT=%PORT%"
 
+if exist "%PY%" goto :launch
+
+rem First run: there is no virtual environment yet.  Build it once with the
+rem same script the one-click entry point uses, then continue launching.
+echo.
+echo   [INFO] .venv not found -- running the one-click setup first (once only).
+echo.
+set "PF_NO_PAUSE=1"
+call "%~dp0setup.bat"
+set "PF_NO_PAUSE="
 if not exist "%PY%" goto :nopython
+
+:launch
 
 "%PY%" -m fisheries.launcher api-banner --host "%HOST%" --port "%PORT%"
 
@@ -49,10 +61,9 @@ echo.
 echo   [ERROR] Python virtual environment not found:
 echo           %PY%
 echo.
-echo   Create it once (see README.md section 1):
-echo       python -m venv .venv
-echo       .venv\Scripts\python.exe -m pip install -e ".[dev,rag,api]"
-echo   Then double-click this file again.
+echo   The automatic setup did not finish.  Re-run it by double-clicking:
+echo       scripts\bat\setup.bat
+echo   or see README.md section 3.2 for the manual steps.
 echo.
 if not "%PF_NO_PAUSE%"=="1" pause
 endlocal

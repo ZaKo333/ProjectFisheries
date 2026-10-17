@@ -154,7 +154,9 @@ python -m fisheries.api                # 然后打开 http://127.0.0.1:8000/app/
 
 #### 一键配置（推荐）
 
-下载或克隆本仓库后，**双击 `一键配置环境.bat`**（等价于 `setup.bat`）即可。
+下载或克隆本仓库后，**双击 `一键配置环境.bat`** 即可。
+直接双击 `启动接口服务.bat` / `运行自检.bat` 也行：第一次发现还没有 `.venv` 时，
+它们会先自动跑一遍同一条配置流程再继续启动——所以「下载 → 双击 → 使用」不用先读文档。
 它会依次做完七件事，重复运行是安全的（已经做过的步骤会跳过）：
 
 1. 检查 Python 版本（需 ≥ 3.10），挡掉 Windows 商店版的 python 转发器；
@@ -690,7 +692,7 @@ curl -X POST http://127.0.0.1:8812/api/v1/assess \
 > 要交给前端同学重做页面，看 [docs/前端对接说明.md](docs/前端对接说明.md)：
 > 接口清单、字段表、已实现功能清单，以及「哪些东西绝不能由前端自己算」。
 > 机器可读的契约在 [docs/openapi.json](docs/openapi.json)，
-> 真实响应样例在 [docs/_api_samples.json](docs/_api_samples.json)。
+> 真实响应样例在 [docs/fixtures/_api_samples.json](docs/fixtures/_api_samples.json)。
 
 ---
 
@@ -746,13 +748,12 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ├── pyproject.toml
 ├── README.md                # 本文件
 ├── 使用说明.txt             # 面向非技术使用者（双击 .bat 之前先看这个）
-├── setup.bat                # 一键配置环境（建 .venv + 装依赖 + 建向量库 + 验证）
-├── 一键配置环境.bat         # 中文名 .bat 只做转发，见下方说明
-├── run-api.bat              # 启动接口服务（同时托管 Web 前端）
-├── run-selftest.bat         # 环境体检
-├── 启动接口服务.bat         # 中文名 .bat 只做转发，见下方说明
-├── 运行自检.bat
+├── 一键配置环境.bat         # 一键配置环境（建 .venv + 装依赖 + 建向量库 + 验证）
+├── 启动接口服务.bat         # 启动接口服务（同时托管 Web 前端）
+├── 运行自检.bat             # 环境体检
+│                            # ↑ 根目录只留这三个中文入口；缺 .venv 时自动先跑配置
 ├── docs/                    # 设计与交付文档（见 §14）
+│   └── fixtures/            # 探针留档与真实响应样例（离线快照，断网也能看）
 ├── knowledge/
 │   ├── README.md            # 语料可信度声明与组织约定（★ 先读这个）
 │   ├── corpus/              # 9 篇种子语料
@@ -769,6 +770,10 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 │   ├── train_yolo_species.py    # 训练 + 评估鱼种三档分类模型（见 §12.5）
 │   ├── pack_dataset_mirror.py   # 把已导好的数据集 / 权重打成可上传的镜像包（见 §3.5、§3.6）
 │   ├── sync_test_counts.py      # 文档里的测试数量 = pytest 收集结果（见 §11）
+│   ├── bat/                 # 启动器的纯 ASCII 实现（中文入口只做转发）
+│   │   ├── setup.bat        #   配置环境（run-*.bat 缺 .venv 时自动调用）
+│   │   ├── run-api.bat      #   启动接口服务 + 托管网页
+│   │   └── run-selftest.bat #   环境体检
 │   └── make_groundtruth_sample.py / evaluate_groundtruth.py  # 人工真值集抽样与评测（见 §12.2）
 ├── src/fisheries/
 │   ├── datasets.py          # 「数据集名字 → 磁盘位置」的唯一真相来源
@@ -788,10 +793,11 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
     └── integration/         # 端到端集成测试（真权重 + 真知识库，见 §11.2）
 ```
 
-> **为什么有一批中文名 `.bat` 只是转发？** `cmd.exe` 按控制台代码页分块解码批处理文件，
+> **为什么根目录只有三个中文名 `.bat`？** `cmd.exe` 按控制台代码页分块解码批处理文件，
 > 一个非 ASCII 字节就可能让它把后面的行从中间切入当成命令执行——而**退出码仍是 0、服务照样起来**，
-> 只有黑窗口里多出一行噪声。所以中文名 `.bat` 只负责转发，实际逻辑在纯 ASCII 的 `run-*.bat`，
-> 所有中文提示改由 Python 打印。`tests/unit/test_launchers.py` 会守住这条约束。
+> 只有黑窗口里多出一行噪声。所以根目录的中文名 `.bat` 只负责转发，实际逻辑在纯 ASCII 的
+> `scripts/bat/*.bat`（它们先 `cd` 回工程根，发现没有 `.venv` 时自动跑一遍 `setup.bat` 再启动），
+> 所有中文提示改由 Python 打印。`tests/unit/test_launchers.py` 会守住这三条约束。
 
 ---
 
@@ -802,7 +808,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1274 项
+python -m pytest -m "not integration"        # 单元测试：1280 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -815,7 +821,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1274 项）
+### 11.1 单元测试（1280 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -832,7 +838,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_water_templates.py` | 68 | 模板预期等级 vs 规则引擎、CSV 往返、提交物与代码一致 |
 | `test_datasets.py` | 87 | 数据集注册表、解析优先级、绝对路径回归守卫 |
 | `test_console.py` | 27 | 编码兜底、符号降级、编码锁 |
-| `test_launchers.py` | 32 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
+| `test_launchers.py` | 38 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
 | `test_setup_env.py` | 39 | 一键配置：版本门、extras 与 `pyproject` 一致、镜像与 pip 命令拼装 |
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
@@ -1159,7 +1165,7 @@ python scripts/build_knowledge_base.py --check   # 只校验一致性
 | [docs/M8_评测报告.md](docs/M8_评测报告.md) | 看两组外部验证的完整结果（自动生成，勿手改） |
 | [knowledge/README.md](knowledge/README.md) | 看语料可信度分级与组织约定 |
 | [docs/openapi.json](docs/openapi.json) | 机器可读的接口契约 |
-| [docs/_api_samples.json](docs/_api_samples.json) | 各端点的真实响应样例 |
+| [docs/fixtures/_api_samples.json](docs/fixtures/_api_samples.json) | 各端点的真实响应样例 |
 
 ---
 

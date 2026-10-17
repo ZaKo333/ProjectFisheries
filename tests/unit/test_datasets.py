@@ -533,7 +533,7 @@ class TestPathStabilization:
     """``fisheries.paths`` 的占位符替换。
 
     钉住的是**产物可重现性**：同一个脚本在任何机器上跑，写出的 JSON 必须逐
-    字节相同（``docs/_m8_metrics.json``、``docs/_api_samples.json`` 都在版本
+    字节相同（``docs/_m8_metrics.json``、``docs/fixtures/_api_samples.json`` 都在版本
     库里，跑一遍就 diff 出一堆与代码无关的路径差异，那条不变量就断了）。
 
     这里所有路径都在运行时从 ``ds.PROJECT_ROOT`` / ``ds.LEGACY_ROOT`` /
@@ -575,7 +575,7 @@ class TestPathStabilization:
         assert out == paths.DATASET_PLACEHOLDER + tail
 
     def test_path_embedded_in_a_long_string_is_replaced(self):
-        # 数据集路径当初正是从这里漏进 ``docs/_api_samples.json`` 的：detail
+        # 数据集路径当初正是从这里漏进 ``docs/fixtures/_api_samples.json`` 的：detail
         # 是**字符串化的 JSON**，路径在中间，不在开头。只认前缀的实现会漏。
         doubled = str(ds.LEGACY_ROOT).replace("\\", "\\\\")
         body = '{"image_path": "' + doubled + '\\\\a.jpg"}'
@@ -608,10 +608,13 @@ class TestPathStabilization:
         for leaf in (7, 0.5, True, None):
             assert paths.stabilize_tree(leaf) == leaf
 
-    @pytest.mark.parametrize("name", ["_m8_metrics.json", "_api_samples.json"])
-    def test_committed_snapshots_have_no_machine_paths(self, name: str):
+    @pytest.mark.parametrize(
+        "relative",
+        ["docs/_m8_metrics.json", "docs/fixtures/_api_samples.json"],
+    )
+    def test_committed_snapshots_have_no_machine_paths(self, relative: str) -> None:
         # 快照本身也要守：改了生成逻辑却忘了重跑，这条会红。
-        text = (ds.PROJECT_ROOT / "docs" / name).read_text(encoding="utf-8")
+        text = (ds.PROJECT_ROOT / relative).read_text(encoding="utf-8")
         assert not re.search(r"(?<![\w\"'])[A-Za-z]:\\+(?![ntr0u])", text)
         assert paths.DATASET_PLACEHOLDER in text
 

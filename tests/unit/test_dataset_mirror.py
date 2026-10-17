@@ -311,5 +311,5 @@ class TestSetupStep:
 
     def test_bat_core_paths_are_ascii(self) -> None:
         """setup.bat 仍必须是纯 ASCII（cmd.exe 的硬约束）。"""
-        data = (PROJECT_ROOT / "setup.bat").read_bytes()
+        data = (PROJECT_ROOT / "scripts" / "bat" / "setup.bat").read_bytes()
         data.decode("ascii")

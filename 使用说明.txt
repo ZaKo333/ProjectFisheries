@@ -49,7 +49,7 @@
                         隐藏（不猜品种），水质按默认品种（鲤科）判定，
                         下拉框仍可手动选。
 
-  运行自检.bat          环境体检。会跑一遍单元测试（1274 项）+ 端到端集成测试
+  运行自检.bat          环境体检。会跑一遍单元测试（1280 项）+ 端到端集成测试
                        （13 项，缺权重/缺索引的会自动跳过并说明补法）+ 全部演示
                        脚本 + 检查知识库索引。答辩前点一次，全绿就放心了。
                        它不会启动服务，跑完自己就结束。
@@ -137,7 +137,7 @@
 
   问：想给别的电脑访问？
   答：默认只监听本机（127.0.0.1），别人连不上。要开放的话，用记事本打开
-        run-api.bat
+        scripts\bat\run-api.bat
       把这一行
         set "HOST=127.0.0.1"
       改成
@@ -180,7 +180,7 @@
           'x' is not recognized as an internal or external command
       这种噪声（而且退出码还是 0、服务照常起来，很容易漏掉）。所以：
           - 中文名的 启动接口服务.bat / 运行自检.bat 只负责转发；
-          - 真正的逻辑在同目录的 run-api.bat / run-selftest.bat，
+          - 真正的逻辑在 scripts\bat\ 下的 run-api.bat / run-selftest.bat，
             这两个是纯 ASCII，一个非 ASCII 字节都没有；
           - 你看到的全部中文提示，都是 Python 打印的（src\fisheries\launcher.py
             与 scripts\selftest.py）。
@@ -201,7 +201,7 @@
 
       .venv\Scripts\python.exe -m fisheries.api
 
-  全部单元测试（1274 项，约 6 分钟）：
+  全部单元测试（1280 项，约 6 分钟）：
 
       .venv\Scripts\python.exe -m pytest tests/unit -o addopts="" -q
 
@@ -242,12 +242,13 @@
 --------------------------------------------------------------------------------
 
   <工程>\
-      启动接口服务.bat          ← 双击这个（转发到 run-api.bat，同时托管网页）
-      运行自检.bat                 转发到 run-selftest.bat
-      一键配置环境.bat             转发到 setup.bat（第一次用先双击它）
-      setup.bat                ↑ 这四个是实际逻辑，纯 ASCII，别改出中文来
-      run-api.bat
-      run-selftest.bat
+      启动接口服务.bat          ← 双击这个（同时托管网页；缺 .venv 会自动先配置）
+      一键配置环境.bat             想单独跑一遍配置，双击这个
+      运行自检.bat                 环境体检
+      scripts\bat\             上面三个的实际逻辑（纯 ASCII，别改出中文来）
+          setup.bat
+          run-api.bat
+          run-selftest.bat
       使用说明.txt             本文件
       README.md               项目全貌：做了什么、怎么设计的、怎么验收的
       docs\项目说明及流程.txt  项目背景、选题、开发流程的说明材料

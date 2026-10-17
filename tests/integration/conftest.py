@@ -123,7 +123,7 @@ def species_ready() -> bool:
 def chat_answer(client: TestClient) -> dict:
     """跑一次真实知识库问答；索引没建就 skip。
 
-    这条 fixture 同时是「离线部署能不能答」的探针：``docs/_api_samples.json`` 里的
+    这条 fixture 同时是「离线部署能不能答」的探针：``docs/fixtures/_api_samples.json`` 里的
     chat 样例就是同一个查询跑出来的。
     """
     resp = client.post("/api/v1/chat", json={"query": "溶氧低怎么办", "k": 3})

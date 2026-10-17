@@ -13,8 +13,11 @@ LangChain API 形态）都是靠它们实测出来的，评委或队友可以复
 | `_probe_webui_callback.py` | 直调 Gradio 真正的回调 `app._run(...)`（演示脚本走的是 `WebSession.run`，绕过了按钮绑的函数） | 8 个输出的个数与顺序必须和 `outputs=` 严格一致；三条错误路径都返回完整 8 元组；组件数 42 |
 | `_probe_d12.py` | 打印 D12 的语言判定与回译后端（含环境变量覆盖、各 provider 的默认语言） | 未知后端默认中文；`aqua-7b-*` 判英文；`FISHERIES_PROMPT_LANG` 可覆盖 |
 | `_probe_confidence.py` | 把「可信度说明」在四种输入 × 中英两语下的成品句打印出来 | 三句式齐全、"不确定"为空时明说、标点不重复（`etc..` / `。。`） |
+| `_probe_api.py` | 真实打一遍 `/assess`、`/ingest/*`、`/tools/call`、`/chat` | 写断言前先看真实响应，避免照着「以为的响应」去写测试 |
+| `_probe_frontend_spec.py` | 导出前端需要的机器可验证事实（端点字段 / 枚举 / 阈值） | 产物 `docs/fixtures/_frontend_spec.txt` |
+| `_make_api_samples.py` | 生成 `docs/openapi.json` + `docs/fixtures/_api_samples.json` | 时间 / 耗时 / 随机 id 换占位符，重复运行逐字节一致 |
 
-输出留档在 `docs/_probe_*.txt`，便于评审时不用重跑就能核对上述结论。
+输出留档在 `docs/fixtures/_probe_*.txt`，便于评审时不用重跑就能核对上述结论。
 
 运行方式（在 `project/` 目录下）：
 
