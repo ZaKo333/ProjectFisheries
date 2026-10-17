@@ -24,11 +24,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from fisheries import console as _console
+from fisheries import console as _console  # noqa: E402 - 先 sys.path 再导入
 
 _console.install()
 
-from fisheries.evaluation.groundtruth import (
+from fisheries.evaluation.groundtruth import (  # noqa: E402 - 同上
     DEFAULT_DIR,
     MIN_LABELS,
     evaluate,

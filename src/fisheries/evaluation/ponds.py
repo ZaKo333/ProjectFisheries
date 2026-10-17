@@ -79,11 +79,11 @@ import csv
 import math
 import re
 from collections import Counter
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
-from typing import Iterable, Iterator, Mapping, Sequence
 
 from .. import datasets as _datasets
 from .labels import (
@@ -98,13 +98,13 @@ __all__ = [
     "COLUMN_ALIASES",
     "DATASET_NAME",
     "DEFAULT_DIR",
-    "PondSample",
-    "PondWindow",
-    "REQUIRED_FIELDS",
     "RANGES",
+    "REQUIRED_FIELDS",
     "STRIDE_HOURS",
     "UNIT_DIVISORS",
     "WINDOW_HOURS",
+    "PondSample",
+    "PondWindow",
     "iter_windows",
     "load_pond",
     "load_ponds",
@@ -328,9 +328,7 @@ class PondSample:
         多塞一个 ``nitrate`` 会让整个请求被 pydantic 拒绝。
         """
         point: dict = {"timestamp": self.sampled_at.isoformat()}
-        for name, value in self.indicators().items():
-            if value is not None:
-                point[name] = value
+        point.update({k: v for k, v in self.indicators().items() if v is not None})
         return point
 
 

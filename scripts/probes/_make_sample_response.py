@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。
 # 详见 src/fisheries/console.py。
-from fisheries import console as _console  # noqa: E402
+from fisheries import console as _console
 
 _console.install()
 

@@ -6,7 +6,7 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "src"))
 
-from fastembed import TextEmbedding  # noqa: E402
+from fastembed import TextEmbedding
 
 CACHE_DIR = pathlib.Path(__file__).resolve().parents[2] / "models" / "fastembed"
 
@@ -22,13 +22,13 @@ docs = [
 query = "池塘溶氧太低了怎么办"
 
 vecs = list(model.embed(docs))
-qvec = list(model.embed([query]))[0]
+qvec = next(iter(model.embed([query])))
 
 print("dim:", len(qvec))
 import numpy as np  # noqa: E402
 
 m = np.array(vecs)
 sims = m @ np.array(qvec) / (np.linalg.norm(m, axis=1) * np.linalg.norm(qvec))
-for d, s in zip(docs, sims):
-    print("  %.4f  %s" % (s, d[:24]))
+for d, s in zip(docs, sims, strict=True):
+    print(f"  {s:.4f}  {d[:24]}")
 print("best:", docs[int(np.argmax(sims))][:20])

@@ -708,7 +708,7 @@ class TestStore:
     def test_fingerprint_changes_with_chunks(self, corpus_dir: Path) -> None:
         pairs = chunk_corpus(load_corpus(corpus_dir))
         fp1 = corpus_fingerprint(pairs)
-        fp2 = corpus_fingerprint(pairs + [pairs[0]])
+        fp2 = corpus_fingerprint([*pairs, pairs[0]])
         assert fp1 != fp2
 
     def test_fingerprint_ignores_light_edits(self, corpus_dir: Path) -> None:
@@ -744,7 +744,7 @@ class TestStore:
         """
 
         class Exploding:
-            class _collection:  # noqa: N801 —— 只为复现 chroma 的属性形状
+            class _collection:
                 @staticmethod
                 def count() -> int:
                     raise RuntimeError("collection 打不开")
@@ -759,7 +759,7 @@ class TestStore:
         """``_collection.count()`` 不可用时用 ``get`` 数 id，而不是直接放弃。"""
 
         class GetOnly:
-            class _collection:  # noqa: N801
+            class _collection:
                 @staticmethod
                 def count() -> int:
                     raise RuntimeError("没有 count()")

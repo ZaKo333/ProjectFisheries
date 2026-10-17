@@ -229,8 +229,8 @@ def read_checksums(path: Path | None = None) -> dict[str, str]:
     if not target.is_file():
         return {}
     table: dict[str, str] = {}
-    for line in target.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+    for raw_line in target.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
         parts = line.split()
@@ -311,10 +311,12 @@ def download(url: str, dest: Path) -> str:
         import urllib.request
 
         try:
-            with urllib.request.urlopen(url, timeout=60) as response:
-                with part.open("wb") as handle:
-                    shutil.copyfileobj(response, handle, _CHUNK * 8)
-        except Exception as exc:  # noqa: BLE001 - 统一转成可读错误
+            with (
+                urllib.request.urlopen(url, timeout=60) as response,
+                part.open("wb") as handle,
+            ):
+                shutil.copyfileobj(response, handle, _CHUNK * 8)
+        except Exception as exc:
             part.unlink(missing_ok=True)
             raise WeightNotFoundError(f"下载失败（{url}）：{exc}") from exc
     part.replace(dest)
@@ -377,7 +379,7 @@ def fetch_all(
     for name in names or WEIGHTS:
         try:
             results[name] = str(fetch(name, force=force))
-        except WeightError as exc:
+        except WeightError as exc:  # noqa: PERF203 - 每个权重的失败要单独记账
             results[name] = f"失败：{' '.join(str(exc).split())}"
     return results
 

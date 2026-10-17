@@ -82,7 +82,7 @@ def main() -> int:
     failures: list[str] = []
 
     for label, argv in CASES:
-        proc = subprocess.run(argv, capture_output=True, env=env, cwd=str(ROOT))
+        proc = subprocess.run(argv, capture_output=True, env=env, cwd=str(ROOT), check=False)
         n_gbk, n_utf8, n_both, samples = classify(proc.stdout)
         verdict = "OK" if (n_utf8 == 0 and proc.returncode == 0) else "FAIL"
         print(

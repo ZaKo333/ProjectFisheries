@@ -65,7 +65,7 @@ class TestPythonGate:
         requires = data["project"]["requires-python"]
         # 形如 ">=3.10"
         major, minor = requires.lstrip(">=").split(".")
-        assert setup_env.MIN_PYTHON == (int(major), int(minor))
+        assert (int(major), int(minor)) == setup_env.MIN_PYTHON
 
 
 # --------------------------------------------------------------------------- #

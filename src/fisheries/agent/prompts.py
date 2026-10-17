@@ -690,14 +690,14 @@ def _fmt_vision_block(vision: dict[str, Any] | None, lang: str = LANG_ZH) -> str
                  f"- 置信度：{vision.get('confidence')}",
                  f"- 严重度权重：{vision.get('severity_weight')}"]
     if vision.get("raw_class"):
-        lines.append((f"- Raw model class: {vision.get('raw_class')}" if en
-                      else f"- 底层原始判定：{vision.get('raw_class')}"))
+        lines.append(f"- Raw model class: {vision.get('raw_class')}" if en
+                      else f"- 底层原始判定：{vision.get('raw_class')}")
     if vision.get("is_low_confidence"):
         lines.append("- WARNING: confidence is low, human review required" if en
                      else "- ⚠ 置信度偏低，需人工复核")
     if vision.get("note"):
-        lines.append((f"- Note (Chinese): {vision['note']}" if en
-                      else f"- 备注：{vision['note']}"))
+        lines.append(f"- Note (Chinese): {vision['note']}" if en
+                      else f"- 备注：{vision['note']}")
     return "\n".join(lines)
 
 
@@ -838,7 +838,7 @@ def _min_reliable_points() -> int:
     """
     try:
         from ..tools.water_risk import MIN_RELIABLE_POINTS
-    except Exception:  # pragma: no cover - 仅在包结构被破坏时触发
+    except ImportError:  # pragma: no cover - 仅在包结构被破坏时触发
         return 24
     return int(MIN_RELIABLE_POINTS)
 
@@ -1084,9 +1084,9 @@ __all__ = [
     "DIRECTION_GLOSS_EN",
     "DISEASE_GROUP_LABELS_EN",
     "DISEASE_LABELS_EN",
-    "DO_THRESHOLD_LABELS_EN",
     "DOMAIN_CONSTRAINTS",
     "DOMAIN_CONSTRAINTS_EN",
+    "DO_THRESHOLD_LABELS_EN",
     "INDICATOR_LABELS_EN",
     "KNOWLEDGE_BLOCK_IS_CHINESE",
     "LANGUAGE_CONTRACT_EN",

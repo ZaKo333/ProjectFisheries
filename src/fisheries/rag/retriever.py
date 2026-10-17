@@ -31,8 +31,9 @@ from __future__ import annotations
 
 import functools
 import pathlib
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from .embedder import (
     Embeddings,
@@ -40,7 +41,7 @@ from .embedder import (
     describe_embeddings,
     project_root,
 )
-from .schemas import RetrievedChunk, RetrievalQuery, RetrievalResult
+from .schemas import RetrievalQuery, RetrievalResult, RetrievedChunk
 from .store import (
     DEFAULT_COLLECTION,
     GENERIC_DISEASE,
@@ -248,11 +249,9 @@ def build_predicate(q: RetrievalQuery) -> Callable[[dict[str, Any]], bool]:
                 allowed.add(GENERIC_DISEASE)
             if meta.get("disease") not in allowed:
                 return False
-        if not q.include_meta and meta.get("section_role") == "meta":
-            # 元章节（"与本项目 Agent 的联动"）默认不参与检索，
-            # 它们措辞里全是领域关键词，会挤掉真正的处置方案。
-            return False
-        return True
+        # 元章节（"与本项目 Agent 的联动"）默认不参与检索，
+        # 它们措辞里全是领域关键词，会挤掉真正的处置方案。
+        return q.include_meta or meta.get("section_role") != "meta"
 
     return predicate
 
@@ -742,7 +741,7 @@ class KnowledgeBase:
     # ------------------------------------------------------------------ 构造
 
     @classmethod
-    def _from_store(cls, store: object, embeddings: Embeddings) -> "KnowledgeBase":
+    def _from_store(cls, store: object, embeddings: Embeddings) -> KnowledgeBase:
         """把 Chroma 里的全部块读进内存，供 BM25 与元数据谓词使用。"""
         data = store.get(include=["documents", "metadatas"])  # type: ignore[attr-defined]
         ids = [str(i) for i in data.get("ids", [])]
@@ -773,7 +772,7 @@ class KnowledgeBase:
         embeddings: Embeddings | None = None,
         embedder_backend: str | None = None,
         strict: bool = True,
-    ) -> "KnowledgeBase":
+    ) -> KnowledgeBase:
         """加载已构建的向量库。未构建时抛 :class:`StoreMismatchError`。"""
         emb = embeddings or build_embeddings(embedder_backend)
         store = load_store(
@@ -792,7 +791,7 @@ class KnowledgeBase:
         embedder_backend: str | None = None,
         max_chars: int | None = None,
         overlap_chars: int | None = None,
-    ) -> tuple["KnowledgeBase", Any]:
+    ) -> tuple[KnowledgeBase, Any]:
         """从语料目录构建向量库并返回 ``(KnowledgeBase, BuildStats)``。"""
         from .loader import load_corpus
         from .splitter import (
@@ -834,10 +833,7 @@ class KnowledgeBase:
         **kwargs: Any,
     ) -> RetrievalResult:
         """执行一次混合检索。"""
-        if isinstance(query, str):
-            q = RetrievalQuery(query=query, **kwargs)
-        else:
-            q = query
+        q = RetrievalQuery(query=query, **kwargs) if isinstance(query, str) else query
         if k is not None:
             q = q.model_copy(update={"k": k})
 
@@ -904,8 +900,8 @@ class KnowledgeBase:
             pairs = self._store.similarity_search_with_score(  # type: ignore[attr-defined]
                 q.query, k=fetch_k, filter=where
             )
-        except Exception:
-            # filter 参数在各版本签名不一致时退化为不过滤，但必须让调用方知道：
+        except Exception:  # noqa: BLE001 - filter 参数在各版本签名不一致时退化为不过滤
+            # 但必须让调用方知道：静默返回未过滤结果会导致"跨病种串答案"。，但必须让调用方知道：
             # 静默返回未过滤结果会导致"跨病种串答案"。
             pairs = self._store.similarity_search_with_score(q.query, k=fetch_k)  # type: ignore[attr-defined]
             self._last_dense_filter_failed = True

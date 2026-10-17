@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -106,7 +105,7 @@ def main() -> int:
         unions = {}
         for src in names:
             acc: set[str] = set()
-            for (split, c), digests in data[src].items():
+            for (_split, c), digests in data[src].items():
                 if c == cls:
                     acc |= digests
             unions[src] = acc
@@ -125,7 +124,7 @@ def main() -> int:
     for cls in CLASSES:
         acc: set[str] = set()
         for src in names:
-            for (split, c), digests in data[src].items():
+            for (_split, c), digests in data[src].items():
                 if c == cls:
                     acc |= digests
         total += len(acc)

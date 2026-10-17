@@ -170,6 +170,7 @@ def ensure_pretrained(name: str) -> Path:
              "--connect-timeout", "20", "-o", str(target), url],
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode == 0 and target.is_file() and target.stat().st_size > 0:
             size_mb = target.stat().st_size / 1e6
@@ -228,7 +229,7 @@ def _average_precision(pairs: list[tuple[float, int]], n_pos: int) -> float:
         precisions[i] = best
     ap = 0.0
     prev_recall = 0.0
-    for precision, recall in zip(precisions, recalls):
+    for precision, recall in zip(precisions, recalls, strict=True):
         ap += precision * (recall - prev_recall)
         prev_recall = recall
     return ap
@@ -238,7 +239,7 @@ def evaluate(model, class_keys: list[str], test_root: Path) -> EvalResult:
     """在测试集上逐图推理，算出准确率、逐类指标、混淆矩阵与弱监督 mAP@0.5。"""
     result = EvalResult()
     for cls in class_keys:
-        result.confusion[cls] = {c: 0 for c in class_keys}
+        result.confusion[cls] = dict.fromkeys(class_keys, 0)
 
     truths: list[str] = []
     preds: list[str] = []
@@ -267,14 +268,14 @@ def evaluate(model, class_keys: list[str], test_root: Path) -> EvalResult:
     if result.n == 0:
         return result
 
-    result.top1 = sum(1 for t, p in zip(truths, preds) if t == p) / result.n
+    result.top1 = sum(1 for t, p in zip(truths, preds, strict=True) if t == p) / result.n
 
     # 逐类 precision / recall / F1（按测试集里真实存在的类算）
     f1s: list[float] = []
     for cls in class_keys:
-        tp = sum(1 for t, p in zip(truths, preds) if t == cls and p == cls)
-        fp = sum(1 for t, p in zip(truths, preds) if t != cls and p == cls)
-        fn = sum(1 for t, p in zip(truths, preds) if t == cls and p != cls)
+        tp = sum(1 for t, p in zip(truths, preds, strict=True) if t == cls and p == cls)
+        fp = sum(1 for t, p in zip(truths, preds, strict=True) if t != cls and p == cls)
+        fn = sum(1 for t, p in zip(truths, preds, strict=True) if t == cls and p != cls)
         precision = tp / (tp + fp) if (tp + fp) else float("nan")
         recall = tp / (tp + fn) if (tp + fn) else float("nan")
         f1 = (
@@ -297,7 +298,7 @@ def evaluate(model, class_keys: list[str], test_root: Path) -> EvalResult:
         n_pos = sum(1 for t in truths if t == cls)
         pairs = [
             (conf, 1 if (p == cls and t == cls) else 0)
-            for t, p, conf in zip(truths, preds, confs)
+            for t, p, conf in zip(truths, preds, confs, strict=True)
             if p == cls
         ]
         ap = _average_precision(pairs, n_pos)

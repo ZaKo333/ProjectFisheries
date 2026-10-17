@@ -42,7 +42,7 @@ def _run(cmd: list[str], *, quiet: bool = False) -> int:
     if quiet:
         kwargs["stdout"] = subprocess.DEVNULL
         kwargs["stderr"] = subprocess.STDOUT
-    return subprocess.run(cmd, **kwargs).returncode  # type: ignore[call-overload]
+    return subprocess.run(cmd, check=False, **kwargs).returncode  # type: ignore[call-overload]
 
 
 def step_python_env() -> bool:
@@ -50,7 +50,7 @@ def step_python_env() -> bool:
     print(f"        Python {sys.version.split()[0]}  ({PY})")
     try:
         import fisheries  # noqa: F401
-    except Exception as exc:  # pragma: no cover - 环境损坏才会走到
+    except ImportError as exc:  # pragma: no cover - 环境损坏才会走到
         print(f"        [失败] 项目包 fisheries 无法导入：{exc!r}")
         print("        在本目录执行： .venv\\Scripts\\python.exe -m pip install -e .")
         return False

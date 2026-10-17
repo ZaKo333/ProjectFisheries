@@ -214,7 +214,7 @@ python -m venv .venv
 .venv\Scripts\activate           # Windows
 source .venv/bin/activate        # macOS / Linux
 
-# 安装本工程（含测试依赖）
+# 安装本工程（含测试与 lint 依赖）
 python -m pip install -U pip
 python -m pip install -e ".[dev]"
 
@@ -847,6 +847,30 @@ HTTP 状态码、响应字段和风险标签——单元测试把每一环都换
 
 **缺料就 `skip`**：没训权重、没装 `ultralytics`、没导数据集、没建知识库索引，集成测试会
 跳过并在 reason 里写清补的命令，不会伪装成通过。
+
+### 11.3 代码风格：一条 `ruff check`
+
+`pyproject.toml` 里有 `[tool.ruff]`（`target-version = "py310"`、`line-length = 100`、
+`src = ["src", "tests", "scripts"]`），规则集取的是「基础 + 有实害的」那一档：
+
+```bash
+python -m ruff check                 # 全仓检查，当前是 All checks passed!
+python -m ruff check --fix           # 能安全自动修的自动修（改完照例再跑一遍测试）
+python -m ruff check --statistics    # 按规则看还剩多少
+```
+
+选中的规则：`E4/E7/E9/F/W`（语法、未定义名、import 用不上）、`I`（import 顺序）、
+`UP`（老写法升级）、`B`（bugbear：可变默认值、`zip` 不写 `strict=True` 等）、
+`SIM`（能化简的写法）、`RUF`（ruff 自家的坑）、`PERF`（明显的性能写法）、`C4`（推导式）、
+`PYI`（`.pyi` 一致性）、`PLW`（pylint 里有实害的几条）、`BLE`（`except Exception` 必须写清理由）。
+
+刻意**没选**的两组：`S`（flake8-bandit）会给 1200 多条测试的每个 `assert` 报「硬编码口令」，
+噪声远大于收益；`D`（pydocstyle）会逼每个私有函数补 docstring。
+`ignore` 只放 `RUF001/RUF002/RUF003`（中文全角标点与同形字是刻意的），`tests/**` 额外豁免 `B017`。
+
+`BLE001` 不是一律禁止：确实要兜底的 15 处写了 `# noqa: BLE001 - <为什么可以兜>`，
+另外 3 处按实际异常类型收窄（`agent/prompts.py` → `ImportError`、
+`agent/translate.py` → `(ImportError, AttributeError)`、`scripts/selftest.py` → `ImportError`）。
 
 
 ---

@@ -70,7 +70,7 @@ def cmd_list() -> int:
         print()
     print("  ★ = 代码当前真正依赖，缺了就跑不起来")
     print()
-    print(f"  下载到本地：python scripts/fetch_datasets.py --fetch <名字>")
+    print("  下载到本地：python scripts/fetch_datasets.py --fetch <名字>")
     print("  换存放位置：set FISHERIES_DATA_ROOT=<目录>（不必移动文件）")
     print()
     return 0
@@ -193,7 +193,7 @@ def cmd_fetch(names: list[str], *, all_names: bool) -> int:
         except ds.DatasetNotFoundError as exc:
             print(f"         失败：{exc}")
             rc = 1
-        except Exception as exc:  # 网络/鉴权等，给一行摘要而不是整片栈
+        except Exception as exc:  # noqa: BLE001 - 网络/鉴权等，给一行摘要而不是整片栈
             print(f"         失败：{type(exc).__name__}: {exc}")
             rc = 1
         else:

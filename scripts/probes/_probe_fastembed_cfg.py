@@ -19,7 +19,7 @@ model = TextEmbedding(model_name="BAAI/bge-small-zh-v1.5", cache_dir=cache)
 inner = getattr(model, "model", None)
 print("model class:", type(inner))
 for attr in ("query_prefix", "passage_prefix", "model_name", "dim"):
-    print("  %-16s = %r" % (attr, getattr(inner, attr, "<none>")))
+    print(f"  {attr:<16} = {getattr(inner, attr, '<none>')!r}")
 print("has query_embed:", hasattr(model, "query_embed"))
 print("has passage_embed:", hasattr(model, "passage_embed"))
 print("has embed:", hasattr(model, "embed"))

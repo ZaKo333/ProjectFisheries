@@ -32,7 +32,7 @@ import hashlib
 import math
 import pathlib
 import threading
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from langchain_core.embeddings import Embeddings
 

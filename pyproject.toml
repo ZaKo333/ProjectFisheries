@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.17"]
 # 只做推理（加载 models/yolov8-fish.pt）时够用；要自己训练权重装下面的 train。
 vision = ["ultralytics>=8.2"]
 # 训练病害识别四分类权重（scripts/train_yolo_fish.py），见 docs/模型训练说明.md。
@@ -69,3 +69,41 @@ filterwarnings = ["ignore::DeprecationWarning"]
 markers = [
     "integration: 端到端集成测试：真模型/真知识库/真路由，缺权重或缺索引时 skip",
 ]
+
+# --------------------------------------------------------------------------- #
+# ruff 配置：静态检查（不格式化，见 .editorconfig 与现有缩进风格）
+#   python -m ruff check          查全部
+#   python -m ruff check --fix    自动修可修的（RUF100 / F541 / I001 这类等价改写）
+# 规则集是「基础但能抓到真错」的一档，不含 flake8-bandit(S)/pydocstyle(D)：
+#   - S101 会对 1200+ 条单测的 assert 全部报错，噪声远大于收益；
+#   - D 会要求给每个私有函数补 docstring，本工程用中文分区注释组织代码。
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9",  # pycodestyle 的硬错误子集（未定义名之外的真错）
+    "F",               # pyflakes：未定义名、未用导入、f-string 无占位符
+    "W",               # pycodestyle 空白告警（行尾空格、多余空行）
+    "I",               # import 排序与分组
+    "UP",              # pyupgrade：过时写法（% 格式化、encoding 声明等）
+    "B",               # bugbear：可变默认参数、zip 不严格等真 bug 候选
+    "SIM",             # 可简化的等价写法
+    "RUF",             # ruff 自带规则（noqa 是否多余、__all__ 是否有序）
+    "PERF",            # 明显的性能问题（能改成推导式的循环）
+    "C4",              # 推导式写法
+    "PYI",             # 类型标注风格
+    "PLW",             # pylint 的告警子集（subprocess 不检查返回码等）
+    "BLE",             # 盲目的 except Exception
+]
+ignore = [
+    # 中文全角标点、汉字宽度、同形字：提示语和文档字符串里是刻意的，不是笔误。
+    "RUF001", "RUF002", "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试里 assert 就是断言机制，B017（用 assertRaises(Exception)）在这里挡不住真错。
+"tests/**" = ["B017"]

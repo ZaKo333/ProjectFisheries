@@ -367,13 +367,13 @@ def describe_backend(config: LLMConfig) -> str:
 
 
 __all__ = [
+    "PROVIDER_PRESETS",
     "ChatClient",
     "ChatResponse",
     "LLMConfig",
     "LLMUnavailableError",
     "MockLLMClient",
     "OpenAICompatibleClient",
-    "PROVIDER_PRESETS",
     "Role",
     "ToolCall",
     "build_client",

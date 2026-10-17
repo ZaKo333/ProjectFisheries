@@ -352,7 +352,7 @@ def _mock_scores(
     rest_sum = sum(raw_rest) or 1.0
 
     scores = {winner: top}
-    for lab, r in zip(others, raw_rest):
+    for lab, r in zip(others, raw_rest, strict=True):
         scores[lab] = (1.0 - top) * r / rest_sum
     return winner, scores
 
@@ -386,7 +386,7 @@ def _yolo_predict(image_path: str, weights_path: str) -> tuple[str, dict[str, fl
     }
 
     # ---- 关键：多对一映射要「求和」而不是「取最大」 ----
-    agg: dict[str, float] = {lab: 0.0 for lab in DISEASE_LABELS}
+    agg: dict[str, float] = dict.fromkeys(DISEASE_LABELS, 0.0)
     unmapped: list[str] = []
     for raw_name, p in raw_scores.items():
         target = RAW_CLASS_TO_LABEL.get(raw_name)
@@ -460,7 +460,7 @@ def detect_fish_lesions(
     boxes = getattr(result, "boxes", None)
     if boxes is not None and len(boxes) > 0:
         for coords, score, cls in zip(
-            boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist()
+            boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist(), strict=True
         ):
             x1, y1, x2, y2 = (float(v) for v in coords)
             item = {

@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。
 # 详见 src/fisheries/console.py。
-from fisheries import console as _console  # noqa: E402
+from fisheries import console as _console
 
 _console.install()
 
@@ -46,16 +46,16 @@ from fisheries.agent.prompts import (  # noqa: E402
     scheduler_system_prompt,
 )
 from fisheries.agent.translate import (  # noqa: E402
-    LANG_EN,
-    LANG_ZH,
     DEFAULT_CHUNK_CHARS,
     DEFAULT_CHUNK_WORDS,
+    LANG_EN,
+    LANG_ZH,
     LOCAL_DIR_ENV,
+    TRANSLATOR_SYSTEM_PROMPT,
+    BypassTranslator,
     GlossaryTranslator,
     LLMTranslator,
-    BypassTranslator,
     LocalTranslator,
-    TRANSLATOR_SYSTEM_PROMPT,
     back_translate_report,
     build_translator,
     describe_translator,
@@ -131,7 +131,7 @@ class EnglishAdvisor:
         self.payload = payload
         self.last_messages: list[dict[str, Any]] = []
 
-    def chat(self, messages, tools=None):  # noqa: ANN001
+    def chat(self, messages, tools=None):
         self.last_messages = messages
         return ChatResponse(
             content=json.dumps(self.payload, ensure_ascii=False, indent=2),
@@ -182,7 +182,7 @@ def case_lang() -> None:
             why = "中文能力够：直接写中文，省一次回译"
         print(f"  {provider:<18} {lang:<10} {why}")
 
-    print(f"\n  -- 显式覆盖 --")
+    print("\n  -- 显式覆盖 --")
     print(f"  resolve_prompt_lang('{LANG_ZH}', provider='aqua-7b-ollama') "
           f"= {resolve_prompt_lang(LANG_ZH, provider='aqua-7b-ollama')}   "
           f"（宁可要 AQUA-7B 的中文，也不回译）")
@@ -190,10 +190,10 @@ def case_lang() -> None:
           f"= {resolve_prompt_lang(LANG_EN, provider='deepseek')}   "
           f"（让强中文模型也用英文答，再回译）")
 
-    print(f"\n  -- 后端预置表（PROVIDER_PRESETS）--")
+    print("\n  -- 后端预置表（PROVIDER_PRESETS）--")
     for name, preset in PROVIDER_PRESETS.items():
         lang = resolve_prompt_lang(None, provider=name)
-        print(f"     {name:<18} model={str(preset.get('model', '')):<34} → {lang}")
+        print(f"     {name:<18} model={preset.get('model', '')!s:<34} → {lang}")
 
 def case_prompt() -> None:
     print(BAR)
@@ -208,7 +208,7 @@ def case_prompt() -> None:
     for line in en.splitlines():
         print(f"  {line}")
 
-    print(f"\n  -- 硬约束自检（英文版是否把中文版的规矩都带过去了）--")
+    print("\n  -- 硬约束自检（英文版是否把中文版的规矩都带过去了）--")
     checks = {
         "面向养殖户（不是写给工程师）": "farmer" in en.lower(),
         "不许改数值": "change no number" in en.lower(),
@@ -226,16 +226,16 @@ def case_prompt() -> None:
 
     missing = [k for k, v in checks.items() if not v]
     print(f"\n  结论：{'全部约束均在英文版中落地' if not missing else '缺失：' + str(missing)}")
-    print(f"  提示词源码：src/fisheries/agent/prompts.py"
-          f"（SCHEDULER_SYSTEM_PROMPT_EN / ADVISOR_SYSTEM_PROMPT_EN）")
+    print("  提示词源码：src/fisheries/agent/prompts.py"
+          "（SCHEDULER_SYSTEM_PROMPT_EN / ADVISOR_SYSTEM_PROMPT_EN）")
 
-    print(f"\n  -- 附带说明：调度角色的英文提示词 --")
+    print("\n  -- 附带说明：调度角色的英文提示词 --")
     print("     调度角色的任务只是「选哪个工具」，不写自然语言给养殖户看。")
     print(f"     英文版 {len(scheduler_system_prompt(LANG_EN))} 字 / "
           f"中文版 {len(scheduler_system_prompt(LANG_ZH))} 字，两者同构。")
-    print(f"\n  -- RAG 知识库仍是中文，这一点是刻意的 --")
-    print(f"     语料是中文行业标准，检索结果直接贴进英文提示词；"
-          f"模型能读中文资料、用英文回答。这样两边都不用维护两份语料。")
+    print("\n  -- RAG 知识库仍是中文，这一点是刻意的 --")
+    print("     语料是中文行业标准，检索结果直接贴进英文提示词；"
+          "模型能读中文资料、用英文回答。这样两边都不用维护两份语料。")
 
 def case_report() -> None:
     print(BAR)
@@ -249,17 +249,17 @@ def case_report() -> None:
         print(BAR)
 
         _, agent, result = _run_english(payload)
-        fallback = agent._fallback_advisories(  # noqa: SLF001 - 演示脚本，故意看内部兜底
+        fallback = agent._fallback_advisories(
             _fusion_of(result), result.water, result.vision,
         ).model_dump(mode="json")
         outcome = back_translate_report(payload, translator=agent.translator,
                                         fallback=fallback, lang=LANG_EN)
 
-        print(f"\n  模型原文（英文）：")
+        print("\n  模型原文（英文）：")
         for line in json.dumps(payload, ensure_ascii=False, indent=2).splitlines():
             print(f"     {line}")
 
-        print(f"\n  逐字段回译：")
+        print("\n  逐字段回译：")
         for key in ("headline", "observation_window", "confidence_note"):
             src = str(payload.get(key, ""))
             got = str(outcome.parsed.get(key, ""))
@@ -281,7 +281,7 @@ def case_report() -> None:
 
         print(f"\n  → 回译后端：{outcome.backend}"
               f"   直译 {outcome.n_translated} 段 / 退回模板 {outcome.n_replaced} 段")
-        print(f"  → 降级留痕（会进 degraded_reasons）：")
+        print("  → 降级留痕（会进 degraded_reasons）：")
         for note in outcome.notes or ["（无）"]:
             print(f"       · {note}")
 
@@ -298,7 +298,7 @@ def case_report() -> None:
     print("        半英半中的报告比少一句建议更糟。每一次退回都写进 degraded_reasons。")
     print(BAR)
 
-def _fusion_of(result):  # noqa: ANN001
+def _fusion_of(result):
     """从 AgentResult 里把融合层对象还原出来（演示用，便于调用内部兜底）。"""
     from fisheries.agent.fusion import FusionResult
     return FusionResult(**result.fusion)
@@ -311,7 +311,7 @@ def case_backends() -> None:
     sample = "dissolved oxygen is low"
     long_sample = ENGLISH_OUTPUT["headline"]
 
-    print(f"\n  -- 环境变量 --")
+    print("\n  -- 环境变量 --")
     for key in ("FISHERIES_TRANSLATOR_MODE", "FISHERIES_TRANSLATOR_PROVIDER",
                 "FISHERIES_TRANSLATOR_API_KEY", "FISHERIES_TRANSLATOR_BASE_URL",
                 "FISHERIES_TRANSLATOR_MODEL", "FISHERIES_TRANSLATOR_LOCAL_DIR",
@@ -322,7 +322,7 @@ def case_backends() -> None:
         print(f"     {key:<38} = {val or '（未设置）'}")
     print(f"     解析出的模式：{resolve_translator_mode(None)}")
 
-    print(f"\n  -- 后端 1：local（本地离线模型，有模型时优先）--")
+    print("\n  -- 后端 1：local（本地离线模型，有模型时优先）--")
     local = LocalTranslator()
     local_ok, local_why = local.available()
     print(f"     {describe_translator(local)}")
@@ -340,7 +340,7 @@ def case_backends() -> None:
         print("     术语后订正：通用 NMT 把 turbidity 译成「多发性」、aerator 译成")
         print("     「呼吸器」，靠一张中文→中文的后订正表扳回来。")
 
-    print(f"\n  -- 后端 2：glossary（兜底，离线、确定性、零依赖）--")
+    print("\n  -- 后端 2：glossary（兜底，离线、确定性、零依赖）--")
     g = GlossaryTranslator()
     print(f"     {describe_translator(g)}")
     for text in (sample, long_sample):
@@ -350,19 +350,19 @@ def case_backends() -> None:
     print("     短句（timing / 指标名）几乎都能直译；整句英文一律拒绝——")
     print("     逐词硬译会得到读不通的中文，那比退回模板更糟。")
 
-    print(f"\n  -- 后端 3：llm（配了 FISHERIES_TRANSLATOR_* 时自动启用）--")
+    print("\n  -- 后端 3：llm（配了 FISHERIES_TRANSLATOR_* 时自动启用）--")
     llm = LLMTranslator(None)
     print(f"     {describe_translator(llm)}")
     print(f"     系统提示词（{len(TRANSLATOR_SYSTEM_PROMPT)} 字）：")
     for line in TRANSLATOR_SYSTEM_PROMPT.strip().splitlines()[:6]:
         print(f"       {line}")
-    print(f"       …")
+    print("       …")
     out = llm.translate(sample)
     print(f"     未配模型时的行为：{'[直译] ' + out.text if out.ok else '[拒绝] ' + out.note}")
     print("     关键：调用失败**不抛异常**，只退回模板 —— 翻译只是可选环节，")
     print("     它挂掉不能让整条 Agent 链路挂掉。")
 
-    print(f"\n  -- 后端 4：bypass（只在调试提示词时用）--")
+    print("\n  -- 后端 4：bypass（只在调试提示词时用）--")
     b = BypassTranslator()
     print(f"     {describe_translator(b)}")
     out = b.translate(long_sample)

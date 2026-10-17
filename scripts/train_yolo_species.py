@@ -55,14 +55,13 @@ if str(_SRC) not in sys.path:
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。
 # 详见 src/fisheries/console.py。
-from fisheries import console as _console
+from fisheries import console as _console  # noqa: E402 - 先 sys.path 再导入
 
 _console.install()
 
 # 复用 train_yolo_fish 的预训练权重下载逻辑（镜像前缀、缓存位置都在那边）
-import train_yolo_fish as tyf
-
-from fisheries.tools.fish_species import (
+import train_yolo_fish as tyf  # noqa: E402 - 同上（脚本同目录导入）
+from fisheries.tools.fish_species import (  # noqa: E402 - 同上
     SPECIES_LABELS,
     map_raw_species,
 )

@@ -193,16 +193,14 @@ def _collect_source(root: Path, source: str) -> list[tuple[Path, str, str | None
             continue
         found_split = True
         for class_dir in sorted(p for p in child.iterdir() if p.is_dir()):
-            for image in _iter_images(class_dir):
-                out.append((image, class_dir.name, canonical))
+            out.extend((image, class_dir.name, canonical) for image in _iter_images(class_dir))
 
     if found_split:
         return out
 
     # 平铺布局
     for class_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-        for image in _iter_images(class_dir):
-            out.append((image, class_dir.name, None))
+        out.extend((image, class_dir.name, None) for image in _iter_images(class_dir))
     return out
 
 

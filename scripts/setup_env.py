@@ -133,7 +133,7 @@ def _run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None 
     merged["PYTHONUNBUFFERED"] = "1"
     if env:
         merged.update(env)
-    return subprocess.run(cmd, cwd=str(cwd or PROJECT_ROOT), env=merged).returncode
+    return subprocess.run(cmd, cwd=str(cwd or PROJECT_ROOT), env=merged, check=False).returncode
 
 
 def _has_venv() -> bool:
@@ -312,11 +312,11 @@ def _missing_pinned_weights() -> list[str]:
         from fisheries import weights as _weights
     except Exception:  # noqa: BLE001 - 提示不是关键路径
         return []
-    missing: list[str] = []
-    for item in _weights.WEIGHTS.values():
-        if item.pinned and not item.path.is_file():
-            missing.append(item.name)
-    return missing
+    return [
+        item.name
+        for item in _weights.WEIGHTS.values()
+        if item.pinned and not item.path.is_file()
+    ]
 
 
 def print_next_steps(

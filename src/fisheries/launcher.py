@@ -27,12 +27,13 @@ cmd.exe 是按**当前控制台代码页**分块解码批处理文件的。文�
 from __future__ import annotations
 
 import argparse
+import contextlib
 import socket
 import sys
 
 from . import console
 
-__all__ = ["local_ipv4", "web_page_url", "api_banner", "stopped", "failed", "main"]
+__all__ = ["api_banner", "failed", "local_ipv4", "main", "stopped", "web_page_url"]
 
 _BAR = "  " + "-" * 60
 
@@ -50,11 +51,11 @@ def local_ipv4() -> list[str]:
     """
     found: list[str] = []
 
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            found.append(str(info[4][0]))
-    except OSError:
-        pass
+    with contextlib.suppress(OSError):
+        found.extend(
+            str(info[4][0])
+            for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
+        )
 
     try:
         probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

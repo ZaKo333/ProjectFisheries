@@ -11,12 +11,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
 from fisheries import datasets as _datasets
-
 from fisheries.agent.fusion import (
     DISEASE_MIN_CONF_FOR_WARNING,
     DISEASE_MIN_SEVERITY_FOR_WARNING,
@@ -573,12 +572,12 @@ class TestMockLLM:
 class SilentClient:
     """一个永远不调工具的调度客户端——用来验证护栏是否生效。"""
 
-    def chat(self, messages, tools=None):  # noqa: ANN001
+    def chat(self, messages, tools=None):
         return ChatResponse(content="我不打算调用任何工具。", finish_reason="stop")
 
 
 class BrokenClient:
-    def chat(self, messages, tools=None):  # noqa: ANN001
+    def chat(self, messages, tools=None):
         raise LLMUnavailableError("模拟：后端未启动")
 
 
@@ -588,7 +587,7 @@ class BadArgsClient:
     def __init__(self):
         self.n = 0
 
-    def chat(self, messages, tools=None):  # noqa: ANN001
+    def chat(self, messages, tools=None):
         self.n += 1
         if self.n == 1:
             return ChatResponse(finish_reason="tool_calls", tool_calls=[
@@ -604,7 +603,7 @@ class LoopClient:
     def __init__(self):
         self.n = 0
 
-    def chat(self, messages, tools=None):  # noqa: ANN001
+    def chat(self, messages, tools=None):
         self.n += 1
         return ChatResponse(finish_reason="tool_calls", tool_calls=[
             ToolCall(id=f"c{self.n}", name="water_risk_predict",
@@ -868,7 +867,7 @@ class ScriptedAdvisor:
         self.payload = payload
         self.last_messages: list[dict[str, Any]] = []
 
-    def chat(self, messages, tools=None):  # noqa: ANN001
+    def chat(self, messages, tools=None):
         self.last_messages = messages
         content = (self.payload if isinstance(self.payload, str)
                    else json.dumps(self.payload, ensure_ascii=False))
@@ -1006,7 +1005,7 @@ class TestConfidenceNote:
                 self.verified = verified
 
         class _Ctx:
-            chunks = [_Chunk(True), _Chunk(False), _Chunk(False)]
+            chunks: ClassVar[list[_Chunk]] = [_Chunk(True), _Chunk(False), _Chunk(False)]
 
         facts = self._facts(
             W(data_quality={"n_points": 24}),

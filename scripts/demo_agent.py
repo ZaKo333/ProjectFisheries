@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
@@ -27,12 +26,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。
 # 详见 src/fisheries/console.py。
-from fisheries import console as _console  # noqa: E402
+from fisheries import console as _console
 
 _console.install()
 
 from fisheries import datasets as _datasets  # noqa: E402
-from fisheries.agent import AgentInput, AquacultureAgent   # noqa: E402
+from fisheries.agent import AgentInput, AquacultureAgent  # noqa: E402
 from fisheries.tools import fish_disease as _fish_disease  # noqa: E402
 
 # 数据集不入库：路径统一由 fisheries.datasets 解析（环境变量 / 工程
@@ -144,10 +143,10 @@ def render(result, verbose_trace: bool = True) -> None:
 
     if result.water:
         w = result.water
-        print(f"\n  -- 水质工具 (water_risk_predict) --")
+        print("\n  -- 水质工具 (water_risk_predict) --")
         print(f"     status={w.get('status')}  等级={w.get('risk_level')}  分数={w.get('risk_score')}")
         if w.get("trends"):
-            for key, t in w["trends"].items():
+            for t in w["trends"].values():
                 print(f"       {t.get('label'):<8} 当前 {t.get('current')} {t.get('unit', ''):<5}"
                       f" 趋势 {t.get('direction')}")
         if w.get("projected_do_alert_eta_hours") is not None:
@@ -158,7 +157,7 @@ def render(result, verbose_trace: bool = True) -> None:
 
     if result.vision:
         v = result.vision
-        print(f"\n  -- 图像工具 (fish_disease_detect) --")
+        print("\n  -- 图像工具 (fish_disease_detect) --")
         print(f"     status={v.get('status')}  病害={v.get('disease_type')}"
               f"  置信度={v.get('confidence')}  严重度={v.get('severity_weight')}")
         print(f"     底层原始判定={v.get('raw_class')}  模型={v.get('model_version')}")
@@ -170,7 +169,7 @@ def render(result, verbose_trace: bool = True) -> None:
 
     failed = (result.fusion or {}).get("failed_modalities") or {}
     if failed:
-        print(f"\n  -- ⚠ 模态失败（结论已排除这些证据）--")
+        print("\n  -- ⚠ 模态失败（结论已排除这些证据）--")
         for mod, code in failed.items():
             print(f"     {'水质数据' if mod == 'water' else '鱼体图片'}：{code}")
 
@@ -180,7 +179,7 @@ def render(result, verbose_trace: bool = True) -> None:
     # 面向养殖户的结构化报告：四个业务块分开打印，便于看清"哪条是水质、哪条是病害"。
     rep = result.report or {}
     if rep:
-        print(f"\n  == 养殖户报告（AdvisorReport）==")
+        print("\n  == 养殖户报告（AdvisorReport）==")
         print(f"     综合风险等级：{rep.get('risk_level')}")
 
         w_actions = rep.get("water_actions") or []
@@ -237,7 +236,7 @@ def render(result, verbose_trace: bool = True) -> None:
                 print(f"         {t.detail[:100]}")
 
     if result.degraded_mode:
-        print(f"\n  -- 降级说明 --")
+        print("\n  -- 降级说明 --")
         for r in result.degraded_reasons:
             print(f"     ! {r}")
 

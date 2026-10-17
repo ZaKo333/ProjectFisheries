@@ -119,8 +119,8 @@ def js_object_keys(source: str, const_name: str) -> set[str]:
             cur += ch
     entries.append(cur)
 
-    for entry in entries:
-        entry = entry.strip()
+    for raw_entry in entries:
+        entry = raw_entry.strip()
         if not entry:
             continue
         hit = re.match(r'^(?:"([^"]+)"|(\d+(?:\.\d+)?)|([A-Za-z_$][\w$]*))\s*:', entry)
@@ -292,7 +292,7 @@ class TestTemplateContract:
 
         proc = subprocess.run(
             [NODE, str(tmp_path / "driver.js"), str(PARSE_JS), str(tmp_path / "cases.json")],
-            capture_output=True, text=True, encoding="utf-8", timeout=60,
+            capture_output=True, text=True, encoding="utf-8", timeout=60, check=False,
         )
         assert proc.returncode == 0, f"node 执行 parse.js 失败：{proc.stderr}"
 

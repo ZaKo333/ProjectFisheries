@@ -18,9 +18,9 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Iterable, Sequence
 
 from .labels import RISK_LEVELS, RISK_ORDINAL
 from .metrics import ConfusionMatrix, describe, spearman
@@ -79,7 +79,7 @@ def run_engine(
                 species=species,
                 horizon_hours=horizon_hours,
             )
-        except Exception as exc:  # 工具约定不抛异常，但外部验证不该被单个样本打断
+        except Exception as exc:  # noqa: BLE001 - 工具约定不抛异常，但外部验证不该被单个样本打断
             # 只在这里造一个 error 结果，**不要**顺手累加 n_failed / 记 errors——
             # 下面 `status != "ok"` 那段是唯一的记账点，否则一次异常会被算成两次失败
             # （n_ok 还会算成 -1）。
@@ -205,14 +205,14 @@ class EvalRun:
 
     def severity_distribution(self) -> dict[str, int]:
         """预测等级的分布，用来看引擎是不是「只会说没事」。"""
-        out = {level: 0 for level in RISK_LEVELS}
+        out = dict.fromkeys(RISK_LEVELS, 0)
         for sample in self.usable:
             if sample.risk_level in out:
                 out[sample.risk_level] += 1
         return out
 
     def true_distribution(self) -> dict[str, int]:
-        out = {level: 0 for level in RISK_LEVELS}
+        out = dict.fromkeys(RISK_LEVELS, 0)
         for sample in self.usable:
             if sample.true_level in out:
                 out[sample.true_level] += 1
@@ -224,8 +224,8 @@ class EvalRun:
         for pond_id in sorted({s.pond_id for s in self.usable}):
             pond_samples = [s for s in self.usable if s.pond_id == pond_id]
             hit = sum(1 for s in pond_samples if s.true_level == s.risk_level)
-            true_counts = {level: 0 for level in RISK_LEVELS}
-            pred_counts = {level: 0 for level in RISK_LEVELS}
+            true_counts = dict.fromkeys(RISK_LEVELS, 0)
+            pred_counts = dict.fromkeys(RISK_LEVELS, 0)
             for sample in pond_samples:
                 if sample.true_level in true_counts:
                     true_counts[sample.true_level] += 1

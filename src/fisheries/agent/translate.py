@@ -840,15 +840,15 @@ def chunk_text(text: str,
         return [source]
 
     pieces: list[str] = []
-    for sentence in _SENT_BOUNDARY.split(source):
-        sentence = sentence.strip()
+    for raw_sentence in _SENT_BOUNDARY.split(source):
+        sentence = raw_sentence.strip()
         if not sentence:
             continue
         if within(sentence):
             pieces.append(sentence)
             continue
-        for clause in _CLAUSE_BOUNDARY.split(sentence):
-            clause = clause.strip()
+        for raw_clause in _CLAUSE_BOUNDARY.split(sentence):
+            clause = raw_clause.strip()
             if not clause:
                 continue
             if within(clause):
@@ -1271,17 +1271,20 @@ class LocalTranslator:
         if not ok:
             raise RuntimeError(why)
 
-        import torch                                   # noqa: PLC0415 - 惰性
-        from transformers import (                     # noqa: PLC0415 - 惰性
-            AutoConfig, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer,
+        import torch
+        from transformers import (
+            AutoConfig,
+            AutoModelForCausalLM,
+            AutoModelForSeq2SeqLM,
+            AutoTokenizer,
         )
         # ``from_pretrained`` 默认给权重加载画一条 tqdm 进度条（258 个分片）。它是
         # 写给 stderr 的，在演示和自检里都被 PowerShell 当成"命令出错"高亮出来。
         # 加载是幂等的、耗时固定，这条进度条没有信息量，关掉。
         try:
-            from transformers.utils import logging as _hf_logging  # noqa: PLC0415
+            from transformers.utils import logging as _hf_logging
             _hf_logging.disable_progress_bar()
-        except Exception:  # pragma: no cover - 版本差异，关不掉也不影响功能
+        except (ImportError, AttributeError):  # pragma: no cover - 版本差异，关不掉也不影响功能
             pass
 
         key = _loadable_path(self.model_path)
@@ -1309,7 +1312,7 @@ class LocalTranslator:
     # -- 单块翻译 -------------------------------------------------------- #
 
     def _generate(self, chunk: str, *, sentence: bool) -> str:
-        import torch                                   # noqa: PLC0415 - 惰性
+        import torch
         tokenizer, net = self._tokenizer, self._model
         with torch.no_grad():
             if self._kind == "seq2seq":
@@ -1629,8 +1632,11 @@ def load_translator_client(env: dict[str, str] | None = None,
     显式关掉。调度角色本身没配 key（离线 Mock）时这里仍然返回 ``None``，
     所以没网的评委机器上不会因此多出一次失败的调用。
     """
-    from fisheries.agent.llm import (          # 局部导入，避免循环依赖
-        PROVIDER_PRESETS, LLMConfig, OpenAICompatibleClient, load_llm_config,
+    from fisheries.agent.llm import (  # 局部导入，避免循环依赖
+        PROVIDER_PRESETS,
+        LLMConfig,
+        OpenAICompatibleClient,
+        load_llm_config,
     )
 
     e = dict(os.environ if env is None else env)
@@ -1686,29 +1692,29 @@ def dumps(obj: Any) -> str:
 __all__ = [
     "ACTION_LIST_FIELDS",
     "ACTION_TEXT_FIELDS",
-    "BackTranslation",
-    "BypassTranslator",
     "DEFAULT_CHUNK_CHARS",
     "DEFAULT_CHUNK_WORDS",
     "DEFAULT_LOCAL_MODEL",
     "DEFAULT_MAX_CHUNKS",
     "GLOSSARY_POST_ZH",
     "GLOSSARY_ZH",
-    "GlossaryTranslator",
     "LANG_EN",
     "LANG_ZH",
-    "LLMTranslator",
     "LOCAL_DIR_ENV",
     "LOCAL_MODEL_ENV",
-    "LocalTranslator",
     "PROMPT_LANG_ENV",
     "SUPPORTED_LANGS",
     "TEXT_FIELDS",
     "TRANSLATOR_MODES",
     "TRANSLATOR_MODE_ENV",
     "TRANSLATOR_SYSTEM_PROMPT",
-    "TranslationOutcome",
     "UNIT_NORMALIZE",
+    "BackTranslation",
+    "BypassTranslator",
+    "GlossaryTranslator",
+    "LLMTranslator",
+    "LocalTranslator",
+    "TranslationOutcome",
     "back_translate_report",
     "build_translator",
     "chunk_text",

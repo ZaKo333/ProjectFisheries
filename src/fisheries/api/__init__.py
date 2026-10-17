@@ -37,12 +37,12 @@ from .deps import ApiSettings, AppState, get_state, project_root
 from .routes import router
 
 __all__ = [
-    "app",
-    "create_app",
-    "main",
-    "router",
     "ApiSettings",
     "AppState",
+    "app",
+    "create_app",
     "get_state",
+    "main",
     "project_root",
+    "router",
 ]

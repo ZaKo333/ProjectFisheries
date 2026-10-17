@@ -17,9 +17,9 @@ MODULES = [
 for name in MODULES:
     try:
         importlib.import_module(name)
-        print("%-42s OK" % name)
-    except Exception as exc:
-        print("%-42s MISSING (%s)" % (name, type(exc).__name__))
+        print(f"{name:<42} OK")
+    except Exception as exc:  # noqa: BLE001, PERF203 - 探针：逐个模块试导入，失败就是结果
+        print(f"{name:<42} MISSING ({type(exc).__name__})")
 
 print()
 for attr in [
@@ -36,9 +36,9 @@ for attr in [
     try:
         mod = importlib.import_module(mod_name)
         getattr(mod, attr_name)
-        print("%-60s OK" % attr)
-    except Exception as exc:
-        print("%-60s MISSING (%s)" % (attr, type(exc).__name__))
+        print(f"{attr:<60} OK")
+    except Exception as exc:  # noqa: BLE001 - 同上：缺属性/缺模块都是探针的结果
+        print(f"{attr:<60} MISSING ({type(exc).__name__})")
 
 print()
 cache = pathlib.Path.home() / ".cache" / "fastembed"

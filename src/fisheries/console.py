@@ -76,17 +76,17 @@ MARK_BAD_ASCII = "[--]"
 MARK_WARN_ASCII = "[!!]"
 
 __all__ = [
-    "MARK_OK",
     "MARK_BAD",
-    "MARK_WARN",
-    "MARK_OK_ASCII",
     "MARK_BAD_ASCII",
+    "MARK_OK",
+    "MARK_OK_ASCII",
+    "MARK_WARN",
     "MARK_WARN_ASCII",
     "install",
     "mark",
-    "warn",
-    "supports",
     "pinned_encoding",
+    "supports",
+    "warn",
 ]
 
 #: 每个流第一次被 ``install()`` 看到时的编码名，键是 ``id(stream)``。
@@ -151,12 +151,9 @@ def install() -> bool:
 
         current = getattr(stream, "encoding", None)
         key = _pin_key(stream)
-        if key is None:
-            # 没有 fileno() 的流（测试替身、StringIO）不做编码锁，
-            # 只把 errors 放宽——它们不会被第三方库偷偷改编码。
-            pinned = current
-        else:
-            pinned = _PINNED.setdefault(key, current or "utf-8")
+        # 没有 fileno() 的流（测试替身、StringIO）不做编码锁，
+        # 只把 errors 放宽——它们不会被第三方库偷偷改编码。
+        pinned = current if key is None else _PINNED.setdefault(key, current or "utf-8")
 
         kwargs: dict[str, Any] = {}
         if current and pinned and current.lower() != pinned.lower():

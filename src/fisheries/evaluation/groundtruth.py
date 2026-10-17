@@ -494,7 +494,7 @@ def evaluate(
 
     pairs: list[tuple[str, str]] = []
     failed = 0
-    for label, sample in zip(labelled, samples):
+    for label, sample in zip(labelled, samples, strict=True):
         if sample.status != "ok" or not sample.risk_level:
             failed += 1
             continue

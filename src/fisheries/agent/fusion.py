@@ -180,8 +180,10 @@ def _water_score(water: dict[str, Any] | None) -> tuple[float | None, list[Evide
     ev: list[Evidence] = []
     score = float(water.get("risk_score") or 0.0) / 100.0
 
-    for hit in water.get("redline_hits") or []:
-        ev.append(Evidence(source="water", code=hit, label=f"水质红线：{hit}"))
+    ev.extend(
+        Evidence(source="water", code=hit, label=f"水质红线：{hit}")
+        for hit in water.get("redline_hits") or []
+    )
 
     sev_map = water.get("severity_map") or {}
     for key, sev in sev_map.items():
@@ -405,12 +407,14 @@ def fuse_assessment(water: dict[str, Any] | None = None,
 
     # ---- 红线优先级最高：命中即高危 ----
     redline_hits = (water or {}).get("redline_hits") or []
-    for hit in redline_hits:
-        alerts.append(Alert(
+    alerts.extend(
+        Alert(
             code=hit, level="critical",
             title="水质红线告警",
             detail=f"触发规则 {hit}，需立即人工干预并启动应急预案。",
-        ))
+        )
+        for hit in redline_hits
+    )
 
     # ---- 严重病害单模态红线：够确信的高危病害直接升级 ----
     severe_disease = False
@@ -592,11 +596,8 @@ def _build_reason(level: str, fused: float, weights: dict[str, float],
 
 
 __all__ = [
-    "Alert",
     "DISEASE_MIN_CONF_FOR_WARNING",
     "DISEASE_MIN_SEVERITY_FOR_WARNING",
-    "Evidence",
-    "FusionResult",
     "SCORE_CRITICAL",
     "SCORE_WARNING",
     "SEVERE_DISEASE_MIN_CONF",
@@ -604,5 +605,8 @@ __all__ = [
     "SYNERGY_RULES",
     "W_VISION",
     "W_WATER",
+    "Alert",
+    "Evidence",
+    "FusionResult",
     "fuse_assessment",
 ]

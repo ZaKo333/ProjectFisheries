@@ -34,22 +34,24 @@ from __future__ import annotations
 import bisect
 import csv
 import io
+import itertools
 import math
 import re
 import statistics
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 __all__ = [
     "CANONICAL_FIELDS",
     "COLUMN_ALIASES",
+    "EXAMPLE_TABLE",
     "INDICATORS",
     "MIN_POINTS",
     "MISSING_SENTINELS",
     "REQUIRED_FIELDS",
-    "EXAMPLE_TABLE",
     "ColumnMapping",
     "TableError",
     "TableIngest",
@@ -368,7 +370,7 @@ def parse_timestamp(raw: Any) -> datetime | None:
         for candidate in (text, stripped):
             try:
                 return datetime.strptime(candidate, fmt)
-            except ValueError:
+            except ValueError:  # noqa: PERF203 - 只有两个候选格式，异常就是控制流
                 continue
 
     # 纯数字：10 位当秒，13 位当毫秒。
@@ -814,10 +816,10 @@ def ingest_rows(
 
     # ---- 逐行取值 -------------------------------------------------------
     parsed: list[tuple[datetime | None, dict[str, Any]]] = []
-    missing_cells: dict[str, int] = {f: 0 for f in INDICATORS}
-    negatives: dict[str, int] = {f: 0 for f in INDICATORS}
-    sentinels: dict[str, int] = {f: 0 for f in INDICATORS}
-    non_finite: dict[str, int] = {f: 0 for f in INDICATORS}
+    missing_cells: dict[str, int] = dict.fromkeys(INDICATORS, 0)
+    negatives: dict[str, int] = dict.fromkeys(INDICATORS, 0)
+    sentinels: dict[str, int] = dict.fromkeys(INDICATORS, 0)
+    non_finite: dict[str, int] = dict.fromkeys(INDICATORS, 0)
     for row in rows:
         stamp: datetime | None = None
         if merge_index is not None:
@@ -898,7 +900,7 @@ def ingest_rows(
         known_idx = [i for i, (s, _) in enumerate(parsed) if s is not None]
         # 每行的平均步长：用相邻两个已知点的间隔除以它们隔了几行。
         per_row: list[float] = []
-        for a, b in zip(known_idx, known_idx[1:]):
+        for a, b in itertools.pairwise(known_idx):
             gap = (parsed[b][0] - parsed[a][0]).total_seconds()
             if gap > 0 and b > a:
                 per_row.append(gap / (b - a))
@@ -965,7 +967,7 @@ def ingest_rows(
         deltas = [d for d in deltas if d > 0]
         if deltas:
             med = statistics.median(deltas)
-            result.interval_minutes = int(round(med))
+            result.interval_minutes = round(med)
             result.interval_source = "timestamp"
             if med < 1:
                 result.warnings.append(

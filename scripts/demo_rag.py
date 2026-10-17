@@ -39,7 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。
 # 详见 src/fisheries/console.py。
-from fisheries import console as _console  # noqa: E402
+from fisheries import console as _console
 
 _console.install()
 
@@ -248,7 +248,7 @@ def case_end_to_end(kb, show_prompt: bool) -> None:
         mock_source="folder_hint",
     ))
 
-    print(f"\n  ── 结论 ──")
+    print("\n  ── 结论 ──")
     print(f"  风险等级 : {result.risk_level}（融合分 {result.fused_score}）")
     print(f"  理由     : {result.reason}")
     print(f"  告警     : {[a['code'] for a in result.alerts]}")
@@ -300,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         kb = open_knowledge_base(auto_build=args.auto_build, embedder_backend=args.embedder)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - 演示脚本：任何加载失败都给补法，不抛栈
         print(f"\n  ❌ 无法加载向量库：{type(exc).__name__}: {exc}")
         print("\n  请先构建：python scripts/build_knowledge_base.py")
         return 2

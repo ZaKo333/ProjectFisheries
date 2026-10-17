@@ -234,7 +234,7 @@ def assess(payload: AssessRequest, request: Request) -> AssessResponse:
     with state.run_lock:
         try:
             result = state.agent.run(inp)
-        except Exception as exc:  # noqa: BLE001 —— 兜底，别把 traceback 直接甩给调用方
+        except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Agent 执行失败：{type(exc).__name__}: {exc}",
@@ -369,7 +369,8 @@ def get_readings(pond_id: str, request: Request, limit: int = 200) -> dict[str, 
     summary="上传鱼体图片并立即识别",
 )
 async def ingest_image(
-    request: Request, file: UploadFile = File(..., description="鱼体图片")
+    request: Request,
+    file: UploadFile = File(..., description="鱼体图片"),  # noqa: B008 - FastAPI 的声明必须写在默认值里
 ) -> IngestImageResponse:
     state: AppState = get_state(request)
     upload_id, dest, original, size = await _store_upload(state, file)
@@ -463,7 +464,7 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     )
     try:
         result = state.knowledge_base.search(query)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"检索失败：{type(exc).__name__}: {exc}",
@@ -731,7 +732,8 @@ def get_species() -> SpeciesAvailabilityResponse:
     summary="上传鱼体图片，判断养殖品种（鲤科 / 罗非鱼 / 虾蟹）",
 )
 async def detect_species(
-    request: Request, file: UploadFile = File(..., description="鱼体图片")
+    request: Request,
+    file: UploadFile = File(..., description="鱼体图片"),  # noqa: B008 - 同上
 ) -> SpeciesDetectResponse:
     state: AppState = get_state(request)
     avail = species_availability()

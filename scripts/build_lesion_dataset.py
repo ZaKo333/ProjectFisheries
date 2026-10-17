@@ -436,7 +436,7 @@ def _split(photos: list[Photo], *, val_ratio: float, seed: int, report: CleanRep
     for photo in photos:
         groups.setdefault((photo.has_lesion, photo.cluster), []).append(photo)
 
-    for (has_lesion, _cluster), members in sorted(groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+    for (_has_lesion, _cluster), members in sorted(groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
         for photo in members:
             photo.split = "val" if rng.random() < val_ratio else "train"
 

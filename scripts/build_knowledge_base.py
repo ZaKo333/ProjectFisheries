@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """构建水产知识库向量库（RAG 索引）。
 
 用法
@@ -70,7 +69,6 @@ from fisheries.rag.splitter import (  # noqa: E402
 from fisheries.rag.store import (  # noqa: E402
     DEFAULT_COLLECTION,
     DEFAULT_PERSIST_DIR,
-    read_manifest,
     store_exists,
 )
 
@@ -165,7 +163,7 @@ def _current_corpus_rows() -> dict[str, object] | None:
         docs = load_corpus(project_root() / "knowledge" / "corpus")
         pairs = chunk_corpus(docs)
         return {"n_chunks": len(pairs), "fingerprint": corpus_fingerprint(pairs)}
-    except Exception:
+    except Exception:  # noqa: BLE001 - 读不到语料就当成没有语料
         return None
 
 def main(argv: list[str] | None = None) -> int:
@@ -211,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
                     collection_name=args.collection,
                     embedder_backend=args.embedder,
                 )
-            except Exception as exc:  # 维度/模型不匹配等
+            except Exception as exc:  # noqa: BLE001 - 维度/模型不匹配等
                 print(f"  {_console.mark(False)} 加载失败：{type(exc).__name__}: {exc}")
                 return 2
             _print_store_report(kb)
@@ -227,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.perf_counter()
     try:
         docs = load_corpus(corpus_dir)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - 语料格式错误要给一行摘要，而不是整片栈
         print(f"  {_console.mark(False)} 语料加载失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
     if not docs:
@@ -263,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             max_chars=args.max_chars,
             overlap_chars=args.overlap_chars,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - 构建失败同样只给一行摘要
         print(f"  {_console.mark(False)} 构建失败：{type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
 

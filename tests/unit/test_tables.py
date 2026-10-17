@@ -28,6 +28,7 @@ from fisheries.tables import (
     parse_timestamp,
     to_float,
 )
+
 _HEADERS = [
     "timestamp",
     "water_temp",
@@ -40,34 +41,21 @@ _HEADERS = [
 
 def _rows(n: int = 6, *, do: float = 6.0, ammonia: float = 0.1) -> list[list[str]]:
     """造 n 行小时级、基本平稳的读数。"""
-    rows: list[list[str]] = []
-    for i in range(n):
-        rows.append([
+    return [
+        [
             f"2026-10-13 {8 + i:02d}:00:00",
             "27.0",
             "8.10",
             f"{do + 0.01 * i:.2f}",
             f"{ammonia + 0.001 * i:.3f}",
             "0.05",
-        ])
-    return rows
+        ]
+        for i in range(n)
+    ]
 
 
 def _readings(n: int = 6, *, do: float = 6.0, ammonia: float = 0.1):
     return ingest_rows(_HEADERS, _rows(n, do=do, ammonia=ammonia)).readings
-
-
-@pytest.fixture(scope="module")
-def png_file(tmp_path_factory: pytest.TempPathFactory) -> str:
-    path = tmp_path_factory.mktemp("img") / "fish.png"
-    path.write_bytes(_PNG_1PX)
-    return str(path)
-
-
-@pytest.fixture
-def session() -> WebSession:
-    """不加载知识库的会话——测试不该依赖本机有没有建过向量库。"""
-    return WebSession(use_knowledge=False)
 
 
 # --------------------------------------------------------------------------- #

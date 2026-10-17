@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。
 # 详见 src/fisheries/console.py。
-from fisheries import console as _console  # noqa: E402
+from fisheries import console as _console
 
 _console.install()
 
@@ -44,7 +44,6 @@ from fisheries.agent.orchestrator import (  # noqa: E402
 )
 from fisheries.agent.prompts import (  # noqa: E402
     ADVISOR_SYSTEM_PROMPT,
-    ADVISOR_USER_TEMPLATE,
 )
 
 BAR = "=" * 78
@@ -80,7 +79,7 @@ class ScriptedAdvisor:
         self.label = label
         self.last_messages: list[dict[str, Any]] = []
 
-    def chat(self, messages, tools=None):  # noqa: ANN001
+    def chat(self, messages, tools=None):
         self.last_messages = messages
         return ChatResponse(
             content=json.dumps(self.payload, ensure_ascii=False, indent=2),
@@ -138,7 +137,7 @@ def case_system() -> None:
     for line in lines:
         print(f"  {line}")
 
-    print(f"\n  -- 硬约束自检 --")
+    print("\n  -- 硬约束自检 --")
     checks = {
         "面向养殖户": "养殖户" in ADVISOR_SYSTEM_PROMPT,
         "禁止改数值": "一个字都不能改" in ADVISOR_SYSTEM_PROMPT,
@@ -193,11 +192,11 @@ def case_message() -> None:
           f"   （{len(system)} 字）")
     print(f"  messages[1].role = {advisor.last_messages[1]['role']}"
           f"   （{len(user)} 字）")
-    print(f"\n  -- 用户消息全文 --")
+    print("\n  -- 用户消息全文 --")
     for line in user.splitlines():
         print(f"  {line}")
 
-    print(f"\n  -- 模板占位符自检（不该残留 {{{{'}}' 字样）--")
+    print("\n  -- 模板占位符自检（不该残留 {{'}' 字样）--")
     leftovers = [p for p in ("{risk_level}", "{fused_score}", "{reason}",
                              "{water_block}", "{vision_block}", "{evidence_block}",
                              "{alert_block}", "{knowledge_block}")
@@ -217,14 +216,14 @@ def case_report() -> None:
         print(f"\n{BAR}")
         print(f"  【{label}】预期：{expect}")
         print(BAR)
-        advisor, result = _run(payload, label)
+        _advisor, result = _run(payload, label)
 
-        print(f"\n  模型原始输出：")
+        print("\n  模型原始输出：")
         for line in json.dumps(payload, ensure_ascii=False, indent=2).splitlines():
             print(f"     {line}")
 
         print(f"\n  → 融合层判定：{result.risk_level}（融合分 {result.fused_score}）")
-        print(f"  → 最终报告：")
+        print("  → 最终报告：")
         rep = result.report
         print(f"       risk_level      = {rep['risk_level']}")
         print(f"       headline        = {rep['headline']}")

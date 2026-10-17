@@ -185,7 +185,7 @@ class TestNotFound:
         with pytest.raises(ds.DatasetNotFoundError) as exc:
             ds.require("river_do")
         message = str(exc.value)
-        for label, _root in ds._roots():  # noqa: SLF001 - 断言的就是这份清单
+        for label, _root in ds._roots():
             assert label in message
         # 给出实际查找路径，而不是一句「找不到」。
         assert str(ds.LEGACY_ROOT / ds.DATASETS["river_do"].entry) in message
@@ -243,7 +243,7 @@ class TestResolutionOrder:
 
     def test_index_file_is_used_when_roots_miss(self, isolated):
         elsewhere = _make_dataset(isolated, "river_do")
-        ds._record("river_do", elsewhere)  # noqa: SLF001 - 模拟 fetch 之后的状态
+        ds._record("river_do", elsewhere)
         status = ds.status("river_do")[0]
         assert status.available
         assert status.source == "索引 dataset_index.json"
@@ -255,7 +255,7 @@ class TestResolutionOrder:
         assert status.source == "kagglehub 缓存"
 
     def test_roots_without_env_var_has_two_entries(self, isolated):
-        labels = [label for label, _ in ds._roots()]  # noqa: SLF001
+        labels = [label for label, _ in ds._roots()]
         assert labels == ["工程 data/datasets", "历史目录 数据集/"]
 
 
@@ -333,28 +333,28 @@ class TestDefaultPath:
 
 class TestIndex:
     def test_roundtrip(self, isolated):
-        ds._record("river_do", Path("C:/somewhere"))  # noqa: SLF001
-        assert ds._read_index()["river_do"] == str(Path("C:/somewhere"))  # noqa: SLF001
+        ds._record("river_do", Path("C:/somewhere"))
+        assert ds._read_index()["river_do"] == str(Path("C:/somewhere"))
 
     def test_record_preserves_other_entries(self, isolated):
-        ds._record("river_do", Path("a"))  # noqa: SLF001
-        ds._record("fish_disease", Path("b"))  # noqa: SLF001
-        index = ds._read_index()  # noqa: SLF001
+        ds._record("river_do", Path("a"))
+        ds._record("fish_disease", Path("b"))
+        index = ds._read_index()
         assert index == {"river_do": "a", "fish_disease": "b"}
 
     def test_broken_json_is_ignored_not_fatal(self, isolated):
         ds.INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
         ds.INDEX_PATH.write_text("{not json", encoding="utf-8")
-        assert ds._read_index() == {}  # noqa: SLF001
+        assert ds._read_index() == {}
 
     def test_non_dict_json_is_ignored(self, isolated):
         ds.INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
         ds.INDEX_PATH.write_text("[1, 2]", encoding="utf-8")
-        assert ds._read_index() == {}  # noqa: SLF001
+        assert ds._read_index() == {}
 
     def test_a_stale_index_path_is_not_trusted(self, isolated):
         # 索引里记的路径已经不存在了（比如盘拔了），必须继续往下找，而不是崩。
-        ds._record("river_do", isolated / "gone")  # noqa: SLF001
+        ds._record("river_do", isolated / "gone")
         assert ds.find("river_do") is None
 
     def test_index_path_lives_under_the_project(self):
@@ -369,23 +369,23 @@ class TestIndex:
 
 class TestKaggleCache:
     def test_missing_cache_dir_gives_empty(self, isolated):
-        assert ds._kaggle_cache_candidates("owner/slug") == []  # noqa: SLF001
+        assert ds._kaggle_cache_candidates("owner/slug") == []
 
     def test_handle_without_slash_gives_empty(self, isolated):
-        assert ds._kaggle_cache_candidates("noslug") == []  # noqa: SLF001
-        assert ds._kaggle_cache_candidates("") == []  # noqa: SLF001
+        assert ds._kaggle_cache_candidates("noslug") == []
+        assert ds._kaggle_cache_candidates("") == []
 
     def test_versions_are_sorted_numerically_desc(self, isolated):
         versions = ds.KAGGLE_CACHE_ROOT / "owner" / "slug" / "versions"
         for name in ("1", "2", "10", "beta"):
             (versions / name).mkdir(parents=True)
-        found = [p.name for p in ds._kaggle_cache_candidates("owner/slug")]  # noqa: SLF001
+        found = [p.name for p in ds._kaggle_cache_candidates("owner/slug")]
         assert found == ["10", "2", "1", "beta"]
 
     def test_owner_slug_is_split_on_the_first_slash(self, isolated):
         versions = ds.KAGGLE_CACHE_ROOT / "owner" / "slug" / "versions" / "1"
         versions.mkdir(parents=True)
-        assert ds._kaggle_cache_candidates("owner/slug") == [versions]  # noqa: SLF001
+        assert ds._kaggle_cache_candidates("owner/slug") == [versions]
 
 
 # --------------------------------------------------------------------------- #
@@ -460,7 +460,7 @@ class TestStatus:
     def test_size_walk_is_capped(self, tmp_path):
         for i in range(5):
             (tmp_path / f"f{i}.bin").write_bytes(b"x" * 10)
-        capped = ds._dir_size(tmp_path, cap_files=2)  # noqa: SLF001
+        capped = ds._dir_size(tmp_path, cap_files=2)
         assert capped <= 50
 
     def test_size_text_kilobytes(self):
@@ -626,10 +626,10 @@ class TestCallersWiredUp:
         from fisheries.evaluation import ponds
 
         spec = ds.DATASETS["aquaponics_pond"]
-        assert ponds.DATASET_NAME == spec.name
+        assert spec.name == ponds.DATASET_NAME
         assert ponds.DEFAULT_DIR.name == spec.entry
         assert ponds.DEFAULT_DIR.parent in (ds.LEGACY_ROOT, ds.LOCAL_ROOT) or (
-            ponds.DEFAULT_DIR == ds.LOCAL_ROOT / spec.entry
+            ds.LOCAL_ROOT / spec.entry == ponds.DEFAULT_DIR
         )
 
     def test_ponds_defaults_do_not_raise_without_data(self):
@@ -716,7 +716,7 @@ class TestScriptsRunStandalone:
 
 
 def test_index_is_written_as_readable_utf8(isolated):
-    ds._record("river_do", Path("C:/a/b"))  # noqa: SLF001
+    ds._record("river_do", Path("C:/a/b"))
     raw = ds.INDEX_PATH.read_text(encoding="utf-8")
     assert json.loads(raw) == {"river_do": str(Path("C:/a/b"))}
     assert raw.endswith("\n")

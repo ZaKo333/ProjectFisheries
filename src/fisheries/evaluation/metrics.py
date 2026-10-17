@@ -8,8 +8,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
 
 __all__ = [
     "ClassReport",
@@ -115,7 +115,7 @@ class ConfusionMatrix:
         self.counts[(true, pred)] = self.counts.get((true, pred), 0) + n
 
     @classmethod
-    def from_pairs(cls, pairs: Iterable[tuple[str, str]], labels: Sequence[str]) -> "ConfusionMatrix":
+    def from_pairs(cls, pairs: Iterable[tuple[str, str]], labels: Sequence[str]) -> ConfusionMatrix:
         matrix = cls(labels)
         for true, pred in pairs:
             matrix.add(true, pred)
@@ -232,11 +232,11 @@ class ConfusionMatrix:
             "| 等级 | 支持数 | 预测数 | 精确率 | 召回率 | F1 |",
             "|---|---|---|---|---|---|",
         ]
-        for r in self.per_class():
-            lines.append(
-                f"| {r.label} | {r.support} | {r.predicted} | "
-                f"{r.precision:.3f} | {r.recall:.3f} | {r.f1:.3f} |"
-            )
+        lines.extend(
+            f"| {r.label} | {r.support} | {r.predicted} | "
+            f"{r.precision:.3f} | {r.recall:.3f} | {r.f1:.3f} |"
+            for r in self.per_class()
+        )
         lines.append("")
         lines.append(
             f"- **准确率** {macro.accuracy:.3f}（{macro.n} 个样本）"
@@ -272,7 +272,7 @@ def pearson(xs: Sequence[float], ys: Sequence[float]) -> float:
         return 0.0
     mx = sum(xs) / n
     my = sum(ys) / n
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
     dx = math.sqrt(sum((x - mx) ** 2 for x in xs))
     dy = math.sqrt(sum((y - my) ** 2 for y in ys))
     if dx == 0 or dy == 0:

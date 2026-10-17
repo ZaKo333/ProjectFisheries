@@ -559,7 +559,7 @@ def _slope_per_hour(values: list[float], interval_hours: float) -> float:
     denom = sum((x - mx) ** 2 for x in xs)
     if denom == 0:
         return 0.0
-    return sum((x - mx) * (y - my) for x, y in zip(xs, values)) / denom
+    return sum((x - mx) * (y - my) for x, y in zip(xs, values, strict=True)) / denom
 
 
 def _mean_tail(values: list[float], n: int) -> float:
@@ -1163,7 +1163,7 @@ def _predict_series(payload: WaterRiskInput) -> WaterRiskOutput:
         projections=projections,
         data_quality=DataQuality(
             n_points=len(points),
-            interval_minutes=int(round(interval_hours * 60)),
+            interval_minutes=round(interval_hours * 60),
             interval_source=interval_source,  # type: ignore[arg-type]
             span_hours=round(span_hours, 2),
             missing_indicators=missing,

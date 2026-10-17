@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """生成 `templates/` 下的水质模板文件。
 
 用法

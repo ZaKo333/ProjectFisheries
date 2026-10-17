@@ -38,10 +38,10 @@ from pathlib import Path
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 os.environ.setdefault("CHROMA_TELEMETRY_ENABLED", "False")
 
-from langchain_core.embeddings import Embeddings  # noqa: E402
+from langchain_core.embeddings import Embeddings
 
-from .embedder import describe_embeddings, project_root  # noqa: E402
-from .schemas import ChunkMeta  # noqa: E402
+from .embedder import describe_embeddings, project_root
+from .schemas import ChunkMeta
 
 #: 默认 collection 名。
 DEFAULT_COLLECTION = "fisheries_knowledge"
@@ -400,12 +400,12 @@ def count_chunks(store: object) -> int | None:
     """
     try:
         return int(store._collection.count())  # type: ignore[attr-defined]
-    except Exception:
+    except Exception:  # noqa: BLE001 - 不同 chromadb 版本的内部结构不一样
         pass
     try:
         data = store.get(include=[])  # type: ignore[attr-defined]
         return len(data.get("ids", []))
-    except Exception:
+    except Exception:  # noqa: BLE001 - 同上：拿不到就返回 None，由调用方决定怎么显示
         return None
 
 

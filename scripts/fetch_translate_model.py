@@ -107,9 +107,7 @@ def wanted(path: str) -> bool:
     name = path.rsplit("/", 1)[-1]
     if name.startswith(SKIP_PREFIXES):
         return False
-    if name.endswith(SKIP_SUFFIXES) and name not in ("vocab.txt",):
-        return False
-    return True
+    return not (name.endswith(SKIP_SUFFIXES) and name not in ("vocab.txt",))
 
 
 def download(url: str, dest: Path, *, expect: int = 0, force: bool = False) -> str:

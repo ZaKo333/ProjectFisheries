@@ -33,8 +33,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
 
 from .metrics import spearman
 
@@ -80,9 +80,7 @@ class IndicatorBand:
         low, high = bounds
         if low is not None and value < low:
             return True
-        if high is not None and value > high:
-            return True
-        return False
+        return high is not None and value > high
 
     def breaches_redline(self, value: float) -> bool:
         return self._outside(value, self.redline)
@@ -184,7 +182,7 @@ def label_indicators(values: Mapping[str, float | None]) -> str:
 
 def label_distribution(labels: Iterable[str]) -> dict[str, int]:
     """统计各等级条数。"""
-    out = {level: 0 for level in RISK_LEVELS}
+    out = dict.fromkeys(RISK_LEVELS, 0)
     for label in labels:
         if label in out:
             out[label] += 1

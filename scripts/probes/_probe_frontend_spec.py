@@ -72,7 +72,7 @@ def main() -> int:
             # 响应
             for code, resp in sorted(op.get("responses", {}).items()):
                 refs = []
-                for ctype, media in (resp.get("content") or {}).items():
+                for media in (resp.get("content") or {}).values():
                     s = media.get("schema", {})
                     if "$ref" in s:
                         refs.append(s["$ref"].rsplit("/", 1)[-1])
@@ -107,8 +107,8 @@ def main() -> int:
     w("\n" + "=" * 78)
     w("三、工具层枚举与常量")
     w("=" * 78)
-    from fisheries.tools import water_risk as wr
     from fisheries.tools import fish_disease as fd
+    from fisheries.tools import water_risk as wr
     from fisheries.tools.definitions import TOOL_SCHEMAS
 
     w("\n[water_risk] 工具名: " + wr.water_risk_predict.__name__)

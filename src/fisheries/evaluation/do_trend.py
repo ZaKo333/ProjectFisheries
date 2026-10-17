@@ -38,8 +38,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, Iterator, Mapping, Sequence
 
 from ..tools.water_risk import _slope_per_hour, hybrid_forecast
 from .ponds import PondSample

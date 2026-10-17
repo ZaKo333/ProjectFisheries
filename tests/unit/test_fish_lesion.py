@@ -382,7 +382,7 @@ def stub_ultralytics(monkeypatch: pytest.MonkeyPatch):
         def __init__(self, weights: str) -> None:
             captured["weights"] = weights
 
-        def predict(self, path: str, conf=None, verbose=False):  # noqa: ARG002
+        def predict(self, path: str, conf=None, verbose=False):
             captured["path"] = path
             captured["conf"] = conf
             return [captured["result"]]

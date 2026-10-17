@@ -19,9 +19,9 @@ from fisheries import console as _console  # noqa: E402
 
 _console.install()
 
-from fisheries import datasets as _datasets  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
+from fisheries import datasets as _datasets  # noqa: E402
 from fisheries.api.app import create_app  # noqa: E402
 
 IMAGE = str(_datasets.resolve(

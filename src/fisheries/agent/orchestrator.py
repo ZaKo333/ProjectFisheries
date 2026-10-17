@@ -39,7 +39,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -127,7 +127,7 @@ class AgentInput(BaseModel):
             raise ValueError("water_readings 传了空列表；没有数据请传 null")
         return v
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, __context: Any, /) -> None:
         if not self.water_readings and not self.image_path:
             raise ValueError("water_readings 与 image_path 至少要提供一个，否则 Agent 无事可做")
 
@@ -498,7 +498,7 @@ class AquacultureAgent:
             from ..rag.retriever import open_knowledge_base
 
             self.knowledge_base = open_knowledge_base(auto_build=False)
-        except Exception as exc:  # 知识库缺失/依赖未装/维度不匹配……
+        except Exception as exc:  # noqa: BLE001 - 知识库缺失/依赖未装/维度不匹配……
             # 知识库不可用**不该让整个 Agent 挂掉**：
             # 水质与图像工具仍然能给出正确结论，只是措施不够具体。
             self.knowledge_base = None
@@ -531,7 +531,7 @@ class AquacultureAgent:
             ctx = kb.retrieve_for_agent(
                 water=water, vision=vision, fusion=fusion.model_dump(mode="json")
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - 检索失败降级为空，不打断主链路
             self.knowledge_base = None
             self.degraded_reasons.append(f"知识库检索失败，建议未引用规范依据：{exc}")
             self._log("error", "RAG 检索失败", str(exc))
@@ -778,7 +778,7 @@ class AquacultureAgent:
     #: 红线规则编号 → 养殖户听得懂的说法。
     #: 规则编号（DO_REDLINE 之类）是给工程师看的，直接写进建议会让人一脸茫然；
     #: 编号本身仍然保留在 alerts[] 的 code 字段与 trace 里，需要追溯时查得到。
-    _REDLINE_LABELS = {
+    _REDLINE_LABELS: ClassVar[dict[str, str]] = {
         "DO_REDLINE": "溶氧已跌破泛塘线",
         "DO_REDLINE_PROJECTED": "溶氧快跌破泛塘线",
         "DO_CRASH_TREND": "溶氧掉得太快",
@@ -978,10 +978,9 @@ class AquacultureAgent:
                         or (water or {}).get("degraded_mode")
                         or (vision or {}).get("degraded_mode"))
 
-        references: list[str] = []
-        if ctx is not None:
-            for c in ctx.chunks:
-                references.append(c.reference_line())
+        references: list[str] = (
+            [c.reference_line() for c in ctx.chunks] if ctx is not None else []
+        )
 
         return AgentResult(
             pond_id=inp.pond_id,

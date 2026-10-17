@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import pytest
-
 from conftest import DISEASE_LABELS, assert_level, level_index, post_assess
 
 pytestmark = pytest.mark.integration

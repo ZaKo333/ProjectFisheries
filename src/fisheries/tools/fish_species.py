@@ -232,7 +232,7 @@ def _yolo_predict_species(
     }
 
     # ---- 多对一要「求和」，不是「取最大」 ----
-    agg: dict[str, float] = {label: 0.0 for label in SPECIES_LABELS}
+    agg: dict[str, float] = dict.fromkeys(SPECIES_LABELS, 0.0)
     unmapped: list[str] = []
     for raw_name, p in raw_scores.items():
         target = map_raw_species(raw_name)

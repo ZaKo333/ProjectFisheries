@@ -446,13 +446,13 @@ class TestChat:
 def _chunk(**overrides):
     from fisheries.rag.schemas import RetrievedChunk
 
-    base = dict(
-        chunk_id="c1",
-        text="溶氧低于 3 mg/L 必须立即增氧。",
-        heading_text="溶解氧分级",
-        title="水质阈值测试文档",
-        category="水质",
-    )
+    base = {
+        "chunk_id": "c1",
+        "text": "溶氧低于 3 mg/L 必须立即增氧。",
+        "heading_text": "溶解氧分级",
+        "title": "水质阈值测试文档",
+        "category": "水质",
+    }
     base.update(overrides)
     return RetrievedChunk(**base)
 

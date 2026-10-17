@@ -8,8 +8,9 @@
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
+
+import tomllib
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 INTEGRATION_DIR = PROJECT_ROOT / "tests" / "integration"

@@ -19,9 +19,9 @@ TOOL_HANDLERS = {
 }
 
 __all__ = [
-    "TOOL_SCHEMAS",
     "TOOL_HANDLERS",
+    "TOOL_SCHEMAS",
+    "fish_disease_detect",
     "get_tool_schemas",
     "water_risk_predict",
-    "fish_disease_detect",
 ]

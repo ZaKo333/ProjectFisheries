@@ -41,9 +41,9 @@ from fisheries import console as _console  # noqa: E402
 
 _console.install()
 
-from fisheries import datasets as _datasets  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from fisheries import datasets as _datasets  # noqa: E402
 from fisheries.api.app import create_app  # noqa: E402
 from fisheries.api.deps import ApiSettings  # noqa: E402
 
@@ -72,17 +72,17 @@ def crashing_water(n: int = 24) -> list[dict[str, Any]]:
 
 def good_water(n: int = 24) -> list[dict[str, Any]]:
     """24 条平稳读数，用于对比。"""
-    out: list[dict[str, Any]] = []
-    for i in range(n):
-        out.append({
+    return [
+        {
             "timestamp": f"2026-05-11T{i:02d}:00:00",
             "water_temp": 26.0,
             "ph": 7.6,
             "dissolved_oxygen": 6.4,
             "ammonia_n": 0.10,
             "nitrite_n": 0.04,
-        })
-    return out
+        }
+        for i in range(n)
+    ]
 
 def _show(resp: Any, *, limit: int = 12) -> None:
     print(f"  HTTP {resp.status_code}")
@@ -111,7 +111,7 @@ def case_overview(client: TestClient) -> None:
     health = client.get("/api/v1/health").json()
     print(f"  status      = {health['status']}")
     print(f"  version     = {health.get('version')}")
-    print(f"  tools       = ")
+    print("  tools       = ")
     for tname, tdesc in (health.get("tools") or {}).items():
         print(f"      · {tname}: {tdesc}")
     kb = health.get("knowledge") or {}
@@ -153,7 +153,7 @@ def case_assess(client: TestClient, show_trace: bool) -> None:
         "include_trace": show_trace,
         "include_knowledge_block": False,
     }
-    print(f"\n  请求：24 条恶化读数（溶氧 6.2→2.6）+ 真实烂鳃图片")
+    print("\n  请求：24 条恶化读数（溶氧 6.2→2.6）+ 真实烂鳃图片")
     resp = client.post("/api/v1/assess", json=payload)
     if resp.status_code != 200:
         _show(resp)
@@ -188,12 +188,12 @@ def case_assess(client: TestClient, show_trace: bool) -> None:
         print(f"    ⚠ {wmsg}")
 
     if show_trace:
-        print(f"\n  推理轨迹：")
+        print("\n  推理轨迹：")
         for s in body["trace"]:
             print(f"    {s['step']:2d}. [{s['kind']:11s}] {s['title']}")
 
-    print(f"\n  → 结论：一次 HTTP 请求就拿到「等级 + 告警 + 处置 + 依据 + 轨迹」，"
-          f"\n     且依据可追溯到具体小节，不是模型凭空说的。")
+    print("\n  → 结论：一次 HTTP 请求就拿到「等级 + 告警 + 处置 + 依据 + 轨迹」，"
+          "\n     且依据可追溯到具体小节，不是模型凭空说的。")
 
 def case_ingest(client: TestClient) -> None:
     print(BAR)
@@ -221,7 +221,7 @@ def case_ingest(client: TestClient) -> None:
     body = resp.json()
     print(f"  HTTP {resp.status_code} → risk_level={body['risk_level']} "
           f"fused={body['fused_score']}")
-    print(f"  → 水质平稳，等级应为「正常」，说明缓冲里的 24 条真的被用上了。")
+    print("  → 水质平稳，等级应为「正常」，说明缓冲里的 24 条真的被用上了。")
 
     print("\n[POST /api/v1/assess]  缓冲里没有的塘口")
     miss = client.post("/api/v1/assess", json={
@@ -251,7 +251,7 @@ def case_upload(client: TestClient) -> None:
         print(f"  → 文件名由服务端 uuid 生成，客户端传的 {GILL_IMAGE.name} 不落盘，"
               f"\n     路径穿越在源头就不成立。")
 
-        print(f"\n[POST /api/v1/assess]  用 upload_id（推荐姿势：不暴露服务器路径）")
+        print("\n[POST /api/v1/assess]  用 upload_id（推荐姿势：不暴露服务器路径）")
         a = client.post("/api/v1/assess", json={
             "pond_id": "P01", "readings": crashing_water(),
             "upload_id": u["upload_id"], "include_trace": False,
@@ -266,7 +266,7 @@ def case_upload(client: TestClient) -> None:
                        files={"file": ("trick.jpg", io.BytesIO(b"not an image"),
                                        "image/jpeg")})
     print(f"  HTTP {fake.status_code} → {fake.json().get('detail')}")
-    print(f"  → 扩展名只做粗筛，真格式由工具的魔数校验判定。")
+    print("  → 扩展名只做粗筛，真格式由工具的魔数校验判定。")
 
     print("\n[POST /api/v1/ingest/image]  扩展名不在白名单")
     bad_ext = client.post("/api/v1/ingest/image",
@@ -279,7 +279,7 @@ def case_upload(client: TestClient) -> None:
                       files={"file": ("big.jpg", io.BytesIO(b"\xff" * (11 * 1024 * 1024)),
                                       "image/jpeg")})
     print(f"  HTTP {big.status_code} → {big.json().get('detail')}")
-    print(f"  → 失败的上传不会在磁盘留下垃圾文件（见 tests/unit/test_api.py）。")
+    print("  → 失败的上传不会在磁盘留下垃圾文件（见 tests/unit/test_api.py）。")
 
 def case_chat(client: TestClient) -> None:
     print(BAR)
@@ -321,7 +321,7 @@ def case_chat(client: TestClient) -> None:
         "tool": "water_risk_predict",
         "arguments": {"readings": crashing_water(), "pond": "P01"}})
     print(f"  HTTP {bad.status_code} → {str(bad.json().get('detail'))[:100]}…")
-    print(f"  → 工具签名不认识 `pond`，直接 422 把真实原因回给调用方。")
+    print("  → 工具签名不认识 `pond`，直接 422 把真实原因回给调用方。")
 
     print("\n[POST /api/v1/tools/call]  参数类型不对 —— readings 不是列表")
     bad2 = client.post("/api/v1/tools/call", json={
@@ -331,9 +331,9 @@ def case_chat(client: TestClient) -> None:
     print(f"  tool   = {b2.get('tool')}")
     print(f"  result = status={b2.get('result', {}).get('status')} "
           f"error_code={b2.get('result', {}).get('error_code')}")
-    print(f"  → 这里**故意**返回 200：工具的契约是「出错也不抛异常」，"
-          f"\n     而是返回 status=error + 人话错误信息，"
-          f"\n     这样 Agent 循环不会因为一次脏输入断链。")
+    print("  → 这里**故意**返回 200：工具的契约是「出错也不抛异常」，"
+          "\n     而是返回 status=error + 人话错误信息，"
+          "\n     这样 Agent 循环不会因为一次脏输入断链。")
 
 def case_errors(client: TestClient) -> None:
     print(BAR)
@@ -348,8 +348,8 @@ def case_errors(client: TestClient) -> None:
     detail = r.json().get("detail") or []
     msg = detail[0].get("msg") if isinstance(detail, list) and detail else detail
     print(f"  HTTP {r.status_code} → {msg}")
-    print(f"  → 契约是 extra=\"forbid\"：拼错**报错**，而不是静默当成"
-          f"\n     「没传溶氧」再算出一个没有溶氧的风险分。")
+    print("  → 契约是 extra=\"forbid\"：拼错**报错**，而不是静默当成"
+          "\n     「没传溶氧」再算出一个没有溶氧的风险分。")
 
     print("\n[读数太少] 只传 2 条")
     r2 = client.post("/api/v1/assess", json={
@@ -357,8 +357,8 @@ def case_errors(client: TestClient) -> None:
     d2 = r2.json().get("detail") or []
     m2 = d2[0].get("msg") if isinstance(d2, list) and d2 else d2
     print(f"  HTTP {r2.status_code} → {m2}")
-    print(f"  → 少于 3 条直接拒绝：否则工具会在样本不足时降级，"
-          f"\n     调用方看到的是一个基于空水质的「正常」——假结论比报错更危险。")
+    print("  → 少于 3 条直接拒绝：否则工具会在样本不足时降级，"
+          "\n     调用方看到的是一个基于空水质的「正常」——假结论比报错更危险。")
 
     print("\n[未知 upload_id]")
     r3 = client.post("/api/v1/assess", json={"pond_id": "P01", "upload_id": "deadbeef"})

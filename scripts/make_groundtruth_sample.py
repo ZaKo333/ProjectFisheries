@@ -38,11 +38,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from fisheries import console as _console
+from fisheries import console as _console  # noqa: E402 - 先 sys.path 再导入
 
 _console.install()
 
-from fisheries.evaluation.groundtruth import (
+from fisheries.evaluation.groundtruth import (  # noqa: E402 - 同上
     DEFAULT_DIR,
     DEFAULT_N,
     DEFAULT_SEED,
@@ -53,7 +53,7 @@ from fisheries.evaluation.groundtruth import (
     sample_windows,
     write_sample,
 )
-from fisheries.evaluation.ponds import AGGREGATE_MINUTES, load_ponds
+from fisheries.evaluation.ponds import AGGREGATE_MINUTES, load_ponds  # noqa: E402 - 同上
 
 DEFAULT_README = """# M8 人工标签评测集
 

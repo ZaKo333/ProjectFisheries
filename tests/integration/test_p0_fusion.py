@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import pytest
-
 from conftest import level_index, post_assess, readings_from_template
 
 pytestmark = pytest.mark.integration

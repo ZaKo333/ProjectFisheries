@@ -51,7 +51,7 @@ def png_file(tmp_path):
 class TestSpeciesTaxonomy:
     def test_labels_are_derived_from_threshold_profiles(self):
         """对外品种必须等于有阈值档案的品种，不能各抄一份。"""
-        assert SPECIES_LABELS == tuple(SPECIES_PROFILES)
+        assert tuple(SPECIES_PROFILES) == SPECIES_LABELS
         assert SPECIES_LABELS == ("鲤科", "罗非鱼", "虾蟹")
 
     def test_default_weights_path_lives_under_models(self):

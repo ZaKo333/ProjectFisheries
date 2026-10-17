@@ -15,6 +15,7 @@ from __future__ import annotations
 import csv
 import dataclasses
 import io
+import itertools
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -397,7 +398,7 @@ class TestResolveColumns:
 
     def test_dialect_d_blank_header_cannot_be_read_by_dictreader(self) -> None:
         # 这是「一律按列下标取值」的理由：DictReader 遇到多个空列名会互相覆盖。
-        cells = header_cells(HEADER_D) + ["", ""]
+        cells = [*header_cells(HEADER_D), "", ""]
         assert cells.count("") >= 3
         cols = ponds.resolve_columns(cells)
         assert cols["created_at"][0] == 0
@@ -678,7 +679,7 @@ class TestIterWindows:
         assert all(w.hours == pytest.approx(50 / 60) for w in windows)
 
         # 不重叠：后一窗的起点严格晚于前一窗的终点，且时间戳无交集。
-        for first, second in zip(windows, windows[1:]):
+        for first, second in itertools.pairwise(windows):
             assert second.started_at > first.ended_at
             first_stamps = {r["timestamp"] for r in first.readings}
             second_stamps = {r["timestamp"] for r in second.readings}

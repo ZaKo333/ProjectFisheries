@@ -40,8 +40,8 @@ __all__ = [
     "HEADER_STYLES",
     "TEMPLATES_DIR",
     "TEMPLATE_INTERVAL_MINUTES",
-    "WaterTemplate",
     "TemplateSpec",
+    "WaterTemplate",
     "all_templates",
     "catalog_markdown",
     "catalog_rows",
@@ -534,15 +534,13 @@ def _readings(spec: TemplateSpec) -> list[WaterQualityPoint]:
         raise ValueError(f"模板 {spec.key} 的点数不一致：{sorted(lengths)}，应为 {_POINTS}")
 
     start = datetime.fromisoformat(spec.start)
-    points: list[WaterQualityPoint] = []
-    for i in range(_POINTS):
-        points.append(
-            WaterQualityPoint(
-                timestamp=start + timedelta(minutes=TEMPLATE_INTERVAL_MINUTES * i),
-                **{k: _round(k, columns[k][i]) for k in _INDICATORS},
-            )
+    return [
+        WaterQualityPoint(
+            timestamp=start + timedelta(minutes=TEMPLATE_INTERVAL_MINUTES * i),
+            **{k: _round(k, columns[k][i]) for k in _INDICATORS},
         )
-    return points
+        for i in range(_POINTS)
+    ]
 
 
 def _template(spec: TemplateSpec) -> WaterTemplate:
@@ -649,9 +647,8 @@ def materialize(key: str, directory: str | Path | None = None) -> Path:
 
 def catalog_rows() -> list[dict[str, Any]]:
     """模板目录的扁平结构，供 API 序列化与 README 表格共用一处口径。"""
-    rows: list[dict[str, Any]] = []
-    for template in all_templates():
-        rows.append({
+    return [
+        {
             "key": template.key,
             "name": template.name,
             "scenario": template.scenario,
@@ -666,8 +663,9 @@ def catalog_rows() -> list[dict[str, Any]]:
             "start": template.start.strftime("%Y-%m-%d %H:%M"),
             "end": template.readings[-1].timestamp.strftime("%Y-%m-%d %H:%M")
             if template.readings and template.readings[-1].timestamp else "",
-        })
-    return rows
+        }
+        for template in all_templates()
+    ]
 
 
 def catalog_markdown() -> str:

@@ -23,13 +23,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。
 # 详见 src/fisheries/console.py。
-from fisheries import console as _console  # noqa: E402
+from fisheries import console as _console
 
 _console.install()
 
 from fisheries import datasets as _datasets  # noqa: E402
-
 from fisheries.tools import TOOL_SCHEMAS, fish_disease_detect, water_risk_predict  # noqa: E402
+
 
 def hr(title: str) -> None:
     print("\n" + "=" * 78)
@@ -66,16 +66,17 @@ def case_degrading_water() -> dict:
     这组数据不是随便编的，它的形态对应高温晴天后的典型"倒藻—缺氧"过程：
     白天藻类过饱和产氧 → 夜间耗氧 → 凌晨溶氧谷值 → 氨氮因硝化受阻而累积。
     """
-    readings = []
-    for i in range(24):
-        readings.append({
+    readings = [
+        {
             "timestamp": f"2026-07-18T{i:02d}:00:00+08:00",
             "water_temp": round(28.0 + 1.5 * (i / 23), 2),
             "ph": round(8.05 + 0.20 * (i / 23), 2),
             "dissolved_oxygen": round(6.2 - 3.6 * (i / 23) ** 1.3, 2),
             "ammonia_n": round(0.15 + 0.47 * (i / 23) ** 1.5, 3),
             "nitrite_n": round(0.05 + 0.10 * (i / 23), 3),
-        })
+        }
+        for i in range(24)
+    ]
     return water_risk_predict(
         readings, pond_id="POND-03", horizon_hours=72, species="鲤科"
     )

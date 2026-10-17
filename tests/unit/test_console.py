@@ -343,6 +343,7 @@ def _run_under_gbk(script: str, *args: str) -> subprocess.CompletedProcess[str]:
         encoding="gbk",
         errors="replace",
         timeout=180,
+        check=False,
     )
 
 

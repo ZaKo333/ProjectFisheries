@@ -12,14 +12,14 @@ from fisheries.rag.splitter import build_embedding_text, chunk_corpus  # noqa: E
 docs = load_corpus(ROOT / "knowledge" / "corpus")
 print("docs:", len(docs))
 for d in docs:
-    print("  %-28s %-6s disease=%-4s verified=%s len=%d"
-          % (d.meta.doc_id, d.meta.category, d.meta.disease, d.meta.verified, len(d.body)))
+    print(f"  {d.meta.doc_id:<28} {d.meta.category:<6} disease={d.meta.disease:<4} "
+          f"verified={d.meta.verified} len={len(d.body)}")
 
 pairs = chunk_corpus(docs)
 print()
 print("total chunks:", len(pairs))
 lens = [m.char_count for m, _ in pairs]
-print("char_count: min=%d max=%d mean=%.1f" % (min(lens), max(lens), sum(lens) / len(lens)))
+print(f"char_count: min={min(lens)} max={max(lens)} mean={sum(lens) / len(lens):.1f}")
 print("tables:", sum(1 for m, _ in pairs if m.has_table))
 
 ids = [m.chunk_id for m, _ in pairs]
@@ -27,9 +27,9 @@ print("chunk_id unique:", len(ids) == len(set(ids)))
 
 print()
 print("=" * 78)
-for m, t in pairs:
+for m, _t in pairs:
     warn = "" if not m.has_table else " [表]"
-    print("[%s] %-42s %4d%s" % (m.doc_id, m.heading_text[:42], m.char_count, warn))
+    print(f"[{m.doc_id}] {m.heading_text[:42]:<42} {m.char_count:4d}{warn}")
 
 print()
 print("=" * 78)

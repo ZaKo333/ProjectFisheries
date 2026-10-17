@@ -62,12 +62,12 @@ from pathlib import Path
 __all__ = [
     "DATASETS",
     "DATA_ROOT_ENV",
-    "DatasetNotFoundError",
-    "DatasetSpec",
-    "DatasetStatus",
     "MIRROR_BASE_ENV",
     "MIRROR_MANIFEST_NAME",
     "MIRROR_OUTPUT_DIR",
+    "DatasetNotFoundError",
+    "DatasetSpec",
+    "DatasetStatus",
     "default_path",
     "fetch",
     "find",
@@ -779,13 +779,15 @@ def _download(url: str, dest: Path) -> str:
             request = urllib.request.Request(
                 candidate, headers={"User-Agent": "fisheries-datasets/1.0"}
             )
-            with urllib.request.urlopen(request, timeout=300) as response:
-                with part.open("wb") as handle:
-                    while True:
-                        chunk = response.read(1 << 16)
-                        if not chunk:
-                            break
-                        handle.write(chunk)
+            with (
+                urllib.request.urlopen(request, timeout=300) as response,
+                part.open("wb") as handle,
+            ):
+                while True:
+                    chunk = response.read(1 << 16)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
             part.replace(dest)
             return candidate
         except (urllib.error.URLError, OSError, TimeoutError) as exc:

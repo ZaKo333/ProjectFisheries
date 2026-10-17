@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,7 +38,7 @@ from .deps import ApiSettings, AppState
 from .routes import router
 from .static import WEB_MOUNT_PATH, mount_web, resolve_web_dir
 
-__all__ = ["create_app", "app", "main"]
+__all__ = ["app", "create_app", "main"]
 
 _STATE_ATTR = "fisheries_state"
 

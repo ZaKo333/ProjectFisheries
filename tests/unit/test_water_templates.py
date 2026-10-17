@@ -26,11 +26,12 @@ from pathlib import Path
 
 import pytest
 
-from fisheries.tools.water_risk import MIN_RELIABLE_POINTS, water_risk_predict
+from fisheries.tables import MIN_POINTS, ingest_rows
+from fisheries.tools.water_risk import MIN_RELIABLE_POINTS, SPECIES_CHOICES, water_risk_predict
 from fisheries.water_templates import (
     HEADER_STYLES,
-    TEMPLATES_DIR,
     TEMPLATE_INTERVAL_MINUTES,
+    TEMPLATES_DIR,
     all_templates,
     catalog_markdown,
     catalog_rows,
@@ -41,8 +42,6 @@ from fisheries.water_templates import (
     template_path,
     write_all,
 )
-from fisheries.tables import MIN_POINTS, ingest_rows
-from fisheries.tools.water_risk import SPECIES_CHOICES
 
 #: 刻意写死：增删模板必须是一次有意识的改动，顺手改坏这里会立刻红。
 EXPECTED_KEYS: tuple[str, ...] = (
@@ -334,7 +333,7 @@ class TestCatalogOutput:
     def test_rows_agree_with_templates(self) -> None:
         rows = catalog_rows()
         assert [r["key"] for r in rows] == list(EXPECTED_KEYS)
-        for row, template in zip(rows, all_templates()):
+        for row, template in zip(rows, all_templates(), strict=True):
             assert row["name"] == template.name
             assert row["species"] == template.species
             assert row["expected_risk"] == template.expected_risk

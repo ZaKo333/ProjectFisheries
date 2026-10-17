@@ -386,7 +386,7 @@ def _per_pond_section(run: EvalRun) -> str:
 def _do_trend_section(trend) -> str:
     """第二组外部验证：这一组**有真值**，所以数字可以当真。"""
     overall = trend.overall
-    lead_minutes = int(round(trend.lead_hours * 60))
+    lead_minutes = round(trend.lead_hours * 60)
     lines = [
         "## 5. 外部验证二：溶氧趋势外推 vs 持久性基线",
         "",

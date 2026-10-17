@@ -106,7 +106,7 @@ def gill_image() -> Path:
 
     try:
         path = datasets.resolve("fish_disease", *GILL_IMAGE_PARTS)
-    except Exception:  # pragma: no cover - 取决于机器
+    except Exception:  # noqa: BLE001 - pragma: no cover - 取决于机器
         pytest.skip("本地没有 Fish Disease Dataset：`fetch_datasets.py --fetch fish_disease`")
     if not path.is_file():  # pragma: no cover - 取决于机器
         pytest.skip(f"数据集里缺这张图：{path}")
@@ -131,7 +131,7 @@ def chat_answer(client: TestClient) -> dict:
     body = resp.json()
     if not body.get("chunks"):
         pytest.skip(
-            "知识库索引不可用（backend=%r）：先跑 scripts/build_knowledge.py 建索引"
-            % body.get("backend")
+            f"知识库索引不可用（backend={body.get('backend')!r}）："
+            "先跑 scripts/build_knowledge.py 建索引"
         )
     return body

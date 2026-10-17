@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """端到端边界案例演示：把「传感器读数 + 图片识别结果」灌进 AquacultureAgent，
 打印完整五步推理链路（工具调用 → 护栏 → 融合定级 → 知识检索 → 建议报告）。
 
@@ -28,22 +27,23 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 # 允许直接 `python scripts\demo_cases.py` 跑，不必先设 PYTHONPATH。
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 # Windows 控制台默认是 GBK 编码页，装饰符号编不出来会把脚本打断。
 # 详见 src/fisheries/console.py。
-from fisheries import console as _console  # noqa: E402
+from fisheries import console as _console
 
 _console.install()
 
-from fisheries.agent.orchestrator import AquacultureAgent, AgentInput  # noqa: E402
-from fisheries.tools.fish_disease import fish_disease_detect            # noqa: E402
-from fisheries.tools import TOOL_HANDLERS                               # noqa: E402
-from fisheries import datasets as _datasets                             # noqa: E402
+from fisheries import datasets as _datasets  # noqa: E402
+from fisheries.agent.orchestrator import AgentInput, AquacultureAgent  # noqa: E402
+from fisheries.tools import TOOL_HANDLERS  # noqa: E402
+from fisheries.tools.fish_disease import fish_disease_detect  # noqa: E402
 
 DEMO_IMAGE = str(_datasets.resolve(
     "fish_disease", "Test", "Bacterial gill disease", "Bacterial gill disease (100).jpg"

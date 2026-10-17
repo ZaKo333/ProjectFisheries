@@ -37,18 +37,17 @@ from fisheries.agent.translate import (
     build_translator,
     chunk_text,
     describe_translator,
+    load_translator_client,
     local_model_available,
     local_model_path,
     local_model_root,
-    numbers_preserved,
-    load_translator_client,
     normalize_units,
+    numbers_preserved,
     post_edit,
     post_edit_terms,
     resolve_prompt_lang,
     resolve_translator_mode,
 )
-
 
 # 这台机器上**真的**装了本地翻译模型（`models/translate/opus-mt-en-zh`，315 MB）。
 # 单元测试绝不允许依赖"本机有没有权重"：凡是要测"没有本地模型时怎么回退"的，
@@ -58,7 +57,7 @@ NO_LOCAL_MODEL = {LOCAL_DIR_ENV: str(pathlib.Path(__file__).resolve().parent / "
 
 def _fake_local_generate(text_map):
     """给 ``LocalTranslator`` 造一个假的 ``_generate``：不加载 315 MB 权重。"""
-    def _generate(chunk, *, sentence):  # noqa: ANN001, ANN202
+    def _generate(chunk, *, sentence):
         return text_map[chunk]
     return _generate
 
@@ -863,7 +862,7 @@ class TestLocalTranslatorPipeline:
     def test_blank_input_succeeds_without_calling_the_model(self, tmp_path):
         calls = []
 
-        def _generate(chunk, *, sentence):  # noqa: ANN001, ANN202
+        def _generate(chunk, *, sentence):
             calls.append(chunk)
             return "不该被调用"
 
@@ -878,7 +877,7 @@ class TestLocalTranslatorPipeline:
         # 调用方会把该字段退回中文模板。
         seen = []
 
-        def _generate(chunk, *, sentence):  # noqa: ANN001, ANN202
+        def _generate(chunk, *, sentence):
             seen.append(chunk)
             return "收到。" if len(seen) == 1 else ""
 
@@ -900,7 +899,7 @@ class TestLocalTranslatorPipeline:
         assert not out.ok
 
     def test_an_inference_error_is_reported_not_raised(self, tmp_path):
-        def _boom(chunk, *, sentence):  # noqa: ANN001, ANN202
+        def _boom(chunk, *, sentence):
             raise RuntimeError("CUDA out of memory")
 
         tr = _stub_local(tmp_path, _boom)
