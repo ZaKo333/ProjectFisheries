@@ -824,7 +824,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1348 项
+python -m pytest -m "not integration"        # 单元测试：1354 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -837,17 +837,17 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1348 项）
+### 11.1 单元测试（1354 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
 | `test_tools.py` | 95 | 阈值端点、红线、非离子氨换算（Emerson 公式 vs 表A1/A2）、缺失权重重归一化、NaN 拒绝、混合基线四条约束、图像确定性 |
 | `test_fish_species.py` | 42 | 品种别名映射、可用性探测（缺权重 / 缺 ultralytics / 可用）、无权重时不猜、错误码、不在 `TOOL_HANDLERS` 里 |
-| `test_agent.py` | 114 | 单模态权重归一化、协同规则、护栏补调、等级下限不被稀释、输出契约 |
+| `test_agent.py` | 117 | 单模态权重归一化、协同规则、护栏补调、等级下限不被稀释、输出契约 |
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
 | `test_rag.py` | 105 | front-matter、分块、RRF 融合、清单一致性守卫 |
-| `test_api.py` | 107 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
+| `test_api.py` | 110 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
 | `test_api_auth.py` | 32 | 访问口令：未配口令照常开放、配了之后 401 + `WWW-Authenticate`、Bearer 大小写、登录/登出与 cookie（值是口令的 SHA-256）、导航跳转、`next` 只收站内路径 |
 | `test_api_rag.py` | 34 | 接口层 × 真实知识库的一致性、溯源标记 |
 | `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |

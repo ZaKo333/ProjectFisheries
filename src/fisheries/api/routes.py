@@ -582,6 +582,23 @@ def _provenance_block(chunk: Any) -> str:
     )
 
 
+def _llm_failure_reason(exc: Exception) -> str:
+    """把一次大模型调用的失败压成一行可诊断的原因。
+
+    只写 ``type(exc).__name__`` 时，「ValidationError」「HTTP 401」看起来都一样，
+    运维只能猜。这里补上被截断的消息正文，同时抹掉形如 ``sk-…`` 的密钥片段：
+    这段文字会出现在对外的响应里。
+    """
+    import re
+
+    text = f"{type(exc).__name__}: {exc}".strip()
+    text = re.sub(r"sk-[A-Za-z0-9_\-]{6,}", "sk-***", text)
+    text = " ".join(text.split())
+    if len(text) > 220:
+        text = text[:220] + "…"
+    return text
+
+
 def _answer_from_chunks(
     state: AppState, payload: ChatRequest, result: Any
 ) -> tuple[str, bool]:
@@ -627,7 +644,7 @@ def _answer_from_chunks(
         # 只写类型名不写 ``str(exc)``：LLM 客户端的异常消息里常带请求 URL，
         # 有时还带 Authorization，接口文本是对外可见的。
         return (
-            f"（大模型调用失败：{type(exc).__name__}，以下是检索到的原文）\n\n"
+            f"（大模型调用失败：{_llm_failure_reason(exc)}，以下是检索到的原文）\n\n"
             + "\n\n".join(_provenance_block(c) for c in result.chunks),
             True,
         )

@@ -746,6 +746,31 @@ class TestNoServerPathsInResponses:
         assert stored.endswith(".png"), stored
 
 
+class TestLlmFailureReason:
+    """降级文案要能自己解释「为什么失败」，但不能把密钥带出去。"""
+
+    def test_keeps_the_type_and_the_message(self):
+        from fisheries.api.routes import _llm_failure_reason
+
+        text = _llm_failure_reason(RuntimeError("HTTP 401：invalid api key"))
+
+        assert "RuntimeError" in text
+        assert "HTTP 401" in text and "invalid api key" in text
+
+    def test_masks_api_keys(self):
+        from fisheries.api.routes import _llm_failure_reason
+
+        text = _llm_failure_reason(RuntimeError("bad key sk-abcdef123456 rejected"))
+
+        assert "sk-abcdef123456" not in text
+        assert "sk-***" in text
+
+    def test_truncates_long_payloads(self):
+        from fisheries.api.routes import _llm_failure_reason
+
+        assert len(_llm_failure_reason(RuntimeError("x" * 800))) <= 230
+
+
 class TestStoredPathHelper:
     """`_stored_path` 单独钉一遍：工程内给相对工程根，工程外只给文件名。"""
 

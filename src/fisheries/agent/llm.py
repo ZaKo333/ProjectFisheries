@@ -231,6 +231,47 @@ class OpenAICompatibleClient:
         return self._parse(body)
 
     @staticmethod
+    def _content_of(msg: dict[str, Any]) -> str | None:
+        """取出 message.content。
+
+        ``content`` 有两种合法形态：字符串，或 ``[{"type": "text", "text": ...}]``
+        片段数组（OpenAI 多模态、DashScope 的若干模型都会给数组）。早期实现把它
+        原样塞进 ``ChatResponse.content: str | None``，pydantic 于是抛
+        ``ValidationError``——对外只看到「大模型调用失败：ValidationError」，
+        完全看不出是格式问题。
+        """
+        raw = msg.get("content")
+        if raw is None or isinstance(raw, str):
+            return raw
+        if isinstance(raw, list):
+            parts: list[str] = []
+            for item in raw:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            return "".join(parts) or None
+        return str(raw)
+
+    @staticmethod
+    def _usage_of(body: dict[str, Any]) -> dict[str, int]:
+        """只保留整数值的 usage 字段（有的后端给浮点，有的给嵌套对象）。"""
+        usage = body.get("usage")
+        if not isinstance(usage, dict):
+            return {}
+        out: dict[str, int] = {}
+        for key, value in usage.items():
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int):
+                out[str(key)] = value
+            elif isinstance(value, float):
+                out[str(key)] = int(value)
+        return out
+
+    @staticmethod
     def _parse(body: dict[str, Any]) -> ChatResponse:
         choices = body.get("choices") or []
         if not choices:
@@ -254,12 +295,14 @@ class OpenAICompatibleClient:
                 raw_arguments=raw_args if isinstance(raw_args, str) else "",
             ))
 
+        finish = choices[0].get("finish_reason")
+        model = body.get("model")
         return ChatResponse(
-            content=msg.get("content"),
+            content=OpenAICompatibleClient._content_of(msg),
             tool_calls=calls,
-            finish_reason=choices[0].get("finish_reason") or "",
-            model=body.get("model") or "",
-            usage=body.get("usage") or {},
+            finish_reason=finish if isinstance(finish, str) else "",
+            model=model if isinstance(model, str) else "",
+            usage=OpenAICompatibleClient._usage_of(body),
             raw=body,
         )
 

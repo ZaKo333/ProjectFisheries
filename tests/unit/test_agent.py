@@ -522,6 +522,33 @@ class TestResponseParsing:
     def test_empty_choices_raises_unavailable(self):
         with pytest.raises(LLMUnavailableError):
             OpenAICompatibleClient._parse({"choices": []})
+    def test_list_content_is_joined_instead_of_raising(self):
+        """DashScope / 多模态后端返回的 content 是片段数组，不是字符串。"""
+        body = {"choices": [{"message": {"content": [
+            {"type": "text", "text": "第一段"},
+            {"type": "text", "text": "第二段"},
+        ]}}]}
+
+        assert OpenAICompatibleClient._parse(body).content == "第一段第二段"
+
+    def test_null_finish_reason_and_model_do_not_explode(self):
+        """`finish_reason: null` 以前会撞上 ``str`` 校验，表现为 ValidationError。"""
+        resp = OpenAICompatibleClient._parse(
+            {"model": None, "choices": [{"finish_reason": None, "message": {"content": "ok"}}]}
+        )
+
+        assert resp.content == "ok"
+        assert resp.finish_reason == ""
+        assert resp.model == ""
+
+    def test_usage_keeps_integers_only(self):
+        body = {"choices": [{"message": {"content": "ok"}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 2.0, "details": {"a": 1}}}
+
+        usage = OpenAICompatibleClient._parse(body).usage
+
+        assert usage == {"prompt_tokens": 5, "completion_tokens": 2}
+
 
 
 # --------------------------------------------------------------------------- #
