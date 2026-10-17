@@ -475,6 +475,27 @@ class TestCommandLine:
         assert "fake" in text and "没有写任何文件" in text
         assert not (out / wt.MIRROR_SUBDIR).exists()
 
+    def test_packer_keeps_existing_dataset_section(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """只打权重时，manifest 里已有的数据集段不能被抹掉。"""
+        item = install_fake(monkeypatch, tmp_path)
+        item.path.write_bytes(PAYLOAD)
+        out = tmp_path / "dist"
+        out.mkdir()
+        previous = {"schema": 1, "datasets": {"old": {"file": "old.zip", "bytes": 1}}}
+        (out / "manifest.json").write_text(
+            json.dumps(previous, ensure_ascii=False), encoding="utf-8"
+        )
+        module = self._packer()
+        assert module.main(["--skip-datasets", "--weights", "--out", str(out)]) == 0
+        payload = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert payload["datasets"] == {"old": {"file": "old.zip", "bytes": 1}}
+        assert payload["weights"]["fake"]["md5"] == item.md5
+
     def test_packer_copies_weights_and_records_md5(
         self,
         monkeypatch: pytest.MonkeyPatch,

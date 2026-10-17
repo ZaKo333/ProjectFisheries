@@ -783,7 +783,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1208 项
+python -m pytest                     # 全部 1209 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -810,7 +810,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_weights.py` | 40 | 权重注册表与哈希形状、md5/sha256 校验五情形、下载与缓存、坏包拒绝、镜像回退、`mock_notice` 文案与只喊一次、`.gitignore` 放行 `checksums.md5`、命令行三条子命令 |
+| `test_weights.py` | 41 | 权重注册表与哈希形状、md5/sha256 校验五情形、下载与缓存、坏包拒绝、镜像回退、`mock_notice` 文案与只喊一次、`.gitignore` 放行 `checksums.md5`、命令行三条子命令 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
 

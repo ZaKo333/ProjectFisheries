@@ -158,6 +158,23 @@ def write_manifest(
     return path
 
 
+def _existing_datasets(output: Path) -> dict[str, dict[str, object]]:
+    """读回已有 manifest 里的 ``datasets`` 段。
+
+    ``--weights --skip-datasets`` 只处理权重，但 manifest 是整份覆盖的：
+    不把原数据集段带过来，就会把上一次打包的成果从清单里抹掉。
+    """
+    path = output / ds.MIRROR_MANIFEST_NAME
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    datasets = payload.get("datasets")
+    return datasets if isinstance(datasets, dict) else {}
+
+
 def pack_weights(
     output: Path, *, dry_run: bool = False
 ) -> dict[str, dict[str, object]]:
@@ -301,7 +318,10 @@ def main(argv: list[str] | None = None) -> int:
         print("    python scripts/fetch_datasets.py --weights")
         return 1
 
-    manifest = write_manifest(output, entries, weight_entries)
+    manifest_entries = dict(entries)
+    if args.skip_datasets:
+        manifest_entries = _existing_datasets(output) or manifest_entries
+    manifest = write_manifest(output, manifest_entries, weight_entries)
     total = sum(int(item["bytes"]) for item in entries.values())
     total += sum(int(item["bytes"]) for item in weight_entries.values())
 
