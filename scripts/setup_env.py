@@ -144,7 +144,7 @@ def _has_venv() -> bool:
 # --------------------------------------------------------------------------- #
 
 def step_python(args: argparse.Namespace) -> bool:
-    print("  [1/6] 检查 Python")
+    print("  [1/7] 检查 Python")
     version = sys.version_info
     print(f"        当前解释器：{sys.executable}")
     print(f"        版本：{version.major}.{version.minor}.{version.micro}")
@@ -166,7 +166,7 @@ def step_python(args: argparse.Namespace) -> bool:
 
 
 def step_venv(args: argparse.Namespace) -> bool:
-    print("  [2/6] 准备虚拟环境 .venv")
+    print("  [2/7] 准备虚拟环境 .venv")
 
     if _has_venv() and not args.recreate:
         print(f"        {_console.mark(True)} 已存在：{VENV_DIR}（要重建加 --recreate）")
@@ -192,7 +192,7 @@ def step_venv(args: argparse.Namespace) -> bool:
 
 
 def step_pip(args: argparse.Namespace) -> bool:
-    print("  [3/6] 升级 pip / setuptools / wheel")
+    print("  [3/7] 升级 pip / setuptools / wheel")
     rc = _run([str(VENV_PY), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
     if rc != 0:
         print(f"        [失败] 升级失败（退出码 {rc}）。若是网络问题，加 --mirror tsinghua 重试。")
@@ -203,7 +203,7 @@ def step_pip(args: argparse.Namespace) -> bool:
 def step_install(args: argparse.Namespace) -> bool:
     extras = parse_extras(args.extras)
     index_url = mirror_url(args.mirror)
-    print(f"  [4/6] 安装项目依赖 {pip_spec(extras)}")
+    print(f"  [4/7] 安装项目依赖 {pip_spec(extras)}")
 
     if args.skip_install:
         print("        （--skip-install，已跳过）")
@@ -217,8 +217,38 @@ def step_install(args: argparse.Namespace) -> bool:
     return True
 
 
+def step_datasets(args: argparse.Namespace) -> bool:
+    print("  [5/7] 导入数据集（可选，最大约 1.4 GB）")
+    if args.skip_datasets:
+        print("        （--skip-datasets，已跳过）")
+        print("        之后补导： .venv\\Scripts\\python.exe scripts\\fetch_datasets.py --fetch all")
+        return True
+
+    # 本地已有的会自己跳过（fetch_datasets 先 find 再下载），所以数据齐的机器上这一步秒过。
+    cmd = [str(VENV_PY), "scripts/fetch_datasets.py", "--fetch", "all"]
+    env = {"FISHERIES_DATASET_MIRROR": args.dataset_mirror} if args.dataset_mirror else None
+    if args.dataset_mirror:
+        print(f"        镜像源：{args.dataset_mirror}")
+    print("        先试 kaggle，失败自动切镜像（镜像包不需要 Kaggle 凭证）。")
+    rc = _run(cmd, env=env)
+
+    if rc != 0:
+        print()
+        print("        [部分失败] 有数据集没导进来。不影响页面与接口先跑起来，")
+        print("        M8 评测、病害图像演示会缺数据。三条路任选：")
+        print("          1) 配 Kaggle 凭证后重试：")
+        print('               .venv\\Scripts\\python.exe -m pip install -e ".[datasets]"')
+        print("               凭证放 %USERPROFILE%\\.kaggle\\kaggle.json")
+        print("          2) 用国内镜像（不需要凭证）：")
+        print("               一键配置环境.bat --dataset-mirror https://你的地址")
+        print("          3) 有现成数据就指过去：")
+        print("               set FISHERIES_DATA_ROOT=<放数据集的总目录>")
+        return False
+    return True
+
+
 def step_knowledge_base(args: argparse.Namespace) -> bool:
-    print("  [5/6] 构建知识库向量库")
+    print("  [6/7] 构建知识库向量库")
     if args.skip_kb:
         print("        （--skip-kb，已跳过；知识问答会不可用）")
         print("        之后补建： .venv\\Scripts\\python.exe scripts\\build_knowledge_base.py")
@@ -251,7 +281,7 @@ def step_knowledge_base(args: argparse.Namespace) -> bool:
 
 
 def step_verify(args: argparse.Namespace) -> bool:
-    print("  [6/6] 验证安装")
+    print("  [7/7] 验证安装")
     if args.skip_verify:
         print("        （--skip-verify，已跳过）")
         return True
@@ -275,7 +305,9 @@ def step_verify(args: argparse.Namespace) -> bool:
     return True
 
 
-def print_next_steps(core_ok: bool, kb_ok: bool, verify_ok: bool, args: argparse.Namespace) -> None:
+def print_next_steps(
+    core_ok: bool, data_ok: bool, kb_ok: bool, verify_ok: bool, args: argparse.Namespace
+) -> None:
     print()
     print(_RULE)
     if core_ok and verify_ok and kb_ok:
@@ -286,8 +318,12 @@ def print_next_steps(core_ok: bool, kb_ok: bool, verify_ok: bool, args: argparse
         print()
         print("    可选：")
         print("      · 先跑一遍自检：  双击 运行自检.bat")
-        print("      · 导入数据集（约 1.4 GB，可选）：")
-        print("          .venv\\Scripts\\python.exe scripts\\fetch_datasets.py pull")
+        if data_ok:
+            print("      · 数据集已导好，M8 评测与病害图像演示都能跑")
+        else:
+            print("      · 数据集还没导全（可选，约 1.4 GB）。没有 Kaggle 凭证就用镜像：")
+            print("          一键配置环境.bat --dataset-mirror https://你的地址")
+            print("          .venv\\Scripts\\python.exe scripts\\fetch_datasets.py --status")
         print("      · 模型权重未随仓库分发，没有它照样能用（病害识别走模拟兜底）")
         if args.skip_kb:
             print("      · 知识问答需要向量库：")
@@ -326,6 +362,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hf-mirror", action="store_true",
                         help=f"下向量模型时直接用国内镜像 {HF_MIRROR}")
     parser.add_argument("--skip-install", action="store_true", help="跳过依赖安装")
+    parser.add_argument("--skip-datasets", action="store_true",
+                        help="跳过数据集导入（最大约 1.4 GB）")
+    parser.add_argument("--dataset-mirror", default=None, metavar="URL",
+                        help="数据集国内镜像根地址；给了就不需要 Kaggle 凭证")
     parser.add_argument("--skip-kb", action="store_true", help="跳过向量库构建")
     parser.add_argument("--skip-verify", action="store_true", help="跳过最终验证")
     return parser
@@ -354,7 +394,13 @@ def main(argv: list[str] | None = None) -> int:
         print()
         ok = step_install(args)
 
-    # 向量库失败不该吞掉后面的验证：依赖装没装好是另一件事，得单独告诉用户。
+    # 数据集与向量库的失败都不该吞掉后面的验证：依赖装没装好是另一件事，
+    # 得单独告诉用户。
+    data_ok = False
+    if ok:
+        print()
+        data_ok = step_datasets(args)
+
     kb_ok = False
     if ok:
         print()
@@ -365,7 +411,8 @@ def main(argv: list[str] | None = None) -> int:
         print()
         verify_ok = step_verify(args)
 
-    print_next_steps(ok, kb_ok, verify_ok, args)
+    print_next_steps(ok, data_ok, kb_ok, verify_ok, args)
+    # 数据集是可选的（缺了只是评测与图像演示缺数据），所以不参与退出码。
     return 0 if (ok and verify_ok and kb_ok) else 1
 
 

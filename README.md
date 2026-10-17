@@ -155,13 +155,15 @@ python -m fisheries.api                # 然后打开 http://127.0.0.1:8000/app/
 #### 一键配置（推荐）
 
 下载或克隆本仓库后，**双击 `一键配置环境.bat`**（等价于 `setup.bat`）即可。
-它会依次做完五件事，重复运行是安全的（已经做过的步骤会跳过）：
+它会依次做完七件事，重复运行是安全的（已经做过的步骤会跳过）：
 
 1. 检查 Python 版本（需 ≥ 3.10），挡掉 Windows 商店版的 python 转发器；
 2. 建 `.venv`；
 3. 升级 pip / setuptools / wheel；
 4. 装依赖 `.[dev,rag,api]`；
-5. 构建知识库向量库（**向量库不入库**，所以全新克隆必须做一次），然后验证依赖齐全。
+5. 导入数据集（可选，最大约 1.4 GB；没配 Kaggle 凭证时走国内镜像，见 §3.5）；
+6. 构建知识库向量库（**向量库不入库**，所以全新克隆必须做一次），
+7. 验证依赖齐全。
 
 最后它会把「下一步双击哪个 .bat、打开哪个地址」打印出来。
 
@@ -171,6 +173,8 @@ python -m fisheries.api                # 然后打开 http://127.0.0.1:8000/app/
 python scripts/setup_env.py                     # 和双击等价
 python scripts/setup_env.py --mirror tsinghua   # 用国内镜像装依赖
 python scripts/setup_env.py --skip-kb           # 先不建向量库，只想看看页面
+python scripts/setup_env.py --skip-datasets     # 不要数据集（省 1.4 GB 与几分钟）
+python scripts/setup_env.py --dataset-mirror https://你的地址/fish-datasets
 python scripts/setup_env.py --recreate          # 删掉 .venv 重建
 python scripts/setup_env.py --extras api,rag,dev --python C:\Python313\python.exe
 ```
@@ -181,9 +185,16 @@ python scripts/setup_env.py --extras api,rag,dev --python C:\Python313\python.ex
 | `--hf-mirror` | 下向量模型时直接用 `hf-mirror.com`（默认源失败会自动切一次） |
 | `--skip-kb` | 跳过向量库（知识问答会不可用，其余功能正常） |
 | `--rebuild-kb` | 向量库已存在也重建 |
+| `--skip-datasets` | 跳过第 5 步，不导数据集 |
+| `--dataset-mirror URL` | 数据集从国内镜像下载（写进 `FISHERIES_DATASET_MIRROR`，见 §3.5） |
 | `--recreate` | 删掉 `.venv` 重建（环境搞坏了用这个） |
 | `--extras` | 自选 extras，默认 `dev,rag,api` |
 | `--skip-install` / `--skip-verify` | 只跑其中几步 |
+
+> 第 5 步与第 6 步失败**都不影响环境可用性**，脚本会照常走完并给出补做的命令：
+> 数据集缺了就没有 M8 评测与病害图像演示；向量库缺了只有「知识问答」不可用。
+> 退出码只看前四步与第 7 步。
+
 
 > 装依赖失败多半是网络。加 `--mirror tsinghua` 重试；仍然失败就看脚本打印的
 > `[失败]` 那一行，它会指出是哪一步。
@@ -269,6 +280,51 @@ python scripts/selftest.py
 | `python scripts/demo_prompt.py` | 系统提示词与护栏，3 个场景 |
 | `python scripts/demo_api.py` | 完整 HTTP 链路，6 个场景（进程内，不用起服务） |
 | `python scripts/demo_translate.py` | 回译层，4 个场景 |
+
+### 3.5 数据集：没有 Kaggle 凭证怎么办
+
+`data/datasets/` 里那 1.4 GB 数据**不随仓库分发**（见 [§13](#13-数据与合规)）。
+注册表里 10 份可从 Kaggle 拿，另外 2 份（`fish_disease_cleaned`、`fish_species_images`）
+本来就没进工程。正常路径是：
+
+```bash
+python -m pip install -e ".[datasets]"        # 装 kagglehub
+# 凭证放 %USERPROFILE%\.kaggle\kaggle.json
+python scripts/fetch_datasets.py --fetch all
+```
+
+**没有 Kaggle 账号也不用卡在这里**，数据集可以走自己搭的静态镜像，不需要任何凭证。
+`fetch` 的顺序是「先 kaggle，失败自动切镜像」，两条路都不通才会报错，报错里会把
+两条路的具体原因和三个办法都列出来。
+
+搭镜像只有三步：
+
+```bash
+# ① 找一台已经把数据导好的机器，把 data/datasets 里的目录打成 zip
+python scripts/pack_dataset_mirror.py --all          # 产出 dist/mirror/*.zip + manifest.json
+python scripts/pack_dataset_mirror.py --name fish_disease --out D:\share
+
+# ② 把 dist/mirror 整个目录传到任意静态托管（对象存储、公司内网、Nginx 都行）
+#    上传后应该能直接访问 https://你的地址/fish-datasets/manifest.json
+
+# ③ 换台机器，把地址填进环境变量，然后正常下载
+set FISHERIES_DATASET_MIRROR=https://你的地址/fish-datasets
+python scripts/fetch_datasets.py --fetch all
+# 或者一步到位：一键配置环境.bat --dataset-mirror https://你的地址/fish-datasets
+```
+
+几点约定：
+
+* **`manifest.json` 是唯一的校验来源**。里面记了每个 zip 的 `sha256` 与文件数，
+  `fetch` 下载完先校验再解压，对不上就丢弃并报错——所以注册表**一行都不用改**。
+  想更严可以把 `archive_url` 与 `sha256` 写回 `src/fisheries/datasets.py` 的 spec，
+  那样连 manifest 被换掉也拦得住（注册表优先于 manifest）。
+* **打包是字节可复现的**：同一份数据重复打包得到同一个 `sha256`（zip 内时间戳固定
+  为 1980-01-01），校验值可以放心抄进文档。
+* 单个数据集也可以只用本地路径或 `file://` 当源，离线演示够用：
+  `set FISHERIES_DATASET_MIRROR=D:\share`。
+* 镜像里没有的（比如那 2 份本地本来就没有的），`--fetch` 会明确说「两条路都不通」，
+  不会静默跳过。
 
 ---
 
@@ -640,7 +696,9 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ├── models/                  # 模型权重（不进版本库，见 §3.3）
 ├── scripts/                 # 全部 CLI：一键配置 / demo / 建库 / 建模板 / 取数据 / 训练 / 体检
 │   ├── build_lesion_dataset.py  # 清洗真实多边形标注 → fish_lesion_seg 数据集
-│   └── train_lesion_seg.py      # 训练 + 评估病灶分割模型（见 §12.4）
+│   ├── train_lesion_seg.py      # 训练 + 评估病灶分割模型（见 §12.4）
+│   ├── pack_dataset_mirror.py   # 把已导好的数据集打成可上传的镜像包（见 §3.5）
+│   └── make_groundtruth_sample.py / evaluate_groundtruth.py  # 人工真值集抽样与评测（见 §12.2）
 ├── src/fisheries/
 │   ├── datasets.py          # 「数据集名字 → 磁盘位置」的唯一真相来源
 │   ├── console.py           # 控制台编码兜底
@@ -665,7 +723,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1149 项
+python -m pytest                     # 全部 1168 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -691,6 +749,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_setup_env.py` | 39 | 一键配置：版本门、extras 与 `pyproject` 一致、镜像与 pip 命令拼装 |
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
+| `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
 
@@ -855,6 +914,9 @@ python scripts/fetch_datasets.py --status                # 本地有哪些（默
 python scripts/fetch_datasets.py --where aquaponics_pond # 只打印路径
 python scripts/fetch_datasets.py --fetch aquaponics_pond # 下载缺的（需联网）
 ```
+
+`--fetch` 走两条路：先 kaggle，失败自动切国内静态镜像，**两条路都不需要同时具备**。
+没有 Kaggle 账号时怎么搭自己的镜像见 [§3.5](#35-数据集没有-kaggle-凭证怎么办)。
 
 查找顺序（先命中先赢，每一级都由测试钉住）。下表里 `<工程>` = 本仓库在你机器上的位置，`<工程上级>` = 它的上一级目录：
 

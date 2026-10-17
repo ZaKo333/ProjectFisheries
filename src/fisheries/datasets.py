@@ -35,6 +35,16 @@
 全都没有就抛 ``DatasetNotFoundError``，错误信息里直接给出可复制的下载命令——
 **不要只说「找不到」**，那会让人去翻代码。
 
+## 下载的两条路
+
+``fetch()`` 先试 kaggle（有 ``kaggle_id`` 时走 kagglehub，需要凭证），
+**失败自动切镜像**：设了 ``FISHERIES_DATASET_MIRROR`` 就去
+``<根地址>/<名字>.zip`` 取，否则退回注册表里写死的 ``archive_url``。
+镜像那一路**不需要 kagglehub、不需要凭证**，zip 的 sha256 会核对。
+
+镜像包由 ``scripts/pack_dataset_mirror.py`` 生成（一个 zip + 一份
+``manifest.json``），上传到任意静态托管即可；地址填进环境变量就能用。
+
 ## 依赖边界
 
 本模块**只用标准库**。``kagglehub`` 是可选依赖，只有真正要下载时才会 import；
@@ -55,6 +65,9 @@ __all__ = [
     "DatasetNotFoundError",
     "DatasetSpec",
     "DatasetStatus",
+    "MIRROR_BASE_ENV",
+    "MIRROR_MANIFEST_NAME",
+    "MIRROR_OUTPUT_DIR",
     "default_path",
     "fetch",
     "find",
@@ -63,6 +76,8 @@ __all__ = [
     "legacy_root",
     "list_datasets",
     "local_root",
+    "mirror_base",
+    "mirror_url",
     "require",
     "resolve",
     "status",
@@ -103,6 +118,19 @@ ARCHIVE_URL_MIRRORS: tuple[str, ...] = (
     "https://gh-proxy.com/{url}",
     "",
 )
+
+#: 自建镜像站根地址的环境变量。
+#:
+#: 设了它之后，``fetch`` 在 kaggle 那一路失败时会去 ``<根地址>/<名字>.zip`` 取，
+#: **不需要 Kaggle 凭证**。镜像站的目录结构由 ``scripts/pack_dataset_mirror.py``
+#: 生成（一个 zip + 一份 ``manifest.json``），上传到任意静态托管即可。
+MIRROR_BASE_ENV: str = "FISHERIES_DATASET_MIRROR"
+
+#: 镜像站里的清单文件名。打包脚本写、下载时读，用来核对 sha256。
+MIRROR_MANIFEST_NAME: str = "manifest.json"
+
+#: 打包脚本的默认输出目录。**不入库**（``.gitignore`` 忽略），只是上传前的暂存处。
+MIRROR_OUTPUT_DIR: Path = PROJECT_ROOT / "dist" / "mirror"
 
 
 def legacy_root() -> Path:
@@ -603,6 +631,81 @@ def list_datasets() -> list[DatasetSpec]:
 # --------------------------------------------------------------------------
 
 
+def mirror_base() -> str:
+    """镜像站根地址（不带结尾的 ``/``）。没配置就是空字符串。
+
+    取 :data:`MIRROR_BASE_ENV` 环境变量。可以是 ``https://``、``http://``，
+    也可以是本机目录或 ``file://`` 地址——离线环境与单元测试都靠这一点。
+    """
+    raw = os.environ.get(MIRROR_BASE_ENV, "").strip()
+    return raw.rstrip("/")
+
+
+def mirror_url(name: str) -> str | None:
+    """这个数据集在镜像站里的 URL。没配镜像、或名字没注册就是 ``None``。"""
+    if name not in DATASETS:
+        return None
+    return _mirror_url_for(DATASETS[name])
+
+
+def _mirror_url_for(spec: DatasetSpec) -> str | None:
+    """镜像地址：先看自建镜像站，再退回注册表里写死的直链。"""
+    base = mirror_base()
+    if base:
+        return f"{base}/{spec.name}.zip"
+    return spec.archive_url or None
+
+
+def _is_local_source(url: str) -> bool:
+    """``url`` 是不是本机路径（含 ``file://``）而不是网络地址。"""
+    if url.startswith("file://"):
+        return True
+    if "://" in url:
+        return False
+    return Path(url).exists()
+
+
+def _local_path(url: str) -> Path:
+    if url.startswith("file://"):
+        from urllib.request import url2pathname
+
+        return Path(url2pathname(url[len("file://") :]))
+    return Path(url)
+
+
+def _is_flat_entry(entry: str) -> bool:
+    """``entry`` 是不是「根目录下的单个文件」而不是子目录路径。"""
+    return "/" not in entry and "\\" not in entry
+
+
+def _manifest_sha256(base: str, name: str) -> str:
+    """从镜像站的 ``manifest.json`` 里取这个包应有的 sha256。
+
+    取不到（没清单 / 离线 / 格式不对）就返回空字符串——校验降级为「跳过」，
+    不因为清单缺了就拒绝整个下载。清单结构由 ``pack_dataset_mirror.py`` 定义。
+    """
+    if not base:
+        return ""
+    text = ""
+    manifest_url = f"{base}/{MIRROR_MANIFEST_NAME}"
+    try:
+        if _is_local_source(manifest_url):
+            text = _local_path(manifest_url).read_text(encoding="utf-8")
+        else:
+            import urllib.request
+
+            with urllib.request.urlopen(manifest_url, timeout=20) as response:
+                text = response.read().decode("utf-8")
+    except (OSError, ValueError, TimeoutError):
+        return ""
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return ""
+    entry = (payload.get("datasets") or {}).get(name) or {}
+    return str(entry.get("sha256") or "")
+
+
 def _sha256_of(path: Path) -> str:
     import hashlib
 
@@ -618,12 +721,25 @@ def _download(url: str, dest: Path) -> str:
 
     按 :data:`ARCHIVE_URL_MIRRORS` 顺序试：国内直连 GitHub raw 经常被 RST，
     先用代理镜像。先写 ``.part`` 再改名，中途断掉不会留下半截文件被当成好的。
+
+    ``url`` 也可以是一个本机路径或 ``file://`` 地址（离线镜像、单元测试），
+    这种情况直接复制，不走网络，也不套 ``ARCHIVE_URL_MIRRORS``。
     """
+    import shutil
     import urllib.error
     import urllib.request
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_suffix(dest.suffix + ".part")
+
+    if _is_local_source(url):
+        source = _local_path(url)
+        if not source.exists():
+            raise DatasetNotFoundError("fetch", f"本机镜像里没有这个文件：{source}")
+        shutil.copyfile(source, part)
+        part.replace(dest)
+        return url
+
     last_error: Exception | None = None
     for template in ARCHIVE_URL_MIRRORS:
         candidate = template.format(url=url) if template else url
@@ -687,8 +803,12 @@ def _extract_archive(archive: Path, dest: Path, spec: DatasetSpec) -> int:
             if info.is_dir():
                 continue
             # 防目录穿越：成员名里出现 .. 一律拒绝。
+            # 注意 Windows 上 Path("/abs.txt").is_absolute() 是 False（没有盘符），
+            # 但 dest / Path("/abs.txt") 会跳到盘根——所以还要看 anchor/drive。
             relative = Path(info.filename.replace("\\", "/"))
-            if relative.is_absolute() or ".." in relative.parts:
+            if relative.is_absolute() or relative.drive or relative.anchor:
+                continue
+            if ".." in relative.parts:
                 continue
             out = dest / relative
             out.parent.mkdir(parents=True, exist_ok=True)
@@ -699,13 +819,17 @@ def _extract_archive(archive: Path, dest: Path, spec: DatasetSpec) -> int:
     return written
 
 
-def fetch(name: str) -> Path:
+def fetch(name: str, *, mirror_first: bool = False) -> Path:
     """下载数据集，并把结果路径记进索引。
 
-    两条路径：
+    两条路，**第一条失败自动换第二条**：
 
-    * 有 ``kaggle_id`` → 走 kagglehub（可选依赖，缺失时给安装提示）。
-    * 有 ``archive_url`` → 直接下 zip，校验 ``sha256`` 后解压，**不需要 kagglehub**。
+    * kaggle 那一路：有 ``kaggle_id`` 就用 kagglehub（可选依赖，缺失时给安装提示）。
+    * 镜像那一路：取了 :data:`MIRROR_BASE_ENV` 就有；否则退回注册表里写的
+      ``archive_url``。下载 zip → 校验 sha256 → 解压，**不需要 kagglehub**。
+
+    默认先试 kaggle（有凭证时通常更快、更新），失败（含「没装 kagglehub」「无
+    凭证」「上游包结构变了」）再自动切镜像。``mirror_first=True`` 反过来先试镜像。
 
     **没有网络时不要调用它**——先试 :func:`find`，本地已有就不会走到这里。
     """
@@ -714,63 +838,121 @@ def fetch(name: str) -> Path:
     if existing is not None:
         return existing
 
-    if spec.archive_url:
-        return _fetch_archive(spec)
+    order = ("mirror", "kaggle") if mirror_first else ("kaggle", "mirror")
+    attempts: list[str] = []
+    for step in order:
+        if step == "kaggle":
+            if not spec.kaggle_id:
+                attempts.append("kaggle：注册表里没登记 kaggle 编号")
+                continue
+            try:
+                return _fetch_kaggle(spec)
+            except DatasetNotFoundError as exc:
+                attempts.append(f"kaggle：{_one_line(exc)}")
+        else:
+            url = _mirror_url_for(spec)
+            if url is None:
+                # 没有镜像也没有直链：仍然记一条，否则报错里只看到 kaggle
+                # 那一路，"两条路都不通"这句话就名不副实。
+                attempts.append(
+                    f"镜像：没配 {MIRROR_BASE_ENV}，注册表里也没有 archive_url"
+                )
+                continue
+            try:
+                return _fetch_archive(spec, url)
+            except DatasetNotFoundError as exc:
+                attempts.append(f"镜像 {url}：{_one_line(exc)}")
 
-    if not spec.kaggle_id:
+    if not attempts:
         raise DatasetNotFoundError(
             name,
             f"数据集「{spec.title}」没有可自动下载的来源。\n"
             f"请手动获取：{spec.url or '（未记录来源）'}",
         )
+    raise DatasetNotFoundError(name, _fetch_failure_message(spec, attempts))
 
+
+def _one_line(exc: Exception) -> str:
+    """把多行错误压成一行，便于拼进「两条路都失败」的清单里。"""
+    text = " ".join(str(exc).split())
+    return text if len(text) <= 160 else text[:157] + "..."
+
+
+def _fetch_failure_message(spec: DatasetSpec, attempts: list[str]) -> str:
+    """``fetch`` 两条路都不通时给的可操作提示。"""
+    lines = [
+        f"数据集「{spec.title}」（{spec.name}）自动下载失败，两条路都不通：",
+        "",
+    ]
+    lines += [f"  · {item}" for item in attempts]
+    lines += [
+        "",
+        "三个办法，任选其一：",
+        "  1. 走 kaggle：装依赖并配好凭证",
+        '       .venv\\Scripts\\python.exe -m pip install -e ".[datasets]"',
+        "     凭证放 %USERPROFILE%\\.kaggle\\kaggle.json（kaggle.com → Settings → API）",
+        "  2. 走镜像：把已上传的镜像站地址填进环境变量，不需要任何凭证",
+        f"       set {MIRROR_BASE_ENV}=https://your-host/fish-datasets",
+        "     镜像包用 python scripts/pack_dataset_mirror.py 生成",
+        "  3. 手动拿到数据后直接指过去",
+        f"       set {DATA_ROOT_ENV}=<放数据集的总目录>",
+    ]
+    return "\n".join(lines)
+
+
+def _fetch_kaggle(spec: DatasetSpec) -> Path:
+    """kagglehub 那一路。失败一律抛 :class:`DatasetNotFoundError`，便于上层回退。"""
     try:
         import kagglehub  # 延迟导入：离线部署不该被这个依赖卡住
     except ImportError as exc:  # pragma: no cover - 取决于环境
         raise DatasetNotFoundError(
-            name,
-            "需要 kagglehub 才能下载数据集，但当前环境没有安装。\n\n"
-            "安装：\n"
-            '    .venv\\Scripts\\python.exe -m pip install -e ".[datasets]"\n'
-            "或者只装这一个包：\n"
-            "    .venv\\Scripts\\python.exe -m pip install kagglehub\n\n"
-            "不想装也可以：手动下好之后用 "
-            f"{DATA_ROOT_ENV} 指向那个目录。",
+            spec.name,
+            "需要 kagglehub 才能下载数据集，但当前环境没有安装。",
         ) from exc
 
-    downloaded = Path(kagglehub.dataset_download(spec.kaggle_id))
+    try:
+        downloaded = Path(kagglehub.dataset_download(spec.kaggle_id))
+    except Exception as exc:  # 网络/鉴权/上游消失，都回退到镜像那一路
+        raise DatasetNotFoundError(
+            spec.name,
+            f"kagglehub 下载失败：{type(exc).__name__}: {_one_line(exc)}",
+        ) from exc
 
     # 下载目录里通常就是 entry，但有些包会多套一层，两个位置都找一下。
     for candidate in (downloaded / spec.entry, downloaded):
         if _usable(candidate, spec):
-            _record(name, candidate)
+            _record(spec.name, candidate)
             return candidate
 
     # 内容对不上（比如包结构变了）：记录也需要报出来，否则用户不知道为什么失败。
     raise DatasetNotFoundError(
-        name,
-        f"kagglehub 下载完成（{downloaded}），但里面找不到 {spec.entry!r}。\n"
-        f"可能是上游包结构变了。请人工确认后把 {DATA_ROOT_ENV} 指过去。",
+        spec.name,
+        f"kagglehub 下载完成（{downloaded}），但里面找不到 {spec.entry!r}。",
     )
 
 
-def _fetch_archive(spec: DatasetSpec) -> Path:
-    """下载 ``archive_url`` 形式的直链压缩包（目前是 GitHub 上的 zip）。"""
+def _fetch_archive(spec: DatasetSpec, url: str | None = None) -> Path:
+    """下载直链压缩包：注册表里的 ``archive_url``，或镜像站里的 ``<名字>.zip``。"""
     import tempfile
+
+    source = url or spec.archive_url
+    if not source:
+        raise DatasetNotFoundError(spec.name, "没有可下载的压缩包地址。")
 
     with tempfile.TemporaryDirectory(prefix=f"fisheries-{spec.name}-") as tmp:
         workspace = Path(tmp)
-        archive = workspace / (spec.archive_url.rsplit("/", 1)[-1] or "archive.zip")
-        used = _download(spec.archive_url, archive)
+        archive = workspace / (source.rstrip("/").rsplit("/", 1)[-1] or "archive.zip")
+        used = _download(source, archive)
 
-        if spec.sha256:
+        expected = spec.sha256 or _manifest_sha256(mirror_base(), spec.name)
+        if expected:
             actual = _sha256_of(archive)
-            if actual != spec.sha256:
+            if actual != expected:
                 raise DatasetNotFoundError(
                     spec.name,
                     f"下载到的文件 sha256 对不上，已丢弃。\n"
                     f"  来源：{used}\n"
-                    f"  期望：{spec.sha256}\n"
+                    f"  期望：{expected}\n"
                     f"  实际：{actual}\n"
                     f"要么上游更新了（请核对后更新注册表里的 sha256），"
                     f"要么下载被中间人改了。",
@@ -779,11 +961,23 @@ def _fetch_archive(spec: DatasetSpec) -> Path:
         staging = workspace / "extracted"
         written = _extract_archive(archive, staging, spec)
         if written == 0:
-            raise DatasetNotFoundError(
-                spec.name, f"压缩包解出来是空的：{spec.archive_url}"
-            )
+            raise DatasetNotFoundError(spec.name, f"压缩包解出来是空的：{used}")
 
         target = LOCAL_ROOT / spec.entry
+
+        # 单文件数据集（``entry`` 是文件名，如 china_water_pollution_data.csv）：
+        # 压缩包里那个文件直接搬到 entry 位置——目录整体 move 会把它变成目录。
+        if _is_flat_entry(spec.entry):
+            extracted = staging / spec.entry
+            if extracted.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.unlink(missing_ok=True)
+                import shutil
+
+                shutil.move(str(extracted), str(target))
+                _record(spec.name, target)
+                return target
+
         if target.exists():
             import shutil
 
