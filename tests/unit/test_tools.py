@@ -399,6 +399,20 @@ class TestUnionizedAmmonia:
         assert unit["exceeded"] is True
         assert unit["limit_ratio"] == pytest.approx(1.76, abs=0.02)
 
+    def test_summary_does_not_claim_the_total_ammonia_tier(self):
+        """文案回归：总氨氮 0.40 还在警戒带（危险线 0.5），不能说「已进入危险区间」。
+
+        早期实现直接把 severity 抬到 1.0，摘要就照着 severity 拼出
+        「当前 0.40 mg/L，已进入危险区间」，与同一段里「总氨氮 0.40」和
+        「非离子氨超限」两句话自相矛盾。现在只允许说「已超非离子氨限值」。
+        """
+        series = make_series(24, ph=8.2, water_temp=26.0, ammonia_n=0.4)
+        summary = water_risk_predict(series, interval_minutes=60)["degradation_summary"]
+
+        assert "已超非离子氨限值" in summary
+        assert "已进入危险区间" not in summary
+        assert "氨氮（毒性形态）" in summary
+
     def test_warning_band_when_free_ammonia_approaches_the_limit(self):
         """总氨氮连"适宜上限"都没到，但换算后的非离子氨已逼近限值 → 预警。
 

@@ -665,7 +665,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1135 项
+python -m pytest                     # 全部 1136 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -674,7 +674,7 @@ python -m pytest tests/unit/test_agent.py -v
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
-| `test_tools.py` | 94 | 阈值端点、红线、非离子氨换算（Emerson 公式 vs 表A1/A2）、缺失权重重归一化、NaN 拒绝、混合基线四条约束、图像确定性 |
+| `test_tools.py` | 95 | 阈值端点、红线、非离子氨换算（Emerson 公式 vs 表A1/A2）、缺失权重重归一化、NaN 拒绝、混合基线四条约束、图像确定性 |
 | `test_fish_species.py` | 34 | 品种别名映射、无权重时不猜、错误码、不在 `TOOL_HANDLERS` 里 |
 | `test_agent.py` | 114 | 单模态权重归一化、协同规则、护栏补调、等级下限不被稀释、输出契约 |
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |

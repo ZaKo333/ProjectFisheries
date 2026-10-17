@@ -855,6 +855,11 @@ def _build_summary(*, level: str, score: float, horizon_hours: int,
     if limiting and limiting in trends:
         t = trends[limiting]
         status = {1.0: "已进入危险区间", 0.5: "处于警戒区间", 0.0: "仍在适宜区间"}[sev[limiting]]
+        # 氨氮的档位是按总氨氮定的，换算成非离子氨后可能已经超限——
+        # 这时说「总氨氮 0.40 已进入危险区间」是错的（危险线是 0.5），
+        # 只能如实说「总氨氮 0.40，已超非离子氨限值」。
+        if limiting == "ammonia_n" and unionized is not None and unionized.exceeded:
+            status = "已超非离子氨限值"
         parts.append(f"主控风险因子为{t.label}：当前 {_fmt(t.current, t.unit)}，{status}。")
     else:
         parts.append("各项常规指标均处于适宜区间。")
@@ -863,6 +868,11 @@ def _build_summary(*, level: str, score: float, horizon_hours: int,
     danger = [trends[k].label for k, v in sev.items() if v == 1.0 and k in trends]
     warning = [trends[k].label for k, v in sev.items() if v == 0.5 and k in trends]
     if danger:
+        # 氨氮这一项可能是被「非离子氨超限」抬上来的，总氨氮本身还在警戒带里。
+        # 说「氨氮已达到危险级别」会与下一句「总氨氮 0.40 < 0.5」自相矛盾。
+        if (unionized is not None and unionized.exceeded
+                and "氨氮" in danger and len(danger) > 0):
+            danger = [("氨氮（毒性形态）" if d == "氨氮" else d) for d in danger]
         parts.append(f"其中{('、'.join(danger))}已达到危险级别。")
     if warning:
         parts.append(f"{('、'.join(warning))}处于警戒区间。")
