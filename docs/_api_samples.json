@@ -17,8 +17,8 @@
     "knowledge": {
       "status": "ready",
       "detail": "已加载混合检索知识库（稠密 + BM25）",
-      "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
-      "n_chunks": 150
+      "backend": "chroma(151 块) + bm25(151 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+      "n_chunks": 151
     },
     "notes": [
       "已开启「按服务器路径读图」（FISHERIES_API_ALLOW_LOCAL_PATH=1），便于演示与内网联调；公网部署请关闭并改用 /api/v1/ingest/image 上传。"
@@ -366,10 +366,10 @@
       {
         "key": "ammonia_accumulation",
         "name": "高温高 pH 氨氮累积",
-        "scenario": "7 月末高温，pH 8.5–8.9，氨氮爬到 0.72 mg/L（危险带，未破 1.0 红线）。",
+        "scenario": "7 月末高温，pH 8.5–8.9，总氨氮爬到 0.72 mg/L（未破 1.0 红线）；按 pH/水温折算，非离子氨约 0.22 mg/L，是 0.020 限值的十一倍。",
         "species": "鲤科",
         "expected_risk": "高危",
-        "focus": "分子氨协同：pH 与水溫同时偏高时氨氮毒性放大。",
+        "focus": "口径换算：pH 与水温同时偏高时，同样一池氨氮的毒性形态成倍放大。",
         "tags": [
           "高危",
           "鲤科",
@@ -490,12 +490,12 @@
       {
         "key": "ammonia_climbing",
         "name": "氨氮缓慢爬升",
-        "scenario": "8 月末投料量大，氨氮从 0.12 一路爬到 0.38 mg/L，尚未破危险线。",
+        "scenario": "8 月末投料量大，总氨氮从 0.12 一路爬到 0.38 mg/L，离危险线（1.0）还远；但 pH 8.25、水温 28.5℃ 下非离子氨约占 11.4%，折合约 0.043 mg/L，已是 GB 11607-1989 限值（0.020 mg/L）的两倍。",
         "species": "鲤科",
-        "expected_risk": "预警",
-        "focus": "趋势预警：数值还好看，但方向不对。",
+        "expected_risk": "高危",
+        "focus": "口径换算：判的是非离子氨，不是总氨氮——总氨氮没破线，毒性形态先破线。",
         "tags": [
-          "预警",
+          "高危",
           "鲤科",
           "氨氮",
           "趋势"
@@ -784,6 +784,19 @@
         "missing_indicators": [],
         "warnings": []
       },
+      "unionized_ammonia": {
+        "total_ammonia_n": 0.3297,
+        "free_ammonia_n": 0.00962,
+        "fraction_pct": 2.919,
+        "ph": 7.66,
+        "water_temp": 27.12,
+        "limit_mg_l": 0.02,
+        "warn_mg_l": 0.01,
+        "limit_ratio": 0.4812,
+        "exceeded": false,
+        "formula": "非离子氨占比 = 1 / (1 + 10^(pKa − pH))，其中 pKa = 0.09018 + 2729.92 / (T + 273.15)（T 为水温 ℃）",
+        "basis": "GB 11607-1989《渔业水质标准》表 1 序号 19：非离子氨 ≤ 0.020 mg/L；附录 A 表 A1 / 表 A2 给出非离子氨占总氨的百分比与等效总氨上限。公式出自 Emerson 等（1975）pKa 温度关系式，与该标准附录 A 表 A1 一致"
+      },
       "degraded_mode": true,
       "projection_method": "hybrid_persistence_baseline",
       "error_code": null,
@@ -852,7 +865,7 @@
       "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
     ],
     "knowledge_summary": {
-      "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+      "backend": "chroma(151 块) + bm25(151 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
       "n_chunks": 6,
       "degraded": false,
       "warnings": [],
@@ -1168,7 +1181,7 @@
       "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
     ],
     "knowledge_summary": {
-      "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+      "backend": "chroma(151 块) + bm25(151 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
       "n_chunks": 8,
       "degraded": false,
       "warnings": [],
@@ -1654,6 +1667,19 @@
         "missing_indicators": [],
         "warnings": []
       },
+      "unionized_ammonia": {
+        "total_ammonia_n": 0.3297,
+        "free_ammonia_n": 0.00962,
+        "fraction_pct": 2.919,
+        "ph": 7.66,
+        "water_temp": 27.12,
+        "limit_mg_l": 0.02,
+        "warn_mg_l": 0.01,
+        "limit_ratio": 0.4812,
+        "exceeded": false,
+        "formula": "非离子氨占比 = 1 / (1 + 10^(pKa − pH))，其中 pKa = 0.09018 + 2729.92 / (T + 273.15)（T 为水温 ℃）",
+        "basis": "GB 11607-1989《渔业水质标准》表 1 序号 19：非离子氨 ≤ 0.020 mg/L；附录 A 表 A1 / 表 A2 给出非离子氨占总氨的百分比与等效总氨上限。公式出自 Emerson 等（1975）pKa 温度关系式，与该标准附录 A 表 A1 一致"
+      },
       "degraded_mode": true,
       "projection_method": "hybrid_persistence_baseline",
       "error_code": null,
@@ -1829,7 +1855,7 @@
       "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 3. 投喂频次与时间安排 > 3.2 关键禁忌（务必遵守）（依据 GB 11607-1989；核验日期 2026-10-15）"
     ],
     "knowledge_summary": {
-      "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+      "backend": "chroma(151 块) + bm25(151 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
       "n_chunks": 8,
       "degraded": false,
       "warnings": [],
@@ -2233,6 +2259,19 @@
         "missing_indicators": [],
         "warnings": []
       },
+      "unionized_ammonia": {
+        "total_ammonia_n": 0.3297,
+        "free_ammonia_n": 0.00962,
+        "fraction_pct": 2.919,
+        "ph": 7.66,
+        "water_temp": 27.12,
+        "limit_mg_l": 0.02,
+        "warn_mg_l": 0.01,
+        "limit_ratio": 0.4812,
+        "exceeded": false,
+        "formula": "非离子氨占比 = 1 / (1 + 10^(pKa − pH))，其中 pKa = 0.09018 + 2729.92 / (T + 273.15)（T 为水温 ℃）",
+        "basis": "GB 11607-1989《渔业水质标准》表 1 序号 19：非离子氨 ≤ 0.020 mg/L；附录 A 表 A1 / 表 A2 给出非离子氨占总氨的百分比与等效总氨上限。公式出自 Emerson 等（1975）pKa 温度关系式，与该标准附录 A 表 A1 一致"
+      },
       "degraded_mode": true,
       "projection_method": "hybrid_persistence_baseline",
       "error_code": null,
@@ -2462,7 +2501,7 @@
           "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
         ],
         "knowledge_summary": {
-          "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+          "backend": "chroma(151 块) + bm25(151 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
           "n_chunks": 8,
           "degraded": false,
           "warnings": [],
@@ -2732,6 +2771,19 @@
             "missing_indicators": [],
             "warnings": []
           },
+          "unionized_ammonia": {
+            "total_ammonia_n": 0.3297,
+            "free_ammonia_n": 0.00962,
+            "fraction_pct": 2.919,
+            "ph": 7.66,
+            "water_temp": 27.12,
+            "limit_mg_l": 0.02,
+            "warn_mg_l": 0.01,
+            "limit_ratio": 0.4812,
+            "exceeded": false,
+            "formula": "非离子氨占比 = 1 / (1 + 10^(pKa − pH))，其中 pKa = 0.09018 + 2729.92 / (T + 273.15)（T 为水温 ℃）",
+            "basis": "GB 11607-1989《渔业水质标准》表 1 序号 19：非离子氨 ≤ 0.020 mg/L；附录 A 表 A1 / 表 A2 给出非离子氨占总氨的百分比与等效总氨上限。公式出自 Emerson 等（1975）pKa 温度关系式，与该标准附录 A 表 A1 一致"
+          },
           "degraded_mode": true,
           "projection_method": "hybrid_persistence_baseline",
           "error_code": null,
@@ -2800,7 +2852,7 @@
           "《淡水池塘投料管理规范——投喂量、频次、时机与饲料管理》> 5. 饲料管理 > 5.3 投喂操作要点（依据 GB 11607-1989；核验日期 2026-10-15）"
         ],
         "knowledge_summary": {
-          "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+          "backend": "chroma(151 块) + bm25(151 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
           "n_chunks": 6,
           "degraded": false,
           "warnings": [],
@@ -2846,7 +2898,7 @@
         "verified": true,
         "score": 0.9607,
         "dense_score": 0.644,
-        "sparse_score": 3.6204,
+        "sparse_score": 3.6802,
         "matched_by": [
           "dense",
           "sparse"
@@ -2863,7 +2915,7 @@
         "verified": true,
         "score": 0.9472,
         "dense_score": 0.6338,
-        "sparse_score": 3.8996,
+        "sparse_score": 3.9582,
         "matched_by": [
           "dense",
           "sparse"
@@ -2880,7 +2932,7 @@
         "verified": true,
         "score": 0.9236,
         "dense_score": 0.7135,
-        "sparse_score": 1.3476,
+        "sparse_score": 1.3702,
         "matched_by": [
           "dense",
           "sparse"
@@ -2888,7 +2940,7 @@
         "citation_keys": []
       }
     ],
-    "backend": "chroma(150 块) + bm25(150 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
+    "backend": "chroma(151 块) + bm25(151 块) / fastembed:BAAI/bge-small-zh-v1.5（512 维）",
     "warnings": []
   },
   "POST /api/v1/assess (错误：什么都没传，422)": {

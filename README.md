@@ -877,6 +877,10 @@ python scripts/build_knowledge_base.py --check   # 只校验一致性
   **告警阈值用的是换算后的非离子氨（毒性氨），不是总氨氮**——
   `> 0.020` 触发红线 `UNIONIZED_AMMONIA_REDLINE`，`0.010 – 0.020` 触发
   `UNIONIZED_AMMONIA_RISK`；总氨氮自己的 0.2 / 0.5 / 1.0 三档是另一条工程分档线。
+  公式不是本项目自创：`pKa` 的温度关系式出自 **Emerson 等（1975）**，
+  *J. Fish. Res. Board Can.* 32(12): 2379–2383，其数值结果就是 GB 11607-1989
+  **附录 A 表 A1**（非离子氨百分比表）；实现与表 A1 / 表 A2 已逐点核过
+  （`pH 8.0 / 25℃` 算得 5.37%，表 A2 反算 `0.02 / 0.37 = 5.4%`）；
   最近一次读数对应的换算值在响应里是 `unionized_ammonia`（含 `fraction_pct` /
   `free_ammonia_n` / `limit_ratio` / 公式与出处原文）；
 - 部分旧行业标准（如无公害食品系列的养殖用水水质、渔药使用准则）已废止且无直接替代，

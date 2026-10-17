@@ -221,9 +221,15 @@ NH3_FORMULA = (
 )
 
 #: 限值与公式的依据出处，同样进响应。
+#: 公式来源：Emerson K., Russo R.C., Lund R.E., Thurston R.V. (1975)
+#: "Aqueous ammonia equilibrium calculations: effect of pH and temperature",
+#: J. Fish. Res. Board Can. 32(12): 2379-2383（pKa 温度系数的原始出处）；
+#: GB 11607-1989 附录 A 表 A1 的百分比列即该式的数值表，可用于交叉校核
+#: （本仓库 `tests/unit/test_tools.py::TestUnionizedAmmonia` 逐点比对了表 A1/A2）。
 NH3_BASIS = (
     "GB 11607-1989《渔业水质标准》表 1 序号 19：非离子氨 ≤ 0.020 mg/L；"
-    "附录 A 表 A1 / 表 A2 给出非离子氨占总氨的百分比与等效总氨上限"
+    "附录 A 表 A1 / 表 A2 给出非离子氨占总氨的百分比与等效总氨上限。"
+    "公式出自 Emerson 等（1975）pKa 温度关系式，与该标准附录 A 表 A1 一致"
 )
 
 
