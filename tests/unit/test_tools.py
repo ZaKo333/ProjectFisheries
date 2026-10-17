@@ -27,7 +27,13 @@ from fisheries.tools.fish_disease import (
     RAW_CLASS_TO_LABEL,
     _mock_scores,
 )
-from fisheries.tools.water_risk import SPECIES_PROFILES, _severity, hybrid_forecast
+from fisheries.tools.water_risk import (
+    SPECIES_PROFILES,
+    _severity,
+    _unionized_state,
+    hybrid_forecast,
+    unionized_ammonia_fraction,
+)
 
 # --------------------------------------------------------------------------- #
 # 测试夹具
@@ -227,9 +233,16 @@ class TestWaterRiskLevels:
         assert out["risk_level"] == "正常"
 
     def test_unionized_ammonia_synergy_rule(self):
-        """pH>8.5 且水温>28℃ 时氨氮超标，应额外命中分子氨风险规则。"""
+        """pH 8.8 / 29℃ 下总氨氮 0.35 mg/L，折合非离子氨约 0.11 mg/L → 直接红线。
+
+        旧规则只在「pH > 8.5 且水温 > 28℃」时提示 `UNIONIZED_AMMONIA_RISK`，
+        这一组恰好落在门槛内，但结论只到"提示"；换算后它其实是 5.5 倍限值，
+        属于必须立刻处理的红线。命中更强的那一条，是对旧行为的收紧而不是放松。
+        """
         out = water_risk_predict(make_series(24, ph=8.8, water_temp=29.0, ammonia_n=0.35))
-        assert "UNIONIZED_AMMONIA_RISK" in out["rule_hits"]
+        assert "UNIONIZED_AMMONIA_REDLINE" in out["redline_hits"]
+        assert out["risk_level"] == "高危"
+        assert out["unionized_ammonia"]["limit_ratio"] > 5.0
 
 
 # --------------------------------------------------------------------------- #
@@ -337,6 +350,111 @@ class TestHybridForecast:
         assert proj["projected_extreme"] == pytest.approx(2.5)
         assert proj["hours_to_threshold"] is not None
         assert 0 < proj["hours_to_threshold"] < 12
+
+
+class TestUnionizedAmmonia:
+    """氨氮口径：传感器给总氨氮，标准限非离子氨，中间差一个由 pH 与水温决定的占比。
+
+    GB 11607-1989 表 1 序号 19 限的是**非离子氨 ≤ 0.020 mg/L**。
+    旧实现用「pH > 8.5 且水温 > 28℃」的硬门槛近似，pH 8.0–8.5 整段漏判；
+    现在只要总氨氮 > 0 就按 Emerson 公式换算，再和限值比。
+    """
+
+    def test_emerson_fraction_matches_gb_appendix_a(self):
+        # 附录 A 表 A1：pH 7.0 / 25℃ 时非离子氨占 0.57%
+        assert unionized_ammonia_fraction(7.0, 25.0) * 100 == pytest.approx(0.56, abs=0.02)
+        # 附录 A 表 A2 反算：pH 8.0 / 25℃ 下非离子氨 0.020 mg/L 对应总氨 0.37 mg/L
+        # → 占比 5.4%，与表 A1 的 pH 8.0 行一致
+        frac_80 = unionized_ammonia_fraction(8.0, 25.0)
+        assert frac_80 * 100 == pytest.approx(5.4, abs=0.1)
+        assert 0.02 / frac_80 == pytest.approx(0.37, abs=0.01)
+
+    def test_fraction_rises_with_ph_and_temperature(self):
+        # pH 每升 1 个单位，占比约升 10 倍；水温升高同样放大
+        assert unionized_ammonia_fraction(8.0, 25.0) < unionized_ammonia_fraction(8.2, 25.0)
+        assert unionized_ammonia_fraction(8.2, 25.0) < unionized_ammonia_fraction(8.5, 25.0)
+        assert unionized_ammonia_fraction(8.2, 20.0) < unionized_ammonia_fraction(8.2, 26.0)
+        assert unionized_ammonia_fraction(8.2, 26.0) < unionized_ammonia_fraction(8.2, 30.0)
+        # 比值近似 10 倍：pH 8.5 / 30℃ 约为 20%
+        assert unionized_ammonia_fraction(8.5, 30.0) * 100 == pytest.approx(20.2, abs=0.3)
+
+    def test_ph_below_the_old_gate_is_now_alarmed(self):
+        """回归测试：pH 8.2 / 26℃ 是被旧规则整段漏掉的那段。
+
+        总氨氮 0.4 mg/L 连"氨氮警戒线"（0.5）都没到，旧规则要求 pH > 8.5
+        且水温 > 28℃ 才报警，于是这一格完全没声音；实际折合非离子氨 0.035 mg/L，
+        已经超限 76%。
+        """
+        series = make_series(24, ph=8.2, water_temp=26.0, ammonia_n=0.4)
+        out = water_risk_predict(series, interval_minutes=60)
+
+        assert out["severity_map"]["ammonia_n"] == 1.0
+        assert "UNIONIZED_AMMONIA_REDLINE" in out["redline_hits"]
+        assert out["risk_level"] == "高危"
+
+        unit = out["unionized_ammonia"]
+        assert unit is not None
+        assert unit["free_ammonia_n"] == pytest.approx(0.0352, abs=0.001)
+        assert unit["fraction_pct"] == pytest.approx(8.8, abs=0.1)
+        assert unit["exceeded"] is True
+        assert unit["limit_ratio"] == pytest.approx(1.76, abs=0.02)
+
+    def test_warning_band_when_free_ammonia_approaches_the_limit(self):
+        """总氨氮连"适宜上限"都没到，但换算后的非离子氨已逼近限值 → 预警。
+
+        0.15 mg/L 的总氨氮在 pH 8.2 / 26℃ 下折合 0.0132 mg/L：
+        没超 0.02，但已是限值的 66%，不该当"正常"报出去。
+        """
+        series = make_series(24, ph=8.2, water_temp=26.0, ammonia_n=0.15)
+        out = water_risk_predict(series, interval_minutes=60)
+
+        unit = out["unionized_ammonia"]
+        assert 0.01 < unit["free_ammonia_n"] <= 0.02
+        assert "UNIONIZED_AMMONIA_RISK" in out["rule_hits"]
+        assert "UNIONIZED_AMMONIA_REDLINE" not in out["rule_hits"]
+        assert out["severity_map"]["ammonia_n"] == 0.5
+        assert out["risk_level"] == "预警"
+
+    def test_low_ph_keeps_the_total_ammonia_tier(self):
+        """pH 7.5 时非离子氨只占 1.8%，总氨氮 0.5 mg/L 折合 0.0088 —— 不触发口径告警。
+
+        这条防的是"加了公式之后所有氨氮都报警"的过度敏感。
+        """
+        series = make_series(24, ph=7.5, water_temp=25.0, ammonia_n=0.5)
+        out = water_risk_predict(series, interval_minutes=60)
+
+        unit = out["unionized_ammonia"]
+        assert unit["free_ammonia_n"] < 0.01
+        assert unit["exceeded"] is False
+        assert "UNIONIZED_AMMONIA_RISK" not in out["rule_hits"]
+        assert "UNIONIZED_AMMONIA_REDLINE" not in out["rule_hits"]
+        # 总氨氮自身仍按 0.2/0.5 的工程分档落在警戒
+        assert out["severity_map"]["ammonia_n"] == 0.5
+        assert out["risk_level"] == "预警"
+
+    def test_missing_input_means_no_conversion(self):
+        """缺 pH / 水温 / 氨氮任一项就不换算，也不编一个假值出来。
+
+        pH 在数据契约里是必填字段（缺了就整条记录不合法），所以这里直接测
+        换算函数本身的守门行为，而不是构造一条非法读数。
+        """
+        assert _unionized_state({"ammonia_n": 0.4, "water_temp": 26.0}) is None
+        assert _unionized_state({"ammonia_n": 0.4, "ph": 8.2}) is None
+        assert _unionized_state({"ph": 8.2, "water_temp": 26.0}) is None
+        assert _unionized_state({}) is None
+        assert _unionized_state({"ammonia_n": 0.4, "ph": 8.2, "water_temp": 26.0}) is not None
+
+    def test_response_carries_formula_and_legal_basis(self):
+        """公式与依据必须随响应一起返回，供前端与申报材料直接引用。"""
+        series = make_series(24, ph=8.2, water_temp=26.0, ammonia_n=0.4)
+        out = water_risk_predict(series, interval_minutes=60)
+        unit = out["unionized_ammonia"]
+
+        assert unit["limit_mg_l"] == 0.02
+        assert "GB 11607-1989" in unit["basis"]
+        assert "0.09018" in unit["formula"] and "2729.92" in unit["formula"]
+        assert "GB 11607-1989" in out["degradation_summary"]
+        assert "非离子氨" in out["degradation_summary"]
 
 
 # --------------------------------------------------------------------------- #

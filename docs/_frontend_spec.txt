@@ -14,6 +14,16 @@ POST   /api/v1/chat    []
        响应 200：Successful Response -> ChatResponse
        响应 422：Validation Error -> HTTPValidationError
 
+GET    /api/v1/config/templates    []
+       摘要：内置水质模板目录（用户无需自备数据即可跑通）
+       响应 200：Successful Response -> TemplateCatalogResponse
+
+GET    /api/v1/config/templates/{key}/csv    []
+       摘要：下载指定内置模板的 CSV（可直接上传 / 粘贴 / 用 Excel 打开）
+       路径/查询参数：key (path, 必填)
+       响应 200：Successful Response -> ?
+       响应 422：Validation Error -> HTTPValidationError
+
 GET    /api/v1/config/thresholds    []
        摘要：阈值、权重与红线规则（供前端展示判定依据）
        响应 200：Successful Response -> ThresholdResponse
@@ -278,6 +288,7 @@ AdvisorReport:
     trends: dict  [可选]
     projections: dict  [可选]
     data_quality: fisheries.tools.water_risk.DataQuality | None  [可选]
+    unionized_ammonia: fisheries.tools.water_risk.UnionizedAmmonia | None  [可选]
     degraded_mode: bool  [可选]
     projection_method: str  [可选]
     error_code: str | None  [可选]
@@ -314,6 +325,7 @@ AdvisorReport:
     PH_REDLINE
     TEMP_FLUCTUATION_HIGH
     TEMP_OUT_OF_OPTIMAL
+    UNIONIZED_AMMONIA_REDLINE
     UNIONIZED_AMMONIA_RISK
 
 [fish_disease] 工具名: fish_disease_detect
@@ -462,15 +474,6 @@ api/deps.py:
     FISHERIES_API_MAX_UPLOAD_MB
     FISHERIES_API_UPLOAD_DIR
     FISHERIES_VISION_WEIGHTS
-
-webui/runner.py:
-    FISHERIES_DISABLE_KNOWLEDGE
-
-webui/app.py:
-    FISHERIES_WEB_HOST
-    FISHERIES_WEB_OPEN_BROWSER
-    FISHERIES_WEB_PORT
-    FISHERIES_WEB_SHARE
 
 agent/llm.py:
     FISHERIES_LLM_

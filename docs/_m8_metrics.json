@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-17 14:56:43 +0800",
+  "generated_at": "2026-10-17 15:09:44 +0800",
   "protocol": {
     "species": "鲤科",
     "horizon_hours": 72,
@@ -435,8 +435,8 @@
       "n_calls": 3183,
       "n_failed": 0,
       "n_ok": 3183,
-      "elapsed_seconds": 1.179,
-      "ms_per_call": 0.37,
+      "elapsed_seconds": 1.23,
+      "ms_per_call": 0.39,
       "errors": []
     },
     "n_samples": 3183,
@@ -449,14 +449,14 @@
       ],
       "matrix": [
         [
-          849,
-          85,
+          846,
+          88,
           230
         ],
         [
           71,
-          321,
-          500
+          317,
+          504
         ],
         [
           0,
@@ -465,76 +465,76 @@
         ]
       ],
       "counts": {
-        "正常->正常": 849,
-        "正常->预警": 85,
+        "正常->正常": 846,
+        "正常->预警": 88,
         "正常->高危": 230,
         "预警->正常": 71,
-        "预警->预警": 321,
-        "预警->高危": 500,
+        "预警->预警": 317,
+        "预警->高危": 504,
         "高危->高危": 1127
       },
       "per_class": [
         {
           "label": "正常",
           "support": 1164,
-          "predicted": 920,
-          "tp": 849,
+          "predicted": 917,
+          "tp": 846,
           "fp": 71,
-          "fn": 315,
-          "precision": 0.9228,
-          "recall": 0.7294,
-          "f1": 0.8148
+          "fn": 318,
+          "precision": 0.9226,
+          "recall": 0.7268,
+          "f1": 0.8131
         },
         {
           "label": "预警",
           "support": 892,
-          "predicted": 406,
-          "tp": 321,
-          "fp": 85,
-          "fn": 571,
-          "precision": 0.7906,
-          "recall": 0.3599,
-          "f1": 0.4946
+          "predicted": 405,
+          "tp": 317,
+          "fp": 88,
+          "fn": 575,
+          "precision": 0.7827,
+          "recall": 0.3554,
+          "f1": 0.4888
         },
         {
           "label": "高危",
           "support": 1127,
-          "predicted": 1857,
+          "predicted": 1861,
           "tp": 1127,
-          "fp": 730,
+          "fp": 734,
           "fn": 0,
-          "precision": 0.6069,
+          "precision": 0.6056,
           "recall": 1.0,
-          "f1": 0.7554
+          "f1": 0.7544
         }
       ],
       "macro": {
         "n": 3183,
-        "accuracy": 0.7216,
-        "macro_precision": 0.7735,
-        "macro_recall": 0.6964,
-        "macro_f1": 0.6882,
-        "weighted_f1": 0.704,
-        "kappa": 0.5731
+        "accuracy": 0.7194,
+        "macro_precision": 0.7703,
+        "macro_recall": 0.6941,
+        "macro_f1": 0.6854,
+        "weighted_f1": 0.7014,
+        "kappa": 0.5697
       }
     },
-    "spearman_score_vs_level": 0.7856,
+    "spearman_score_vs_level": 0.7854,
     "late_prediction_rate": 0.0,
     "false_alarm_rate": 0.1976,
     "redline_recall": {
-      "hit": 1123,
+      "hit": 1127,
       "total": 1127,
-      "rate": 0.9965
+      "rate": 1.0
     },
     "limiting_agreement": {
-      "hit": 1644,
+      "hit": 1643,
       "total": 1907,
-      "rate": 0.8621
+      "rate": 0.8616
     },
     "severity_distribution": {
-      "正常": 920,
-      "预警": 406,
-      "高危": 1857
+      "正常": 917,
+      "预警": 405,
+      "高危": 1861
     },
     "true_distribution": {
       "正常": 1164,
@@ -549,7 +549,7 @@
         "median": 0.0,
         "p75": 0.0,
         "max": 73.05,
-        "mean": 3.184
+        "mean": 3.247
       },
       "预警": {
         "count": 892,
@@ -558,7 +558,7 @@
         "median": 34.09,
         "p75": 57.47,
         "max": 100.0,
-        "mean": 36.819
+        "mean": 36.921
       },
       "高危": {
         "count": 1127,
@@ -567,7 +567,7 @@
         "median": 57.47,
         "p75": 73.05,
         "max": 100.0,
-        "mean": 56.924
+        "mean": 57.045
       }
     },
     "per_pond": {
@@ -629,16 +629,16 @@
       },
       "IoTPond4": {
         "n": 389,
-        "accuracy": 0.5656,
+        "accuracy": 0.5553,
         "true": {
           "正常": 82,
           "预警": 202,
           "高危": 105
         },
         "pred": {
-          "正常": 61,
-          "预警": 73,
-          "高危": 255
+          "正常": 60,
+          "预警": 71,
+          "高危": 258
         }
       },
       "IoTPond6": {
@@ -685,16 +685,16 @@
       },
       "IoTPond9": {
         "n": 457,
-        "accuracy": 0.86,
+        "accuracy": 0.8534,
         "true": {
           "正常": 156,
           "预警": 32,
           "高危": 269
         },
         "pred": {
-          "正常": 120,
-          "预警": 8,
-          "高危": 329
+          "正常": 118,
+          "预警": 9,
+          "高危": 330
         }
       },
       "IoTpond1": {
@@ -722,8 +722,8 @@
         "n_calls": 8563,
         "n_failed": 0,
         "n_ok": 8563,
-        "elapsed_seconds": 2.031,
-        "ms_per_call": 0.24,
+        "elapsed_seconds": 2.327,
+        "ms_per_call": 0.27,
         "errors": []
       },
       "n_samples": 8563,
@@ -736,14 +736,14 @@
         ],
         "matrix": [
           [
-            1958,
-            234,
+            1953,
+            239,
             1111
           ],
           [
             115,
-            748,
-            1583
+            744,
+            1587
           ],
           [
             0,
@@ -752,76 +752,76 @@
           ]
         ],
         "counts": {
-          "正常->正常": 1958,
-          "正常->预警": 234,
+          "正常->正常": 1953,
+          "正常->预警": 239,
           "正常->高危": 1111,
           "预警->正常": 115,
-          "预警->预警": 748,
-          "预警->高危": 1583,
+          "预警->预警": 744,
+          "预警->高危": 1587,
           "高危->高危": 2814
         },
         "per_class": [
           {
             "label": "正常",
             "support": 3303,
-            "predicted": 2073,
-            "tp": 1958,
+            "predicted": 2068,
+            "tp": 1953,
             "fp": 115,
-            "fn": 1345,
-            "precision": 0.9445,
-            "recall": 0.5928,
-            "f1": 0.7284
+            "fn": 1350,
+            "precision": 0.9444,
+            "recall": 0.5913,
+            "f1": 0.7272
           },
           {
             "label": "预警",
             "support": 2446,
-            "predicted": 982,
-            "tp": 748,
-            "fp": 234,
-            "fn": 1698,
-            "precision": 0.7617,
-            "recall": 0.3058,
-            "f1": 0.4364
+            "predicted": 983,
+            "tp": 744,
+            "fp": 239,
+            "fn": 1702,
+            "precision": 0.7569,
+            "recall": 0.3042,
+            "f1": 0.4339
           },
           {
             "label": "高危",
             "support": 2814,
-            "predicted": 5508,
+            "predicted": 5512,
             "tp": 2814,
-            "fp": 2694,
+            "fp": 2698,
             "fn": 0,
-            "precision": 0.5109,
+            "precision": 0.5105,
             "recall": 1.0,
-            "f1": 0.6763
+            "f1": 0.676
           }
         ],
         "macro": {
           "n": 8563,
-          "accuracy": 0.6446,
-          "macro_precision": 0.739,
-          "macro_recall": 0.6329,
-          "macro_f1": 0.6137,
-          "weighted_f1": 0.6279,
-          "kappa": 0.4636
+          "accuracy": 0.6436,
+          "macro_precision": 0.7373,
+          "macro_recall": 0.6318,
+          "macro_f1": 0.6124,
+          "weighted_f1": 0.6266,
+          "kappa": 0.462
         }
       },
-      "spearman_score_vs_level": 0.7869,
+      "spearman_score_vs_level": 0.7866,
       "late_prediction_rate": 0.0,
       "false_alarm_rate": 0.3364,
       "redline_recall": {
-        "hit": 2805,
+        "hit": 2809,
         "total": 2814,
-        "rate": 0.9968
+        "rate": 0.9982
       },
       "limiting_agreement": {
-        "hit": 4293,
-        "total": 4979,
-        "rate": 0.8622
+        "hit": 4290,
+        "total": 4980,
+        "rate": 0.8614
       },
       "severity_distribution": {
-        "正常": 2073,
-        "预警": 982,
-        "高危": 5508
+        "正常": 2068,
+        "预警": 983,
+        "高危": 5512
       },
       "true_distribution": {
         "正常": 3303,
@@ -836,16 +836,16 @@
           "median": 0.0,
           "p75": 0.0,
           "max": 68.18,
-          "mean": 2.833
+          "mean": 2.891
         },
         "预警": {
           "count": 2446,
           "min": 0.0,
-          "p25": 23.38,
+          "p25": 25.0,
           "median": 34.09,
           "p75": 54.55,
           "max": 100.0,
-          "mean": 35.143
+          "mean": 35.249
         },
         "高危": {
           "count": 2814,
@@ -854,7 +854,7 @@
           "median": 57.47,
           "p75": 68.18,
           "max": 100.0,
-          "mean": 52.419
+          "mean": 52.575
         }
       },
       "per_pond": {
@@ -916,16 +916,16 @@
         },
         "IoTPond4": {
           "n": 1098,
-          "accuracy": 0.4964,
+          "accuracy": 0.4909,
           "true": {
             "正常": 257,
             "预警": 563,
             "高危": 278
           },
           "pred": {
-            "正常": 148,
+            "正常": 145,
             "预警": 167,
-            "高危": 783
+            "高危": 786
           }
         },
         "IoTPond6": {
@@ -972,16 +972,16 @@
         },
         "IoTPond9": {
           "n": 1262,
-          "accuracy": 0.8106,
+          "accuracy": 0.8082,
           "true": {
             "正常": 439,
             "预警": 79,
             "高危": 744
           },
           "pred": {
-            "正常": 267,
-            "预警": 21,
-            "高危": 974
+            "正常": 265,
+            "预警": 22,
+            "高危": 975
           }
         },
         "IoTpond1": {
@@ -1008,8 +1008,8 @@
         "n_calls": 1694,
         "n_failed": 0,
         "n_ok": 1694,
-        "elapsed_seconds": 0.833,
-        "ms_per_call": 0.49,
+        "elapsed_seconds": 0.774,
+        "ms_per_call": 0.46,
         "errors": []
       },
       "n_samples": 1694,
@@ -1022,14 +1022,14 @@
         ],
         "matrix": [
           [
-            176,
-            23,
+            175,
+            24,
             425
           ],
           [
             8,
-            98,
-            348
+            97,
+            349
           ],
           [
             0,
@@ -1038,60 +1038,60 @@
           ]
         ],
         "counts": {
-          "正常->正常": 176,
-          "正常->预警": 23,
+          "正常->正常": 175,
+          "正常->预警": 24,
           "正常->高危": 425,
           "预警->正常": 8,
-          "预警->预警": 98,
-          "预警->高危": 348,
+          "预警->预警": 97,
+          "预警->高危": 349,
           "高危->高危": 616
         },
         "per_class": [
           {
             "label": "正常",
             "support": 624,
-            "predicted": 184,
-            "tp": 176,
+            "predicted": 183,
+            "tp": 175,
             "fp": 8,
-            "fn": 448,
-            "precision": 0.9565,
-            "recall": 0.2821,
-            "f1": 0.4356
+            "fn": 449,
+            "precision": 0.9563,
+            "recall": 0.2804,
+            "f1": 0.4337
           },
           {
             "label": "预警",
             "support": 454,
             "predicted": 121,
-            "tp": 98,
-            "fp": 23,
-            "fn": 356,
-            "precision": 0.8099,
-            "recall": 0.2159,
-            "f1": 0.3409
+            "tp": 97,
+            "fp": 24,
+            "fn": 357,
+            "precision": 0.8017,
+            "recall": 0.2137,
+            "f1": 0.3374
           },
           {
             "label": "高危",
             "support": 616,
-            "predicted": 1389,
+            "predicted": 1390,
             "tp": 616,
-            "fp": 773,
+            "fp": 774,
             "fn": 0,
-            "precision": 0.4435,
+            "precision": 0.4432,
             "recall": 1.0,
-            "f1": 0.6145
+            "f1": 0.6142
           }
         ],
         "macro": {
           "n": 1694,
-          "accuracy": 0.5254,
-          "macro_precision": 0.7366,
-          "macro_recall": 0.4993,
-          "macro_f1": 0.4637,
-          "weighted_f1": 0.4753,
-          "kappa": 0.2615
+          "accuracy": 0.5242,
+          "macro_precision": 0.7337,
+          "macro_recall": 0.498,
+          "macro_f1": 0.4618,
+          "weighted_f1": 0.4735,
+          "kappa": 0.2597
         }
       },
-      "spearman_score_vs_level": 0.7922,
+      "spearman_score_vs_level": 0.792,
       "late_prediction_rate": 0.0,
       "false_alarm_rate": 0.6811,
       "redline_recall": {
@@ -1100,14 +1100,14 @@
         "rate": 1.0
       },
       "limiting_agreement": {
-        "hit": 871,
+        "hit": 870,
         "total": 1014,
-        "rate": 0.859
+        "rate": 0.858
       },
       "severity_distribution": {
-        "正常": 184,
+        "正常": 183,
         "预警": 121,
-        "高危": 1389
+        "高危": 1390
       },
       "true_distribution": {
         "正常": 624,
@@ -1122,7 +1122,7 @@
           "median": 0.0,
           "p75": 0.0,
           "max": 38.96,
-          "mean": 2.621
+          "mean": 2.717
         },
         "预警": {
           "count": 454,
@@ -1131,7 +1131,7 @@
           "median": 34.09,
           "p75": 68.18,
           "max": 100.0,
-          "mean": 38.524
+          "mean": 38.647
         },
         "高危": {
           "count": 616,
@@ -1140,7 +1140,7 @@
           "median": 57.47,
           "p75": 73.05,
           "max": 100.0,
-          "mean": 56.889
+          "mean": 57.04
         }
       },
       "per_pond": {
@@ -1202,7 +1202,7 @@
         },
         "IoTPond4": {
           "n": 203,
-          "accuracy": 0.3842,
+          "accuracy": 0.3793,
           "true": {
             "正常": 40,
             "预警": 104,
@@ -1210,8 +1210,8 @@
           },
           "pred": {
             "正常": 13,
-            "预警": 8,
-            "高危": 182
+            "预警": 7,
+            "高危": 183
           }
         },
         "IoTPond6": {
@@ -1258,15 +1258,15 @@
         },
         "IoTPond9": {
           "n": 241,
-          "accuracy": 0.6846,
+          "accuracy": 0.6805,
           "true": {
             "正常": 85,
             "预警": 15,
             "高危": 141
           },
           "pred": {
-            "正常": 23,
-            "预警": 1,
+            "正常": 22,
+            "预警": 2,
             "高危": 217
           }
         },
@@ -1541,7 +1541,7 @@
       "median": 29.55,
       "p75": 57.47,
       "max": 100.0,
-      "mean": 31.637
+      "mean": 31.732
     }
   }
 }

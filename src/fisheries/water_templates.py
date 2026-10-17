@@ -226,8 +226,9 @@ def _specs() -> tuple[TemplateSpec, ...]:
         }
 
     def ammonia_accumulation() -> dict[str, list[float]]:
-        # 高温 + 高 pH + 氨氮累积：这是"分子氨占比升高"的教科书组合，
-        # 会命中 UNIONIZED_AMMONIA_RISK 协同规则。
+        # 高温 + 高 pH + 氨氮累积：非离子氨占比升高的教科书组合。
+        # pH 8.65、水温 31℃ 下非离子氨约占 30%，0.72 mg/L 折合约 0.22 mg/L，
+        # 是 GB 11607-1989 限值（0.020）的十一倍，命中 UNIONIZED_AMMONIA_REDLINE。
         return {
             "water_temp": _curve(31.0, 1.2, 16.0),
             "ph": _curve(8.65, 0.20, 16.0),
@@ -292,7 +293,10 @@ def _specs() -> tuple[TemplateSpec, ...]:
         }
 
     def ammonia_climbing() -> dict[str, list[float]]:
-        # 氨氮从 0.12 爬到 0.38：越过适宜上限（0.2）但没到危险（0.5）。
+        # 氨氮从 0.12 爬到 0.38：越过适宜上限（0.2）但离危险线（1.0）还远。
+        # 换成毒性形态就不是这么回事了：pH 8.25、水温 28.5℃ 下非离子氨约占 11.4%，
+        # 0.38 mg/L 折合约 0.043 mg/L，已是 GB 11607-1989 的 0.020 mg/L 的两倍多。
+        # 这个模板就是给「总氨氮看着还好、毒性形态先超限」这条口径做演示的。
         return {
             "water_temp": _curve(28.5, 1.4, 16.0),
             "ph": _curve(8.25, 0.20, 16.0),
@@ -364,10 +368,13 @@ def _specs() -> tuple[TemplateSpec, ...]:
         TemplateSpec(
             key="ammonia_accumulation",
             name="高温高 pH 氨氮累积",
-            scenario="7 月末高温，pH 8.5–8.9，氨氮爬到 0.72 mg/L（危险带，未破 1.0 红线）。",
+            scenario=(
+                "7 月末高温，pH 8.5–8.9，总氨氮爬到 0.72 mg/L（未破 1.0 红线）；"
+                "按 pH/水温折算，非离子氨约 0.22 mg/L，是 0.020 限值的十一倍。"
+            ),
             species="鲤科",
             expected_risk="高危",
-            focus="分子氨协同：pH 与水溫同时偏高时氨氮毒性放大。",
+            focus="口径换算：pH 与水温同时偏高时，同样一池氨氮的毒性形态成倍放大。",
             tags=("高危", "鲤科", "氨氮", "高温"),
             header_style="zh_units",
             start="2026-07-25 08:00:00",
@@ -436,11 +443,15 @@ def _specs() -> tuple[TemplateSpec, ...]:
         TemplateSpec(
             key="ammonia_climbing",
             name="氨氮缓慢爬升",
-            scenario="8 月末投料量大，氨氮从 0.12 一路爬到 0.38 mg/L，尚未破危险线。",
+            scenario=(
+                "8 月末投料量大，总氨氮从 0.12 一路爬到 0.38 mg/L，离危险线（1.0）还远；"
+                "但 pH 8.25、水温 28.5℃ 下非离子氨约占 11.4%，折合约 0.043 mg/L，"
+                "已是 GB 11607-1989 限值（0.020 mg/L）的两倍。"
+            ),
             species="鲤科",
-            expected_risk="预警",
-            focus="趋势预警：数值还好看，但方向不对。",
-            tags=("预警", "鲤科", "氨氮", "趋势"),
+            expected_risk="高危",
+            focus="口径换算：判的是非离子氨，不是总氨氮——总氨氮没破线，毒性形态先破线。",
+            tags=("高危", "鲤科", "氨氮", "趋势"),
             header_style="canonical",
             start="2026-08-28 08:00:00",
             build=ammonia_climbing,

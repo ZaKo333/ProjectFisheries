@@ -13,7 +13,7 @@
   };
 
   /**
-   * 6.2 rule_hits 规则码（17 个，一个不能漏）
+   * 6.2 rule_hits 规则码（18 个，一个不能漏）
    * { label, severity }  severity: 1 危险 / 0.5 警戒 / 0 提示
    */
   const RULE_HITS = {
@@ -25,7 +25,8 @@
     NH3N_ABOVE_WARNING:        { label: "氨氮超过警戒值", severity: 0.5 },
     NH3N_TREND_UP_FAST:        { label: "氨氮上升过快", severity: 0.5 },
     NH3_REDLINE:               { label: "氨氮触及红线（1.0 mg/L）", severity: 1 },
-    UNIONIZED_AMMONIA_RISK:    { label: "分子氨毒性风险（高温 + 高 pH）", severity: 1 },
+    UNIONIZED_AMMONIA_REDLINE: { label: "非离子氨（毒性氨）超限（0.02 mg/L）", severity: 1 },
+    UNIONIZED_AMMONIA_RISK:    { label: "非离子氨逼近限值（0.01–0.02 mg/L）", severity: 0.5 },
     NO2N_ABOVE_WARNING:        { label: "亚硝酸盐超过警戒值", severity: 0.5 },
     NO2N_TREND_UP_FAST:        { label: "亚硝酸盐上升过快", severity: 0.5 },
     NO2_REDLINE:               { label: "亚硝酸盐触及红线（0.5 mg/L）", severity: 1 },
@@ -39,16 +40,19 @@
   /**
    * 6.3 redline_hits 红线码
    *
-   * 这里是 `water_risk.py::_check_redlines` 实际会发出的**全部 6 个码**，一个不多一个不少。
+   * 这里是 `water_risk.py::_check_redlines` 实际会发出的**全部 7 个码**，一个不多一个不少。
    * 曾经漏过三个（DO_REDLINE_PROJECTED / DO_CRASH_TREND / PH_REDLINE）、多了两个
    * （PH_LOW_REDLINE / PH_HIGH_REDLINE —— 它们只是后端 REDLINE 阈值表的字典键，
    * pH 越界时后端发的是 PH_REDLINE），结果那三个码在界面上直接显示英文。
+   * `UNIONIZED_AMMONIA_REDLINE` 不在后端 REDLINE 阈值表里（表里的键按总氨氮 mg/L 存，
+   * 这条按换算后的非离子氨 0.02 mg/L 判），所以这里必须单独登记。
    */
   const REDLINES = {
     DO_REDLINE:           { label: "溶氧跌破泛塘临界值", value: "1.5 mg/L" },
     DO_REDLINE_PROJECTED: { label: "按趋势外推，溶氧将跌破泛塘临界值", value: "1.5 mg/L" },
     DO_CRASH_TREND:       { label: "溶氧短期内骤降", value: "3 h 内降幅 ≥ 2.0 mg/L" },
     NH3_REDLINE:          { label: "氨氮触及红线", value: "1.0 mg/L" },
+    UNIONIZED_AMMONIA_REDLINE: { label: "非离子氨（毒性氨）超限", value: "0.02 mg/L（GB 11607-1989）" },
     NO2_REDLINE:          { label: "亚硝酸盐触及红线", value: "0.5 mg/L" },
     PH_REDLINE:           { label: "pH 触及红线", value: "低于 5.5 或高于 9.5" },
   };
