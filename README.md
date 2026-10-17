@@ -674,12 +674,16 @@ curl -X POST http://127.0.0.1:8812/api/v1/assess \
       }'
 ```
 
-**接口层的四条设计约束**：
+**接口层的五条设计约束**：
 
 - 接口层不重新实现业务逻辑，只做四件事：校验入参、调用已实现的工具 / Agent、转成稳定契约、把异常转成明确状态码。
 - 契约用 `extra="forbid"`——请求里多写一个字段返回 **422 而不是静默忽略**，字段拼错会立刻报错。
 - **图片默认只接受 `upload_id`**，不接受服务器任意路径。只有设了 `FISHERIES_API_ALLOW_LOCAL_PATH=1`
   才开放 `image_path`（那是任意文件读取面，公网必须关闭）。
+- **会话数据按客户端隔离**：读数缓冲、评估历史、上传记录都带 `session_id`
+  （请求头 `X-Session-Id` > cookie `fisheries_session` > 首次访问自动签发；头不合法直接 400），
+  落在 `data/uploads/api_state.sqlite3`（`FISHERIES_API_STATE_DB` 可改）。
+  两个浏览器用同一个塘号也串不了台，进程重启数据还在。
 - 知识库不可用时 `/assess` 仍返回 200，只在 `degraded_reasons` 里写明「未引用规范依据」；
   只有 `/chat` 本身是知识库功能，会返回 503。
 
@@ -776,6 +780,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 │   ├── agent/               # Agent 层：调度、护栏、融合、回译
 │   ├── rag/                 # 检索层：加载 / 分块 / 向量库 / 混合检索
 │   ├── api/                 # 接口层：FastAPI 契约、路由与前端静态托管
+│   │   └── store.py         #   会话数据（读数 / 历史 / 上传）落 SQLite
 │   ├── tables.py            # 表格接入层：列名别名 / 时间轴 / 缺失与量纲
 │   └── evaluation/          # 外部验证（只做评测，不参与线上链路）
 └── tests/
@@ -797,7 +802,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1236 项
+python -m pytest -m "not integration"        # 单元测试：1274 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -810,7 +815,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1236 项）
+### 11.1 单元测试（1274 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -820,7 +825,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
 | `test_rag.py` | 105 | front-matter、分块、RRF 融合、清单一致性守卫 |
-| `test_api.py` | 90 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
+| `test_api.py` | 99 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
 | `test_api_rag.py` | 34 | 接口层 × 真实知识库的一致性、溯源标记 |
 | `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |
 | `test_web_contract.py` | 26 | 前端静态托管、`dict.js` 枚举码 vs 后端源码、`api.js` 路径 vs OpenAPI |
@@ -834,6 +839,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
+| `test_session_store.py` | 29 | 会话标识的合法性、读数按会话/塘号隔离、`replace`、超上限丢最旧、历史与上传同样隔离、换实例后数据还在（模拟重启）、惰性建库 |
 | `test_weights.py` | 42 | 权重注册表与哈希形状、md5/sha256 校验五情形、下载与缓存、坏包拒绝、镜像回退、`mock_notice` 文案与只喊一次、`.gitignore` 放行 `checksums.md5`、命令行三条子命令 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。

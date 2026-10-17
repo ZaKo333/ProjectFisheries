@@ -189,6 +189,21 @@ def health(request: Request) -> HealthResponse:
     )
 
 
+def _session_id(request: Request) -> str:
+    """取中间件挂上的会话标识。
+
+    中间件（app.py 的 ``_attach_session``）保证每个请求都有；
+    这里缺失只可能是「有人绕过 FastAPI 直接调用路由函数」，所以报 500 而不是猜一个。
+    """
+    sid = getattr(request.state, "session_id", None)
+    if not sid:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="会话标识未初始化（中间件未生效）",
+        )
+    return str(sid)
+
+
 # --------------------------------------------------------------------------- #
 # 核心：融合评估
 # --------------------------------------------------------------------------- #
@@ -201,9 +216,10 @@ def health(request: Request) -> HealthResponse:
 def assess(payload: AssessRequest, request: Request) -> AssessResponse:
     state: AppState = get_state(request)
 
+    session_id = _session_id(request)
     readings = _readings_to_dicts(payload.readings) if payload.readings else None
     if readings is None and payload.use_buffer:
-        readings = state.get_readings(payload.pond_id)
+        readings = state.get_readings(session_id, payload.pond_id)
         if not readings:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -213,7 +229,7 @@ def assess(payload: AssessRequest, request: Request) -> AssessResponse:
                 ),
             )
 
-    image_path = _resolve_image_path(state, payload.image_path, payload.upload_id)
+    image_path = _resolve_image_path(state, session_id, payload.image_path, payload.upload_id)
     if not readings and not image_path:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -246,12 +262,19 @@ def assess(payload: AssessRequest, request: Request) -> AssessResponse:
         include_knowledge_block=payload.include_knowledge_block,
     )
     # 历史里存精简版：轨迹和知识块原文又大又只对当次请求有意义。
-    state.record(payload.pond_id, _to_response(result, include_trace=False, include_knowledge_block=False))
+    state.record(
+        session_id,
+        payload.pond_id,
+        _to_response(result, include_trace=False, include_knowledge_block=False),
+    )
     return response
 
 
 def _resolve_image_path(
-    state: AppState, image_path: str | None, upload_id: str | None
+    state: AppState,
+    session_id: str,
+    image_path: str | None,
+    upload_id: str | None,
 ) -> str | None:
     """确定本次要分析的图片路径。
 
@@ -259,7 +282,8 @@ def _resolve_image_path(
     其次才是客户端直传的服务器路径，且受 ``allow_local_path`` 开关约束。
     """
     if upload_id:
-        path = state.lookup_upload(upload_id)
+        # 只在本会话的 uploads 里找：别人的 upload_id 在语义上等于「不存在」。
+        path = state.lookup_upload(session_id, upload_id)
         if path is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -330,13 +354,13 @@ def call_tool(payload: ToolCallRequest, request: Request) -> ToolResultResponse:
 @router.post(
     "/ingest/sensor",
     response_model=IngestSensorResponse,
-    summary="追加传感器读数到会话缓冲（内存态）",
+    summary="追加传感器读数到会话缓冲（按会话隔离，写入 SQLite）",
 )
 def ingest_sensor(payload: IngestSensorRequest, request: Request) -> IngestSensorResponse:
     state: AppState = get_state(request)
     readings = _readings_to_dicts(payload.readings)
     total, first, last = state.append_readings(
-        payload.pond_id, readings, replace=payload.replace
+        _session_id(request), payload.pond_id, readings, replace=payload.replace
     )
     return IngestSensorResponse(
         pond_id=payload.pond_id,
@@ -353,7 +377,7 @@ def ingest_sensor(payload: IngestSensorRequest, request: Request) -> IngestSenso
 )
 def get_readings(pond_id: str, request: Request, limit: int = 200) -> dict[str, Any]:
     state: AppState = get_state(request)
-    items = state.get_readings(pond_id)
+    items = state.get_readings(_session_id(request), pond_id)
     limit = max(1, min(limit, state.settings.buffer_max))
     return {
         "pond_id": pond_id,
@@ -387,7 +411,7 @@ async def ingest_image(
             },
         )
 
-    state.register_upload(upload_id, dest)
+    state.register_upload(_session_id(request), upload_id, dest)
     return IngestImageResponse(
         upload_id=upload_id,
         filename=original.name,
@@ -588,11 +612,11 @@ def _answer_from_chunks(
 @router.get(
     "/ponds/{pond_id}/history",
     response_model=HistoryResponse,
-    summary="评估历史（内存态，进程重启即失效）",
+    summary="评估历史（按会话隔离，SQLite 持久化）",
 )
 def get_history(pond_id: str, request: Request, limit: int = 20) -> HistoryResponse:
     state: AppState = get_state(request)
-    items = state.get_history(pond_id)
+    items = state.get_history(_session_id(request), pond_id)
     limit = max(1, min(limit, state.settings.history_max))
     return HistoryResponse(pond_id=pond_id, total=len(items), items=items[-limit:][::-1])
 
@@ -755,7 +779,7 @@ async def detect_species(
             },
         )
 
-    state.register_upload(upload_id, dest)
+    state.register_upload(_session_id(request), upload_id, dest)
     return SpeciesDetectResponse(
         upload_id=upload_id,
         filename=original.name,

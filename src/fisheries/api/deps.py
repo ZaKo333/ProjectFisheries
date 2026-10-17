@@ -18,8 +18,11 @@
    > 已在 README「后续迭代」里记为待办。对「一个塘口看板」的并发量，
    > 串行化完全够用，且绝不会出错。
 
-3. **上传文件与内存缓冲都必须有上限。**
-   演示进程会被长时间挂着，没有上限的字典就是内存泄漏。
+3. **会话数据必须按会话隔离，而且不能放在进程内存里。**
+   原来三个 dict 只用 ``pond_id`` 当键（默认值还是 ``"unknown"``）：
+   两个浏览器用同一个塘号就会互相看到对方的读数，进程一重启又全丢。
+   现在交给 ``store.SessionStore``（SQLite），键是 ``(session_id, pond_id)``。
+   上限仍然保留：读数按 ``buffer_max``、历史按 ``history_max`` 截断。
 """
 
 from __future__ import annotations
@@ -27,7 +30,6 @@ from __future__ import annotations
 import os
 import threading
 import time
-from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -38,6 +40,7 @@ from ..agent.orchestrator import (
     knowledge_enabled_by_default,
 )
 from ..tools.water_risk import MAX_EXTRAPOLATION_HOURS, MIN_RELIABLE_POINTS, PERSISTENCE_CAP
+from .store import SessionStore
 
 __all__ = ["ApiSettings", "AppState", "get_state", "project_root"]
 
@@ -82,6 +85,10 @@ class ApiSettings:
     max_upload_mb: int = 10
     history_max: int = 200
     buffer_max: int = 5000
+    #: 会话库（SQLite）落点。None 表示跟着 ``upload_dir`` 走：
+    #: 默认 ``data/uploads/api_state.sqlite3``。放上传目录旁边是刻意的——
+    #: 换个上传目录就等于换一套会话数据，测试与演示天然隔离。
+    state_db: Path | None = None
     api_title: str = "ProjectFisheries Agent API"
     api_version: str = "0.1.0"
 
@@ -90,12 +97,15 @@ class ApiSettings:
         root = project_root()
         raw_dir = os.environ.get("FISHERIES_API_UPLOAD_DIR")
         upload_dir = Path(raw_dir) if raw_dir else root / "data" / "uploads"
+        raw_db = os.environ.get("FISHERIES_API_STATE_DB")
+        state_db = Path(raw_db) if raw_db else None
         return cls(
             upload_dir=upload_dir,
             allow_local_path=_env_bool("FISHERIES_API_ALLOW_LOCAL_PATH", True),
             max_upload_mb=_env_int("FISHERIES_API_MAX_UPLOAD_MB", 10),
             history_max=_env_int("FISHERIES_API_HISTORY_MAX", 200),
             buffer_max=_env_int("FISHERIES_API_BUFFER_MAX", 5000),
+            state_db=state_db,
         )
 
 
@@ -117,9 +127,14 @@ class AppState:
         # `_prepare_knowledge()` 在降级路径里会往 `self.notes` 追加提示，
         # 如果它排在后面，知识库一旦不可用就会抛 AttributeError——
         # 恰好把「优雅降级」写成了「启动即崩」，而那正是最需要它工作的场景。
-        self.uploads: dict[str, Path] = {}
-        self.buffers: dict[str, deque[dict[str, Any]]] = {}
-        self.history: dict[str, deque[Any]] = {}
+        # 会话数据（读数 / 历史 / 上传）统一走 SQLite：
+        # 键是 (session_id, pond_id)，进程重启不丢，两个客户端也不会串。
+        db_path = self.settings.state_db or (self.settings.upload_dir / "api_state.sqlite3")
+        self.store = SessionStore(
+            db_path,
+            buffer_max=self.settings.buffer_max,
+            history_max=self.settings.history_max,
+        )
         self.notes: list[str] = []
 
         #: 启动时就把知识库打开/判定好，避免首个请求卡顿，也避免并发重复加载。
@@ -178,47 +193,38 @@ class AppState:
         }
 
     # ------------------------------------------------------------------ #
-    # 会话数据（内存态，进程重启即失效）
+    # 会话数据（SQLite，按 session 隔离，进程重启不丢）
     # ------------------------------------------------------------------ #
 
     def append_readings(
-        self, pond_id: str, readings: list[dict[str, Any]], *, replace: bool = False
-    ) -> tuple[int, dict[str, Any] | None, dict[str, Any] | None]:
-        """把读数写进会话缓冲，返回 (总数, 首条, 末条)。"""
-        with self.data_lock:
-            deck = self.buffers.get(pond_id)
-            if deck is None or replace:
-                deck = deque(maxlen=self.settings.buffer_max)
-                self.buffers[pond_id] = deck
-            deck.extend(readings)
-            items = list(deck)
-        first = items[0].get("timestamp") if items else None
-        last = items[-1].get("timestamp") if items else None
-        return len(items), first, last
+        self,
+        session_id: str,
+        pond_id: str,
+        readings: list[dict[str, Any]],
+        *,
+        replace: bool = False,
+    ) -> tuple[int, str | None, str | None]:
+        """把读数写进**这个会话的**缓冲，返回 (总数, 首条时间戳, 末条时间戳)。"""
+        return self.store.append_readings(session_id, pond_id, readings, replace=replace)
 
-    def get_readings(self, pond_id: str) -> list[dict[str, Any]]:
-        with self.data_lock:
-            return list(self.buffers.get(pond_id, ()))
+    def get_readings(self, session_id: str, pond_id: str) -> list[dict[str, Any]]:
+        return self.store.get_readings(session_id, pond_id)
 
-    def register_upload(self, upload_id: str, path: Path) -> None:
-        with self.data_lock:
-            self.uploads[upload_id] = path
+    def register_upload(self, session_id: str, upload_id: str, path: Path) -> None:
+        self.store.register_upload(session_id, upload_id, path)
 
-    def lookup_upload(self, upload_id: str) -> Path | None:
-        with self.data_lock:
-            return self.uploads.get(upload_id)
+    def lookup_upload(self, session_id: str, upload_id: str) -> Path | None:
+        return self.store.lookup_upload(session_id, upload_id)
 
-    def record(self, pond_id: str, result: Any) -> None:
-        with self.data_lock:
-            deck = self.history.get(pond_id)
-            if deck is None:
-                deck = deque(maxlen=self.settings.history_max)
-                self.history[pond_id] = deck
-            deck.append(result)
+    def record(self, session_id: str, pond_id: str, result: Any) -> None:
+        self.store.record(session_id, pond_id, result)
 
-    def get_history(self, pond_id: str) -> list[Any]:
-        with self.data_lock:
-            return list(self.history.get(pond_id, ()))
+    def get_history(self, session_id: str, pond_id: str) -> list[Any]:
+        return self.store.get_history(session_id, pond_id)
+
+    def close(self) -> None:
+        """释放 SQLite 连接（lifespan 结束时调用）。"""
+        self.store.close()
 
     # ------------------------------------------------------------------ #
 
@@ -263,6 +269,7 @@ class AppState:
             "max_upload_mb": s.max_upload_mb,
             "history_max": s.history_max,
             "buffer_max": s.buffer_max,
+            "state_db": str(s.state_db or (s.upload_dir / "api_state.sqlite3")),
             "extrapolation_horizon_hours": MAX_EXTRAPOLATION_HOURS,
             "min_reliable_points": MIN_RELIABLE_POINTS,
             "persistence_cap": PERSISTENCE_CAP,

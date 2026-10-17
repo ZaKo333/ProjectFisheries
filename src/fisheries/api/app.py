@@ -27,8 +27,9 @@ import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -37,6 +38,7 @@ from .. import weights as _weights
 from .deps import ApiSettings, AppState
 from .routes import router
 from .static import WEB_MOUNT_PATH, mount_web, resolve_web_dir
+from .store import SESSION_COOKIE, SESSION_HEADER, is_valid_session_id, new_session_id
 
 __all__ = ["app", "create_app", "main"]
 
@@ -63,9 +65,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        # 内存态数据没有落盘需求，这里只做显式释放，避免测试间残留引用。
-        state.buffers.clear()
-        state.history.clear()
+        # 会话数据已经在 SQLite 里，关连接即可；不要删库——
+        # 删了就等于「重启丢数据」，而这正是这次要修的问题。
+        state.close()
 
 
 def create_app(
@@ -97,6 +99,45 @@ def create_app(
         ),
         lifespan=_lifespan,
     )
+
+    @application.middleware("http")
+    async def _attach_session(request: Request, call_next: Any) -> Response:
+        """给每个请求定一个会话标识，并保证响应里能把它带回去。
+
+        优先级：请求头 ``X-Session-Id``（脚本/多会话联调用）> cookie > 新生成。
+        头存在但不合法时**直接 400**，不静默降级——否则两个客户端以为自己
+        隔离了，其实一起落在新生成的随机会话里，排障时完全看不出来。
+        """
+        raw_id = request.headers.get(SESSION_HEADER)
+        created = False
+        if raw_id is not None:
+            if not is_valid_session_id(raw_id):
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "detail": f"{SESSION_HEADER} 不合法：需要 8~64 位字母/数字/下划线/短横线"
+                    },
+                )
+            session_id = raw_id
+        else:
+            session_id = request.cookies.get(SESSION_COOKIE, "")
+            if not is_valid_session_id(session_id):
+                session_id = new_session_id()
+                created = True
+        request.state.session_id = session_id
+        response = await call_next(request)
+        response.headers[SESSION_HEADER] = session_id
+        if created:
+            # 30 天：演示场景下没必要让用户第二天回来就丢历史。
+            # httponly 是防脚本读取，不是鉴权——session_id 只做隔离。
+            response.set_cookie(
+                SESSION_COOKIE,
+                session_id,
+                max_age=30 * 24 * 3600,
+                httponly=True,
+                samesite="lax",
+            )
+        return response
 
     if enable_cors is None:
         raw = os.environ.get("FISHERIES_API_ENABLE_CORS", "1").strip().lower()

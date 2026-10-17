@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import os
@@ -32,6 +33,7 @@ from starlette.testclient import TestClient
 from fisheries.agent.orchestrator import KNOWLEDGE_DISABLE_ENV
 from fisheries.api.app import create_app
 from fisheries.api.deps import ApiSettings
+from fisheries.api.store import SESSION_COOKIE, SESSION_HEADER, is_valid_session_id
 
 # --------------------------------------------------------------------------- #
 # 夹具
@@ -1060,3 +1062,125 @@ class TestConcurrency:
             expected = "高危" if i % 2 else "正常"
             assert body["risk_level"] == expected
             assert body["trace"], "轨迹不应为空"
+
+# --------------------------------------------------------------------------- #
+# 会话隔离（一个浏览器一个会话，串不了台）
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def make_client(upload_dir):
+    """按需创建多个 ``TestClient``，用来模拟「两个浏览器」。
+
+    每个 ``TestClient`` 有自己的 cookie jar；不显式传 ``X-Session-Id`` 时，
+    第一次请求会各自拿到一个新会话。同一个 ``upload_dir`` 意味着共用同一个
+    SQLite 文件，正好用来验证「隔离靠会话，不靠进程」。
+    """
+    stack = contextlib.ExitStack()
+
+    def _make(**kwargs):
+        settings = ApiSettings(upload_dir=upload_dir, **kwargs)
+        return stack.enter_context(TestClient(create_app(settings)))
+
+    yield _make
+    stack.close()
+
+
+class TestSessionIsolation:
+    def test_two_browsers_with_the_same_pond_id_do_not_mix(self, make_client):
+        """默认塘号都是 ``unknown``，原来两边能互相看见数据——这就是那个 bug。"""
+        first, second = make_client(), make_client()
+        first.post(
+            "/api/v1/ingest/sensor", json={"pond_id": "S1", "readings": crashing_water()}
+        )
+        assert second.get("/api/v1/ponds/S1/readings").json()["total"] == 0
+
+        second.post(
+            "/api/v1/ingest/sensor", json={"pond_id": "S1", "readings": good_water(5)}
+        )
+        assert first.get("/api/v1/ponds/S1/readings").json()["total"] == 24
+        assert second.get("/api/v1/ponds/S1/readings").json()["total"] == 5
+
+    def test_assess_with_use_buffer_cannot_borrow_another_sessions_water(self, make_client):
+        owner, stranger = make_client(), make_client()
+        owner.post(
+            "/api/v1/ingest/sensor", json={"pond_id": "S2", "readings": crashing_water()}
+        )
+        # 陌生人自己的缓冲是空的：拿不到数据就明确报错（409 缓冲为空），
+        # 而不是悄悄借别人的水来算。
+        resp = stranger.post("/api/v1/assess", json={"pond_id": "S2", "use_buffer": True})
+        assert resp.status_code == 409
+        assert str(resp.json()["detail"]).strip()
+
+    def test_same_header_shares_one_session(self, make_client):
+        """同一个 ``X-Session-Id`` 就是同一个会话：脚本/多标签页联调靠这个。"""
+        header = {SESSION_HEADER: "shared-session-0001"}
+        first, second = make_client(), make_client()
+        first.post(
+            "/api/v1/ingest/sensor",
+            json={"pond_id": "S3", "readings": crashing_water()},
+            headers=header,
+        )
+        back = second.get("/api/v1/ponds/S3/readings", headers=header).json()
+        assert back["total"] == 24
+
+    def test_invalid_header_is_rejected_instead_of_silently_downgraded(self, client):
+        """不合法就 400：静默给个新会话，客户端会以为自己隔离了。"""
+        resp = client.get("/api/v1/health", headers={SESSION_HEADER: "bad"})
+        assert resp.status_code == 400
+        assert SESSION_HEADER in resp.json()["detail"]
+
+    def test_every_response_carries_the_session_id_and_sets_the_cookie(self, client):
+        resp = client.get("/api/v1/health")
+        assert resp.status_code == 200
+        sid = resp.headers[SESSION_HEADER]
+        assert is_valid_session_id(sid)
+        assert resp.cookies.get(SESSION_COOKIE) == sid
+        # 下一次请求靠 cookie 复用同一个会话，不能每次都换新 id。
+        assert client.get("/api/v1/health").headers[SESSION_HEADER] == sid
+
+    def test_history_is_isolated_too(self, make_client):
+        first, second = make_client(), make_client()
+        first.post("/api/v1/assess", json={"pond_id": "S4", "readings": good_water()})
+        assert first.get("/api/v1/ponds/S4/history").json()["total"] == 1
+        assert second.get("/api/v1/ponds/S4/history").json()["total"] == 0
+
+    def test_upload_from_another_session_is_not_found(self, make_client):
+        """``upload_id`` 不是凭据，但它属于某个会话；换会话就应当查不到。"""
+        owner, stranger = make_client(), make_client()
+        up = owner.post(
+            "/api/v1/ingest/image",
+            files={"file": ("fish.png", b"\x89PNG\r\n\x1a\n" + b"0" * 400, "image/png")},
+        ).json()
+        resp = stranger.post(
+            "/api/v1/assess", json={"pond_id": "S5", "upload_id": up["upload_id"]}
+        )
+        assert resp.status_code == 404
+        assert up["upload_id"] in str(resp.json()["detail"])
+
+    def test_data_survives_restarting_the_app_on_the_same_directory(self, upload_dir, make_client):
+        """换一个 app 实例 = 进程重启：库文件还在，数据与历史都还在。"""
+        header = {SESSION_HEADER: "restart-session-0001"}
+        before = make_client()
+        before.post(
+            "/api/v1/ingest/sensor",
+            json={"pond_id": "S6", "readings": good_water(6)},
+            headers=header,
+        )
+        before.post("/api/v1/assess", json={"pond_id": "S6", "readings": good_water()}, headers=header)
+        assert (upload_dir / "api_state.sqlite3").is_file()
+
+        after = make_client()
+        assert after.get("/api/v1/ponds/S6/readings", headers=header).json()["total"] == 6
+        assert after.get("/api/v1/ponds/S6/history", headers=header).json()["total"] == 1
+
+    def test_state_db_can_be_pinned_elsewhere(self, upload_dir, tmp_path):
+        """``FISHERIES_API_STATE_DB`` 把会话数据放到指定路径（容器里挂卷用）。"""
+        pinned = tmp_path / "elsewhere" / "state.sqlite3"
+        pinned.parent.mkdir()
+        app = create_app(ApiSettings(upload_dir=upload_dir, state_db=pinned))
+        with TestClient(app) as c:
+            c.post("/api/v1/ingest/sensor", json={"pond_id": "S7", "readings": good_water(2)})
+        assert pinned.is_file()
+        assert not (upload_dir / "api_state.sqlite3").exists()
+

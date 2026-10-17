@@ -102,7 +102,7 @@
     },
     "/api/v1/ingest/sensor": {
       "post": {
-        "summary": "追加传感器读数到会话缓冲（内存态）",
+        "summary": "追加传感器读数到会话缓冲（按会话隔离，写入 SQLite）",
         "operationId": "ingest_sensor_api_v1_ingest_sensor_post",
         "requestBody": {
           "content": {
@@ -267,7 +267,7 @@
     },
     "/api/v1/ponds/{pond_id}/history": {
       "get": {
-        "summary": "评估历史（内存态，进程重启即失效）",
+        "summary": "评估历史（按会话隔离，SQLite 持久化）",
         "operationId": "get_history_api_v1_ponds__pond_id__history_get",
         "parameters": [
           {
