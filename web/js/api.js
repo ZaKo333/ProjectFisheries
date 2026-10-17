@@ -60,6 +60,7 @@
 
   const STATUS_MSG = {
     400: "上传内容为空。",
+    401: "需要访问口令：服务端开启了鉴权，请先在登录页输入口令（脚本里用 Authorization: Bearer <token>）。",
     403: "服务器已禁用「按本地路径读图」，请改用图片上传。",
     404: "请求的资源不存在（如 upload_id 或图片路径、工具名、模板 key）。",
     409: "声明使用会话缓冲，但缓冲里没有读数。请先上传传感器数据，或直接传入 readings。",
@@ -153,6 +154,12 @@
     }
 
     if (!resp.ok) {
+      // 401 = 服务端开了访问口令：页面模式下直接带去登录页（保留当前页做回跳），
+      // 免得用户看到一堆「请求失败」却不知道该先登录。脚本/非 HTTP 页面保持原样。
+      if (resp.status === 401 && isHttpPage() && !state.baseURL) {
+        const back = global.location.pathname + global.location.hash;
+        global.location.replace("/login?next=" + encodeURIComponent(back));
+      }
       throw makeError(resp.status, body);
     }
     return body;

@@ -676,7 +676,7 @@ curl -X POST http://127.0.0.1:8812/api/v1/assess \
       }'
 ```
 
-**接口层的五条设计约束**：
+**接口层的六条设计约束**：
 
 - 接口层不重新实现业务逻辑，只做四件事：校验入参、调用已实现的工具 / Agent、转成稳定契约、把异常转成明确状态码。
 - 契约用 `extra="forbid"`——请求里多写一个字段返回 **422 而不是静默忽略**，字段拼错会立刻报错。
@@ -686,6 +686,10 @@ curl -X POST http://127.0.0.1:8812/api/v1/assess \
   （请求头 `X-Session-Id` > cookie `fisheries_session` > 首次访问自动签发；头不合法直接 400），
   落在 `data/uploads/api_state.sqlite3`（`FISHERIES_API_STATE_DB` 可改）。
   两个浏览器用同一个塘号也串不了台，进程重启数据还在。
+- **公网部署必须开口令**：设了 `FISHERIES_API_TOKEN` 后，除 `/api/v1/health`、静态页
+  `/app/` 与登录/登出路由外，所有接口都要带 `Authorization: Bearer <token>`；
+  浏览器首次访问会被 303 跳到 `/login`，登录后下发 `fisheries_auth` cookie（30 天，
+  值是口令的 SHA-256 而非口令本身）。没设这个变量=完全开放，只适合本机或内网。
 - 知识库不可用时 `/assess` 仍返回 200，只在 `degraded_reasons` 里写明「未引用规范依据」；
   只有 `/chat` 本身是知识库功能，会返回 503。
 
@@ -808,7 +812,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1280 项
+python -m pytest -m "not integration"        # 单元测试：1312 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -821,7 +825,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1280 项）
+### 11.1 单元测试（1312 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -832,6 +836,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
 | `test_rag.py` | 105 | front-matter、分块、RRF 融合、清单一致性守卫 |
 | `test_api.py` | 99 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
+| `test_api_auth.py` | 32 | 访问口令：未配口令照常开放、配了之后 401 + `WWW-Authenticate`、Bearer 大小写、登录/登出与 cookie（值是口令的 SHA-256）、导航跳转、`next` 只收站内路径 |
 | `test_api_rag.py` | 34 | 接口层 × 真实知识库的一致性、溯源标记 |
 | `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |
 | `test_web_contract.py` | 26 | 前端静态托管、`dict.js` 枚举码 vs 后端源码、`api.js` 路径 vs OpenAPI |
@@ -1044,10 +1049,11 @@ python scripts/train_lesion_seg.py --epochs 80   # 重新训练 + 评估
 100% 里有多少是「记住了原图」无法排除——它只服务粗档位，不值得为它重新组织划分。
 真要提升，缺的是分种标注与蟹类图片。
 
-### 12.6 会话缓冲是内存态
+### 12.6 会话缓冲已落 SQLite，但还没做限流
 
-接口层的塘口读数缓冲与历史记录都在进程内存里，**重启即丢**。
-做演示够用；要做成长期监测需要落到数据库，并补上鉴权与限流。
+接口层的塘口读数缓冲、历史记录与上传登记都按会话隔离，并落在
+`data/uploads/api_state.sqlite3`，**进程重启不丢**；访问口令见 §8（`FISHERIES_API_TOKEN`）。
+仍然缺的是**限流**与多副本：单进程 + SQLite 适合一台机器长期跑，不适合横向扩展。
 
 ### 12.7 工程不自带数据集
 

@@ -35,6 +35,14 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from .. import weights as _weights
+from .auth import (
+    LOGIN_PATH,
+    configured_token,
+    is_authorized,
+    is_public_path,
+    register_auth_routes,
+    unauthorized_response,
+)
 from .deps import ApiSettings, AppState
 from .routes import router
 from .static import WEB_MOUNT_PATH, mount_web, resolve_web_dir
@@ -139,6 +147,23 @@ def create_app(
             )
         return response
 
+    @application.middleware("http")
+    async def _require_token(request: Request, call_next: Any) -> Response:
+        """配置了 ``FISHERIES_API_TOKEN`` 时先验口令，没配就直通。
+
+        定义在会话中间件**之后**，所以它在外层先执行：未通过鉴权的请求
+        连会话都不会被创建，也就不会往 SQLite 里写无意义的数据。
+
+        ``OPTIONS`` 一律放行——那是浏览器的 CORS 预检，不带自定义头；
+        由后面的 CORS 中间件负责应答。
+        """
+        token = configured_token()
+        if token is None or request.method == "OPTIONS" or is_public_path(request.url.path):
+            return await call_next(request)
+        if is_authorized(request, token):
+            return await call_next(request)
+        return unauthorized_response(request)
+
     if enable_cors is None:
         raw = os.environ.get("FISHERIES_API_ENABLE_CORS", "1").strip().lower()
         enable_cors = raw in {"1", "true", "yes", "on"}
@@ -163,6 +188,8 @@ def create_app(
     application.state._pending_settings = settings  # type: ignore[attr-defined]
 
     application.include_router(router)
+    # 登录/登出路由不属于业务接口，单独挂；口令未配置时 /login 会直接跳回 /app/。
+    register_auth_routes(application)
 
     # 静态前端放最后挂：接口路由优先匹配，/app 只吃自己前缀下的路径，
     # 因此 /docs、/openapi.json、/api/v1/** 都不受影响。
@@ -178,6 +205,9 @@ def create_app(
                 "docs": "/docs",
                 "openapi": "/openapi.json",
                 "health": "/api/v1/health",
+                # 配了口令的话，浏览器要先走 /login；脚本直接带 Bearer 头。
+                "auth_required": configured_token() is not None,
+                "login": LOGIN_PATH,
                 # 演示前端没跟这份部署一起带出来时这里是 None，
                 # 调用方据此决定要不要把用户往页面上引。
                 "app": WEB_MOUNT_PATH if web_dir is not None else None,
@@ -226,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[fisheries] 启动接口服务 http://{host}:{port}  (docs: /docs)")
     if resolve_web_dir() is not None:
         print(f"[fisheries] 演示前端   http://{host}:{port}{WEB_MOUNT_PATH}/")
+    if configured_token() is not None:
+        print(f"[fisheries] 已启用访问口令（{LOGIN_PATH} 登录；脚本用 Authorization: Bearer <token>）")
     uvicorn.run(
         "fisheries.api.app:app",
         host=host,
