@@ -824,7 +824,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1354 项
+python -m pytest -m "not integration"        # 单元测试：1355 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -837,7 +837,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1354 项）
+### 11.1 单元测试（1355 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -847,7 +847,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
 | `test_rag.py` | 105 | front-matter、分块、RRF 融合、清单一致性守卫 |
-| `test_api.py` | 110 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
+| `test_api.py` | 111 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
 | `test_api_auth.py` | 32 | 访问口令：未配口令照常开放、配了之后 401 + `WWW-Authenticate`、Bearer 大小写、登录/登出与 cookie（值是口令的 SHA-256）、导航跳转、`next` 只收站内路径 |
 | `test_api_rag.py` | 34 | 接口层 × 真实知识库的一致性、溯源标记 |
 | `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |

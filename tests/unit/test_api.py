@@ -746,6 +746,33 @@ class TestNoServerPathsInResponses:
         assert stored.endswith(".png"), stored
 
 
+class TestPackageImport:
+    """``python -m fisheries.api.app`` 会先 import 包；包若急着导入 ``.app``，
+    解释器会打印 ``RuntimeWarning: 'fisheries.api.app' found in sys.modules``。
+    这条警告会刷在 ``api.log`` 里，看起来像错误，所以钉住「包不拉 .app」。
+    """
+
+    def test_package_does_not_pull_in_the_app_module(self) -> None:
+        import subprocess
+        import sys
+        from pathlib import Path as _Path
+
+        root = _Path(__file__).resolve().parents[2]
+        env = dict(os.environ, PYTHONPATH=str(root / "src"))
+        code = "import sys, fisheries.api; print('fisheries.api.app' in sys.modules)"
+        out = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(root),
+            timeout=120,
+            check=False,
+        )
+
+        assert out.returncode == 0, out.stderr
+        assert out.stdout.strip() == "False"
+
 class TestLlmFailureReason:
     """降级文案要能自己解释「为什么失败」，但不能把密钥带出去。"""
 

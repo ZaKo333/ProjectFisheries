@@ -85,7 +85,7 @@ function Fail([string]$msg) {
     Write-Host "DEPLOY_FAIL: $msg" -ForegroundColor Red
     if (Test-Path $ServerLog) {
         Write-Host "---- last 40 lines of $ServerLog ----" -ForegroundColor Yellow
-        Get-Content $ServerLog -Tail 40 | ForEach-Object { Write-Host $_ }
+        Get-Content $ServerLog -Tail 40 -Encoding UTF8 | ForEach-Object { Write-Host $_ }
     }
     exit 1
 }
@@ -130,8 +130,13 @@ if ($CodeSha) {
     if ($LASTEXITCODE -ne 0) { Fail "tar.exe could not extract $codeZip" }
     $inner = @(Get-ChildItem -Path $codeTmp -Directory)
     if ($inner.Count -ne 1) { Fail "archive $codeZip should hold exactly one root folder, found $($inner.Count)" }
-    if (-not $inner[0].Name.EndsWith($short)) {
-        Fail "archive root is '$($inner[0].Name)' but the requested commit is $short"
+    # GitHub names the folder after the FULL sha (ProjectFisheries-<40 chars>),
+    # so a 7-char short sha never matches - accept either form.
+    $root = $inner[0].Name
+    $rootOk = $root.StartsWith("ProjectFisheries-") -and
+        ($root.EndsWith($CodeSha) -or $root.EndsWith($short))
+    if (-not $rootOk) {
+        Fail "archive root is '$root' but the requested commit is $CodeSha"
     }
     New-Item -ItemType Directory -Force -Path $App | Out-Null
     # /E copies without deleting: data/ and models/ inside $App must survive.

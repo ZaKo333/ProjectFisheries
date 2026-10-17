@@ -131,7 +131,11 @@ class TestCodeUpdate:
 
     def test_extracted_root_must_match_the_sha(self) -> None:
         text = _text()
-        assert 'EndsWith($short)' in text, "必须校验解包出来的根目录名以短 SHA 结尾，否者等于没校验"
+        # GitHub 的归档根目录是 ProjectFisheries-<完整 40 位 sha>：
+        # 只比对 7 位短 SHA 一定失败（线上真实发生过）。
+        assert 'StartsWith("ProjectFisheries-")' in text
+        assert "EndsWith($CodeSha)" in text, "必须接受完整 SHA 的归档根目录"
+        assert "EndsWith($short)" in text, "也要接受短 SHA 的写法"
 
     def test_copy_never_deletes_data_or_models(self) -> None:
         text = _text()

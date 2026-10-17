@@ -32,9 +32,32 @@ schemas  请求 / 响应数据契约（Pydantic v2，全部 ``extra="forbid"``�
 自动走 mock 并在响应里标注 ``degraded_mode=true``。
 """
 
-from .app import app, create_app, main
-from .deps import ApiSettings, AppState, get_state, project_root
-from .routes import router
+import importlib
+
+_LAZY = {
+    "app": (".app", "app"),
+    "create_app": (".app", "create_app"),
+    "main": (".app", "main"),
+    "ApiSettings": (".deps", "ApiSettings"),
+    "AppState": (".deps", "AppState"),
+    "get_state": (".deps", "get_state"),
+    "project_root": (".deps", "project_root"),
+    "router": (".routes", "router"),
+}
+
+
+def __getattr__(name: str):
+    """按需导入。
+
+    ``python -m fisheries.api.app`` 会先导入包 ``fisheries.api``；若包的
+    ``__init__`` 里就把 ``.app`` 拉进来，解释器会打印
+    ``RuntimeWarning: 'fisheries.api.app' found in sys.modules ...``。
+    """
+    try:
+        module_name, attr = _LAZY[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    return getattr(importlib.import_module(module_name, __name__), attr)
 
 __all__ = [
     "ApiSettings",
