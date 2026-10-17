@@ -213,14 +213,15 @@
 --------------------------------------------------------------------------------
 
   <工程>\
-      启动项目.bat            ← 双击这个（转发到 run-api.bat）
-      启动接口服务.bat            同上，中文名更直白
-      运行自检.bat                转发到 run-selftest.bat
-      run-api.bat             ↑ 这三个是实际逻辑，纯 ASCII，别改出中文来
+      启动接口服务.bat          ← 双击这个（转发到 run-api.bat，同时托管网页）
+      运行自检.bat                 转发到 run-selftest.bat
+      一键配置环境.bat             转发到 setup.bat（第一次用先双击它）
+      setup.bat                ↑ 这四个是实际逻辑，纯 ASCII，别改出中文来
+      run-api.bat
       run-selftest.bat
       使用说明.txt             本文件
       README.md               项目全貌：做了什么、怎么设计的、怎么验收的
-      项目说明及流程.txt      项目背景、选题、开发流程的说明材料
+      docs\项目说明及流程.txt  项目背景、选题、开发流程的说明材料
       web\                    网页界面本身（纯原生 HTML/CSS/JS，不需要编译）
       examples\pond_demo_water.csv   示例水质表格
       templates\                    12 个内置水质场景模板（页面下拉框用的就是它们）
