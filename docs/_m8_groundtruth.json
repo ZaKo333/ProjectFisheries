@@ -1,0 +1,18 @@
+{
+  "metric_kind": "human_label_accuracy",
+  "metric_label": "人工标签准确率（独立真值）",
+  "levels": [
+    "正常",
+    "预警",
+    "高危"
+  ],
+  "n_sampled": 100,
+  "n_labeled": 0,
+  "n_missing": 100,
+  "min_labels": 20,
+  "species": "鲤科",
+  "horizon_hours": 72,
+  "status": "pending_labels",
+  "reason": "人工标注只有 0 条，少于 20 条，按约定不出指标（宁可显示待标注，也不拿几条样本算准确率）",
+  "annotators": []
+}

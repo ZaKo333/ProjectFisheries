@@ -1,0 +1,48 @@
+{
+  "n_samples": 100,
+  "levels": [
+    "正常",
+    "预警",
+    "高危"
+  ],
+  "min_labels": 20,
+  "columns": [
+    "window_id",
+    "pond_id",
+    "started_at",
+    "ended_at",
+    "n_points",
+    "water_temp",
+    "ph",
+    "dissolved_oxygen",
+    "ammonia_n",
+    "nitrite_n",
+    "free_ammonia_mg_l",
+    "human_level",
+    "annotator",
+    "note"
+  ],
+  "human_columns": [
+    "human_level",
+    "annotator",
+    "note"
+  ],
+  "generated_at": "2026-10-17T15:28:24",
+  "n_requested": 100,
+  "seed": 42,
+  "window_hours": 3.0,
+  "stride_hours": 3.0,
+  "min_gap_hours": 24.0,
+  "aggregate_minutes": 10,
+  "ponds": [
+    "IoTPond2",
+    "IoTPond3",
+    "IoTPond4",
+    "IoTPond6",
+    "IoTPond7",
+    "IoTPond8",
+    "IoTPond9",
+    "IoTpond1"
+  ],
+  "source": "data/datasets/wq_ponds（load_ponds 默认目录）"
+}

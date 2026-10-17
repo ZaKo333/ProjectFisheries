@@ -14,18 +14,23 @@
 - `runner`：调用规则引擎、把预测与阈值标签配成对、切片误报漏报
 - `do_trend`：**有真值的那一组**——用池塘溶氧序列比较引擎的混合基线外推
   与持久性基线（真值是真实发生的未来读数，不是算出来的）
+- `groundtruth`：**唯一有人工真值的一组**——从同一份数据分层抽样
+  （`data/eval_groundtruth/`），由人逐条判等级，算「人工标签准确率」；
+  不足 `MIN_LABELS` 条不出指标（宁可显示待标注）
 - `report`：渲染成 Markdown 评测报告
 
-## 这两组验证的独立性不一样，别混着引用
+## 这三组验证的独立性不一样，别混着引用
 
-| | 第一组（`runner`） | 第二组（`do_trend`） |
-|---|---|---|
-| 真值 | **按同一套阈值现算的** | **真实发生的未来读数** |
-| 独立性 | ⚠ 不独立 | ✅ 独立 |
-| 量的是什么 | 两套阈值口径（最坏情况 vs 加权评分）的分歧 | 混合基线外推相对持久性基线的优劣 |
+| | 第一组（`runner`） | 第二组（`do_trend`） | 第三组（`groundtruth`） |
+|---|---|---|---|
+| 真值 | **按同一套阈值现算的** | **真实发生的未来读数** | **人逐条判的等级** |
+| 独立性 | ⚠ 不独立 | ✅ 独立 | ✅ 独立 |
+| 量的是什么 | 两套阈值口径（最坏情况 vs 加权评分）的分歧 | 混合基线外推相对持久性基线的优劣 | 引擎判得**对不对** |
+| 能叫「准确率」吗 | ❌ 只能叫**规则一致性** | ❌ 是相对基线的优劣 | ✅ **只有这个能** |
 
-第一组的准确率**不是**「引擎准确率」——标签和引擎用的是同一套阈值依据。
-这条警告在 `report.py` 与 `docs/M8_评测报告.md` 里都逐字写着。
+第一组的 71.9%**不是**「引擎准确率」——标签和引擎用的是同一套阈值依据，
+它证明的是「代码没写错、两条实现基本一致」。这条警告在 `report.py`
+与 `docs/M8_评测报告.md` 里都逐字写着；真正的准确率看第三组。
 """
 
 from __future__ import annotations
@@ -56,6 +61,20 @@ from .labels import (
     worst_indicators,
 )
 from .metrics import ClassReport, ConfusionMatrix, MacroReport, describe, spearman
+from .groundtruth import (
+    DEFAULT_DIR as GT_DEFAULT_DIR,
+    DEFAULT_N as GT_DEFAULT_N,
+    DEFAULT_SEED as GT_DEFAULT_SEED,
+    MIN_LABELS as GT_MIN_LABELS,
+    LabeledWindow,
+    WindowSample,
+    check_isolation,
+    evaluate as evaluate_groundtruth,
+    labeled_rows,
+    read_sample,
+    sample_windows,
+    write_sample,
+)
 from .ponds import (
     AGGREGATE_MINUTES,
     COLUMN_ALIASES,
@@ -82,52 +101,64 @@ from .runner import EvalRun, EvalSample, evaluate, run_engine
 __all__ = [
     "AGGREGATE_MINUTES",
     "AQUA_BANDS",
-    "COLUMN_ALIASES",
+    "check_isolation",
     "ClassReport",
     "CoherenceReport",
+    "COLUMN_ALIASES",
     "ConfusionMatrix",
     "DATASET_NAME",
     "DEFAULT_DIR",
     "DEFAULT_HISTORY_POINTS",
     "DEFAULT_LEAD_POINTS",
     "DEFAULT_STEP_MINUTES",
+    "describe",
     "DoTrendReport",
     "EvalRun",
     "EvalSample",
+    "evaluate",
+    "evaluate_do_trend",
+    "evaluate_groundtruth",
+    "growth_coherence",
+    "GT_DEFAULT_DIR",
+    "GT_DEFAULT_N",
+    "GT_DEFAULT_SEED",
+    "GT_MIN_LABELS",
     "HISTORY_CHOICES",
+    "indicator_severities",
     "IndicatorBand",
+    "iter_do_series",
+    "iter_windows",
+    "label_distribution",
+    "label_indicators",
+    "labeled_rows",
+    "LabeledWindow",
+    "load_pond",
+    "load_ponds",
     "MacroReport",
+    "parse_timestamp",
+    "pond_outcomes",
     "PondDoSeries",
     "PondOutcome",
     "PondSample",
     "PondWindow",
     "ProjectionScore",
     "RANGES",
-    "REQUIRED_FIELDS",
-    "RISK_LEVELS",
-    "RISK_ORDINAL",
-    "STRIDE_HOURS",
-    "UNIT_DIVISORS",
-    "WINDOW_HOURS",
-    "describe",
-    "evaluate",
-    "evaluate_do_trend",
-    "growth_coherence",
-    "indicator_severities",
-    "iter_do_series",
-    "iter_windows",
-    "label_distribution",
-    "label_indicators",
-    "load_pond",
-    "load_ponds",
-    "parse_timestamp",
-    "pond_outcomes",
+    "read_sample",
     "render_report",
     "render_run_section",
+    "REQUIRED_FIELDS",
     "resolve_columns",
+    "RISK_LEVELS",
+    "RISK_ORDINAL",
     "run_engine",
+    "sample_windows",
     "score_series",
     "spearman",
+    "STRIDE_HOURS",
     "summarize_samples",
+    "UNIT_DIVISORS",
+    "WINDOW_HOURS",
+    "WindowSample",
     "worst_indicators",
+    "write_sample",
 ]

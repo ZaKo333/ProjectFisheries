@@ -1,5 +1,7 @@
 {
-  "generated_at": "2026-10-17 15:09:44 +0800",
+  "generated_at": "2026-10-17 15:32:15 +0800",
+  "metric_kind": "rule_consistency",
+  "metric_label": "规则一致性准确率（引擎输出 vs 离线阈值脚本，不是与事实相符的准确率）",
   "protocol": {
     "species": "鲤科",
     "horizon_hours": 72,
@@ -435,8 +437,8 @@
       "n_calls": 3183,
       "n_failed": 0,
       "n_ok": 3183,
-      "elapsed_seconds": 1.23,
-      "ms_per_call": 0.39,
+      "elapsed_seconds": 1.35,
+      "ms_per_call": 0.42,
       "errors": []
     },
     "n_samples": 3183,
@@ -722,8 +724,8 @@
         "n_calls": 8563,
         "n_failed": 0,
         "n_ok": 8563,
-        "elapsed_seconds": 2.327,
-        "ms_per_call": 0.27,
+        "elapsed_seconds": 2.644,
+        "ms_per_call": 0.31,
         "errors": []
       },
       "n_samples": 8563,
@@ -1008,8 +1010,8 @@
         "n_calls": 1694,
         "n_failed": 0,
         "n_ok": 1694,
-        "elapsed_seconds": 0.774,
-        "ms_per_call": 0.46,
+        "elapsed_seconds": 0.917,
+        "ms_per_call": 0.54,
         "errors": []
       },
       "n_samples": 1694,

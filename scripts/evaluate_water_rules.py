@@ -381,6 +381,8 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "generated_at": generated_at,
+        "metric_kind": "rule_consistency",
+        "metric_label": "规则一致性准确率（引擎输出 vs 离线阈值脚本，不是与事实相符的准确率）",
         "protocol": {
             "species": args.species,
             "horizon_hours": args.horizon_hours,
