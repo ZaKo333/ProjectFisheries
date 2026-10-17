@@ -33,6 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .. import __version__
+from .. import weights as _weights
 from .deps import ApiSettings, AppState
 from .routes import router
 from .static import WEB_MOUNT_PATH, mount_web, resolve_web_dir
@@ -54,6 +55,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: ApiSettings | None = getattr(app.state, "_pending_settings", None)
     state = AppState(settings)
     setattr(app.state, _STATE_ATTR, state)
+    # 权重缺失要「明确说出来再降级」，不许静默 mock（见 src/fisheries/weights.py）。
+    # 只对「我们自己训的」权重喊话：官方预训练权重只在重训时需要，缺了不影响推理。
+    for name in _weights.missing():
+        if _weights.spec(name).pinned:
+            _weights.warn_mock(f"api:{name}", name)
     try:
         yield
     finally:

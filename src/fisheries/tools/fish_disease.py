@@ -42,6 +42,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
 
 from fisheries import console as _console
+from fisheries import weights as _weights
 
 # --------------------------------------------------------------------------- #
 # 一、标签体系与映射
@@ -257,6 +258,11 @@ def resolve_weights(weights_path: str | None = None) -> str | None:
     return None
 
 
+def _registered(name: str) -> str | None:
+    """注册表里有这一项才返回名字，否则 None（警告只打固定文案，不许炸）。"""
+    return name if name in _weights.WEIGHTS else None
+
+
 def _resolve_backend(weights_path: str | None) -> tuple[str, str | None]:
     """探测可用的推理后端，返回 (backend, weights_path)。
 
@@ -265,13 +271,22 @@ def _resolve_backend(weights_path: str | None) -> tuple[str, str | None]:
     未显式指定 ``weights_path`` 时按 :data:`_WEIGHTS_CANDIDATES` 的顺序找第一个存在的
     权重文件；一个都没有就落到 mock 后端（而不是抛异常），保证演示链路始终起得来。
     找了权重但 ``ultralytics`` 没装时同样落 mock。
+
+    **降级不静默**：落到 mock 时打一行 WARNING（同一进程只打一次），文案固定为
+    :data:`fisheries.weights.MOCK_NOTICE`，并说明缺的是哪个文件、怎么补。
     """
     candidate = resolve_weights(weights_path)
     if candidate is None:
+        _weights.warn_mock(
+            "fish_disease",
+            _registered("fish_disease"),
+            "找不到 " + " 或 ".join(_WEIGHTS_CANDIDATES),
+        )
         return "mock", None
     try:
         import ultralytics  # noqa: F401
     except ImportError:
+        _weights.warn_mock("fish_disease", _registered("fish_disease"), "ultralytics 未安装")
         return "mock", None
     # import ultralytics 会把 sys.stdout 的编码改成 UTF-8；不改回来，
     # 调用方在中文控制台里从这一行之后打印的中文全会变乱码。
@@ -392,13 +407,24 @@ def _yolo_predict(image_path: str, weights_path: str) -> tuple[str, dict[str, fl
 
 
 def _resolve_lesion_weights(weights_path: str | None = None) -> str | None:
-    """找到可用的病灶检测权重；没有就返回 None（此时没有病灶定位）。"""
+    """找到可用的病灶检测权重；没有就返回 None（此时没有病灶定位）。
+
+    缺这份权重不叫「mock」——病害分类照旧是真模型，只是少了病灶的位置和面积，
+    所以这里用措辞更准的 :func:`fisheries.weights.warn_once`。
+    """
     if weights_path:
         return weights_path if os.path.isfile(weights_path) else None
     for name in LESION_WEIGHTS_CANDIDATES:
         candidate = os.path.join(_MODELS_DIR, name)
         if os.path.isfile(candidate):
             return candidate
+    _weights.warn_once(
+        "fish_lesion",
+        "找不到病灶检测权重（"
+        + " 或 ".join(LESION_WEIGHTS_CANDIDATES)
+        + "）：病害类型仍由分类模型给出，但**没有病灶位置与面积**。"
+        " 获取方式：python scripts/fetch_datasets.py --fetch-weights fish_lesion",
+    )
     return None
 
 

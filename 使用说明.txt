@@ -42,7 +42,11 @@
                         和病害图像演示，页面和接口照常能用；想补数据可以
                         让管数据的人按 README 第 3.5 节搭一个国内镜像。
 
-  运行自检.bat          环境体检。会跑一遍全部单元测试（1168 项）+ 全部演示
+                        图像模型的权重也不在安装包里：缺了会明确提示
+                        「权重缺失，将启用 mock 模拟模式」，不会假装识别。
+                        补的办法见 README 第 3.6 节（--fetch-weights all）。
+
+  运行自检.bat          环境体检。会跑一遍全部单元测试（1208 项）+ 全部演示
                        脚本 + 检查知识库索引。答辩前点一次，全绿就放心了。
                        它不会启动服务，跑完自己就结束。
 
@@ -145,6 +149,8 @@
         · 个别演示脚本会打印一行「该数据集未导入」然后继续
       想看当前认得哪些数据集，在工程目录里跑：
         .venv\Scripts\python.exe scripts\fetch_datasets.py --status
+
+        .venv\Scripts\python.exe scripts\fetch_datasets.py --weights    看权重状态
       想换位置（比如换台电脑、换块盘）：把 数据集 文件夹拷过去，然后设一个
       环境变量指过去即可，代码一行不用改：
         set FISHERIES_DATA_ROOT=E:\你放数据集的目录
@@ -205,6 +211,11 @@
 
       .venv\Scripts\python.exe scripts\fetch_datasets.py --status
 
+  模型权重：看状态 / 补下载（两个约 10 MB，下载完自动核 md5）：
+
+      .venv\Scripts\python.exe scripts\fetch_datasets.py --weights
+      .venv\Scripts\python.exe scripts\fetch_datasets.py --fetch-weights all
+
   想重新训练病害识别模型（需要 NVIDIA 显卡，约 20 分钟）：
 
       .venv\Scripts\python.exe scripts\train_yolo_fish.py --report   先体检
@@ -234,6 +245,7 @@
       scripts\train_yolo_fish.py     训练病害识别模型（可选，需显卡）
       src\fisheries\datasets.py      「数据集名字 → 磁盘位置」的唯一定义处
       models\yolov8-fish.pt          训练好的病害识别权重（约 3 MB；有这个才走真模型）
+      models\checksums.md5           权重校验值（md5），跟着仓库走，随时能核
       models\translate\              本地离线翻译模型（有这个就不必配翻译 Key）
       data\datasets\                 原始数据集（1.37 GB，28,794 文件，不进 Git）
       data\derived\                  训练/评测用的派生数据（22.6 MB，可重建可删）

@@ -72,6 +72,26 @@ def step_optional_deps() -> None:
         if not installed and fix:
             print(f"                     执行: {fix}")
 
+    _report_weights()
+
+
+def _report_weights() -> None:
+    """把模型权重的有无说清楚——缺了会走 mock，绝不允许静默降级。"""
+    from fisheries import weights as wt
+
+    print("        模型权重：")
+    for row in wt.status():
+        item = wt.spec(row["name"])
+        if not row["exists"]:
+            print(f"          [缺失] {row['name']:<14} {row['file']}")
+            if item.pinned:
+                print(f"                 {wt.MOCK_NOTICE}（{item.label}）")
+                print(f"                 执行: python scripts/fetch_datasets.py --fetch-weights {row['name']}")
+            continue
+        size = f"{row['bytes'] / 1048576:.1f} MB"
+        note = "" if item.pinned else "（仅重训需要）"
+        print(f"          [就绪] {row['name']:<14} {size:>8}  {row['file']}{note}")
+
 
 def step_knowledge_base() -> bool:
     print("  [3/5] 检查知识库索引")

@@ -237,14 +237,14 @@ python -m pip install -e ".[rag,api]"
 
 ### 3.3 首次运行会下载什么
 
-仓库里**只有代码和语料，没有模型权重，也没有数据集**（见 [§13](#13-数据与合规)）。
+仓库里**只有代码、语料和一份权重校验文件（`models/checksums.md5`），没有权重本体，也没有数据集**（见 [§13](#13-数据与合规)）。
 第一次跑的时候有两件事要留意：
 
 | 产物 | 大小 | 怎么来 |
 |---|---|---|
 | `models/fastembed/` 中文向量模型 | ≈ 91 MB | **首次检索时自动下载**。离线环境请先联网跑一次，或预先放进该目录 |
-| `models/yolov8-fish.pt` 病害识别权重 | ≈ 3 MB | 本仓库**不附带**，需自行训练（见 [docs/模型训练说明.md](docs/模型训练说明.md)）。缺失时图像工具自动落回兜底并在响应里标 `degraded_mode=true` |
-| `models/yolov8-fish-lesion-seg.pt` 病灶定位权重 | ≈ 6 MB | 本仓库**不附带**，`python scripts/train_lesion_seg.py` 训练产出（见 §12.4）。缺失时只是没有病灶数量/面积，病害结论照旧 |
+| `models/yolov8-fish.pt` 病害识别权重 | ≈ 3 MB | 仓库**不附带**，走外部托管：`python scripts/fetch_datasets.py --fetch-weights fish_disease` 一条命令拉回来并自动核 md5（见 [§3.6](#36-模型权重托管校验与缺失时会发生什么)）。也可以自己训练，见 [docs/模型训练说明.md](docs/模型训练说明.md) |
+| `models/yolov8-fish-lesion-seg.pt` 病灶定位权重 | ≈ 6 MB | 同上，`--fetch-weights fish_lesion`；或 `python scripts/train_lesion_seg.py` 训练产出（见 §12.4）。缺失时只是没有病灶数量/面积，病害结论照旧 |
 | `models/translate/` 离线回译模型 | ≈ 315 MB | 可选，`python scripts/fetch_translate_model.py` |
 
 **向量库不随仓库分发**（`knowledge/chroma/` 在 `.gitignore` 里）：它是约 2 MB 的
@@ -325,6 +325,65 @@ python scripts/fetch_datasets.py --fetch all
   `set FISHERIES_DATASET_MIRROR=D:\share`。
 * 镜像里没有的（比如那 2 份本地本来就没有的），`--fetch` 会明确说「两条路都不通」，
   不会静默跳过。
+
+### 3.6 模型权重：托管、校验与缺失时会发生什么
+
+图像链路要用两个权重：病害识别 `models/yolov8-fish.pt`（≈ 3 MB）与病灶定位
+`models/yolov8-fish-lesion-seg.pt`（≈ 7 MB）。它们**不提交 git**——二进制大文件会让每次
+提交都带上一块 review 不了的 delta，而权重只会在重训时变。仓库里放的是
+**`models/checksums.md5`**（标准 `md5sum` 格式，两行哈希 + 两行注释），本体走外部托管。
+
+一条命令拉回来：
+
+```bash
+python scripts/fetch_datasets.py --fetch-weights all           # 两个都拉，下载完自动校验
+python scripts/fetch_datasets.py --fetch-weights fish_disease  # 只拉一个
+python scripts/fetch_datasets.py --weights                     # 只看状态，不下载
+python scripts/fetch_datasets.py --weights --verify            # 重新算一遍哈希
+```
+
+镜像地址取 `FISHERIES_WEIGHTS_MIRROR`；没配就回退到数据集的 `FISHERIES_DATASET_MIRROR`
+（权重放在该地址下的 `weights/` 子目录）。**一键配置不会自动下权重**（装完还没配镜像时必然失败），
+但它会在结尾按「缺哪些 + 一条命令」提示你，`运行自检.bat` 里也会逐项列状态。自己搭镜像：
+
+```bash
+# 在一台权重已就绪的机器上，把权重原样复制（不压缩）到 dist/mirror/weights/
+python scripts/pack_dataset_mirror.py --weights --skip-datasets --out D:\share
+# 把 D:\share\weights\ 整个传上静态托管，然后换台机器指过去
+set FISHERIES_WEIGHTS_MIRROR=https://你的地址/fish-weights
+python scripts/fetch_datasets.py --fetch-weights all
+```
+
+校验是自动的：下载完比对 `checksums.md5` 里的 md5、spec 里的 sha256 与文件大小，对不上
+就删掉重下一次，两次都不对才报错；`--verify` 手动复核。离线机器也可以自己核：
+
+```bash
+md5sum -c models/checksums.md5                                    # Linux / Git Bash
+certutil -hashfile models\yolov8-fish.pt MD5                      # Windows cmd
+```
+
+**权重缺失不会静默降级**，会在第一次真正用到时打一条 WARNING（同一条只打一次）：
+
+```text
+WARNING fisheries.weights: fish_disease | 权重缺失，将启用 mock 模拟模式：病害识别权重（models/yolov8-fish.pt）
+```
+
+三个入口都会说：工具层第一次落兜底时、API 启动的 lifespan 里、`python scripts/selftest.py`
+的「检查可选依赖」那一步（逐项列「就绪 / 缺失」，缺失的给获取命令）。
+
+#### 申报用：权重清单
+
+| 文件 | 大小（B） | md5 | sha256 | 用途 | 缺失后果 |
+|---|---|---|---|---|---|
+| `models/yolov8-fish.pt` | 2,980,669 | `9c93b4614b8e879dfcd33d854495b572` | `95a9bb0d62e9032ed515f4d43f61b4733fdf53ae443b6875bdbe17684ba96da7` | 鱼病分类（YOLOv8-cls 微调） | 图像工具落 mock，响应标 `degraded_mode=true` |
+| `models/yolov8-fish-lesion-seg.pt` | 7,053,685 | `93ce235e828481c003e1f577ab0f7149` | `d814df5155324b65dc62df3c718a6e43a99ee92f01ce9342a9562e15fa1e4e10` | 病灶分割，给病灶数量与面积 | 病害结论照旧，只是没有位置与面积 |
+
+托管位置：`FISHERIES_WEIGHTS_MIRROR` 指向的 `<地址>/weights/`，两个文件同名存放；
+校验值同时写在仓库内的 `models/checksums.md5` 里，评委拿到文件后可当场核 md5。
+
+另外两个官方预训练权重（`models/pretrained/yolov8n-cls.pt`、`yolov8n-seg.pt`）只在重训时
+用到，`pinned=False`、不钉哈希，`--fetch-weights` 会跳过它们；确实需要时按 spec 里的
+`upstream` 从 Ultralytics 官方 release 下载。
 
 ---
 
@@ -693,14 +752,15 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ├── examples/
 │   └── pond_demo_water.csv  # 演示用 24 小时水质读数
 ├── data/                    # 运行期产物（不进版本库；datasets/ 是可选的数据集落点）
-├── models/                  # 模型权重（不进版本库，见 §3.3）
+├── models/                  # 模型权重（不进版本库；只有 checksums.md5 入库，见 §3.6）
 ├── scripts/                 # 全部 CLI：一键配置 / demo / 建库 / 建模板 / 取数据 / 训练 / 体检
 │   ├── build_lesion_dataset.py  # 清洗真实多边形标注 → fish_lesion_seg 数据集
 │   ├── train_lesion_seg.py      # 训练 + 评估病灶分割模型（见 §12.4）
-│   ├── pack_dataset_mirror.py   # 把已导好的数据集打成可上传的镜像包（见 §3.5）
+│   ├── pack_dataset_mirror.py   # 把已导好的数据集 / 权重打成可上传的镜像包（见 §3.5、§3.6）
 │   └── make_groundtruth_sample.py / evaluate_groundtruth.py  # 人工真值集抽样与评测（见 §12.2）
 ├── src/fisheries/
 │   ├── datasets.py          # 「数据集名字 → 磁盘位置」的唯一真相来源
+│   ├── weights.py           # 权重注册表 / md5 校验 / 外托管下载 / 缺权重时的显式提示
 │   ├── console.py           # 控制台编码兜底
 │   ├── launcher.py          # 启动器要显示的全部中文（.bat 是纯 ASCII）
 │   ├── water_templates.py   # 12 个内置模板的定义与 CSV 生成
@@ -723,7 +783,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1168 项
+python -m pytest                     # 全部 1208 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -750,6 +810,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
+| `test_weights.py` | 40 | 权重注册表与哈希形状、md5/sha256 校验五情形、下载与缓存、坏包拒绝、镜像回退、`mock_notice` 文案与只喊一次、`.gitignore` 放行 `checksums.md5`、命令行三条子命令 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
 
@@ -981,6 +1042,13 @@ python scripts/build_knowledge_base.py --check   # 只校验一致性
 
 > ⚠ 代码中的阈值表为**工程默认值 v0.1**，正式使用前须由有资质的水产技术人员复核。
 > 本项目输出**不构成用药指令**。
+
+### 13.4 模型权重同样外托管
+
+权重不上仓库（二进制、每次提交带不可 review 的 delta），但**可获取性受约束**：仓库内的
+`models/checksums.md5` 钉住 md5，§3.6 的清单给出两个文件的大小、md5、sha256、托管位置与
+下载命令。评委拿到文件后 `md5sum -c models/checksums.md5` 即可确认没被损坏或替换；
+拿不到权重时程序会打 `权重缺失，将启用 mock 模拟模式` 并继续跑完其他能力，不会假装有结果。
 
 ---
 

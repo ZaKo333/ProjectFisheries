@@ -25,15 +25,23 @@ dist/
 htmlcov/
 
 # --- 模型权重与下载缓存 -----------------------------------------------------
-# models/ 整体不进仓库（约 400 MB）。换机器时按下述方式复原：
+# 权重文件不进仓库（约 400 MB），但「权重是什么」进仓库：models/checksums.md5
+# 记录了每个权重的 md5，由 src/fisheries/weights.py 的 render_checksums() 生成，
+# 可用 `md5sum -c models/checksums.md5` 或 `certutil -hashfile <文件> MD5` 核对。
+#
+# 注意写成 `models/*` 而不是 `models/`：父目录被整体忽略后，Git 不允许再用 `!`
+# 单独放行里面的文件，那样 checksums.md5 就永远提交不上去。
+#
+# 换机器时按下述方式复原（也可一条命令全下：python scripts/fetch_datasets.py --fetch-weights all）：
 #   · models/fastembed/          → 首次检索时由 fastembed 自动下载（约 91 MB）
 #   · models/translate/          → python scripts/fetch_translate_model.py（约 315 MB）
 #   · models/pretrained/         → 训练脚本自动放置的官方预训练权重
-#   · models/yolov8-fish.pt      → python scripts/train_yolo_fish.py 训练产出
-#   · models/yolov8-fish-lesion-seg.pt → python scripts/train_lesion_seg.py 训练产出
-# 没有这些文件时程序会优雅降级（YOLO 落回模板、回译落回受控词表），
+#   · models/yolov8-fish.pt      → 训练产出，或从镜像站下载（见 weights.py）
+#   · models/yolov8-fish-lesion-seg.pt → 训练产出，或从镜像站下载（见 weights.py）
+# 没有这些文件时程序会明确提示后降级（日志打「权重缺失，将启用 mock 模拟模式」），
 # 但 RAG 检索需要 fastembed 缓存，首次运行请保证联网。
-models/
+models/*
+!models/checksums.md5
 
 # --- 知识库向量库 -----------------------------------------------------------
 # Chroma 的持久化产物，由 scripts/build_knowledge_base.py 从 knowledge/corpus/

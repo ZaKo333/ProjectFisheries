@@ -11,8 +11,9 @@
 2. 建 ``.venv``；
 3. 升级 pip / setuptools / wheel；
 4. ``pip install -e ".[dev,rag,api]"``；
-5. 构建知识库向量库（**向量库不入库**，所以全新克隆必须做一次；``--skip-kb`` 跳过）；
-6. 验证 ``import fisheries`` 与接口依赖，并打印下一步。
+5. 导入数据集（可选，``--skip-datasets`` 跳过；没有 Kaggle 凭证时用 ``--dataset-mirror``）；
+6. 构建知识库向量库（**向量库不入库**，所以全新克隆必须做一次；``--skip-kb`` 跳过）；
+7. 验证 ``import fisheries`` 与接口依赖，并打印下一步。
 
 为什么第 5 步是必需的
 --------------------
@@ -305,6 +306,19 @@ def step_verify(args: argparse.Namespace) -> bool:
     return True
 
 
+def _missing_pinned_weights() -> list[str]:
+    """还缺哪些「产品要用」的权重；环境没装好时返回空表，不要因为提示而失败。"""
+    try:
+        from fisheries import weights as _weights
+    except Exception:  # noqa: BLE001 - 提示不是关键路径
+        return []
+    missing: list[str] = []
+    for item in _weights.WEIGHTS.values():
+        if item.pinned and not item.path.is_file():
+            missing.append(item.name)
+    return missing
+
+
 def print_next_steps(
     core_ok: bool, data_ok: bool, kb_ok: bool, verify_ok: bool, args: argparse.Namespace
 ) -> None:
@@ -324,7 +338,13 @@ def print_next_steps(
             print("      · 数据集还没导全（可选，约 1.4 GB）。没有 Kaggle 凭证就用镜像：")
             print("          一键配置环境.bat --dataset-mirror https://你的地址")
             print("          .venv\\Scripts\\python.exe scripts\\fetch_datasets.py --status")
-        print("      · 模型权重未随仓库分发，没有它照样能用（病害识别走模拟兜底）")
+        if _missing_pinned_weights():
+            print("      · 模型权重未随仓库分发（图像识别要用），补下载：")
+            print("          .venv\\Scripts\\python.exe scripts\\fetch_datasets.py --fetch-weights all")
+            print("        没配置权重镜像会失败，怎么搭见 README 第 3.6 节；")
+            print("        缺权重时识别会打一条「权重缺失，将启用 mock 模拟模式」再走模拟。")
+        else:
+            print("      · 模型权重已就绪")
         if args.skip_kb:
             print("      · 知识问答需要向量库：")
             print("          .venv\\Scripts\\python.exe scripts\\build_knowledge_base.py")
