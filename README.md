@@ -814,7 +814,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1318 项
+python -m pytest -m "not integration"        # 单元测试：1322 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -827,7 +827,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1318 项）
+### 11.1 单元测试（1322 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -850,7 +850,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_deploy_script.py` | 6 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
+| `test_deploy_script.py` | 10 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
 | `test_session_store.py` | 29 | 会话标识的合法性、读数按会话/塘号隔离、`replace`、超上限丢最旧、历史与上传同样隔离、换实例后数据还在（模拟重启）、惰性建库 |
@@ -1068,6 +1068,23 @@ python scripts/train_lesion_seg.py --epochs 80   # 重新训练 + 评估
 
 向量库与**向量化模型都不随仓库分发**（模型约 91 MB）。克隆后第一次构建知识库时会
 自动下载向量模型；纯离线部署请预先联网跑一次，或把模型预置到 `models/fastembed/`。
+
+### 12.9 换向量化后端必须重建向量库
+
+向量库里记着「这份库是哪个 embedder 建的」，服务只接受与 `FISHERIES_RAG_EMBEDDER` 一致的那份，
+不一致会直接报 `StoreMismatchError`（hash 是 256 维伪向量，fastembed 是 512 维语义向量），
+所以切换后端时**旧库必须删掉重建**，不能只改环境变量：
+
+```powershell
+# Windows 服务器上（部署脚本会先停服务、删旧库、重建、重启）
+& C:\fisheries\app\scripts\deploy_windows.ps1 -Embedder fastembed
+& C:\fisheries\app\scripts\deploy_windows.ps1 -Embedder fastembed -RebuildKb   # 就是想在原后端上重建
+& C:\fisheries\app\scripts\deploy_windows.ps1 -Embedder hash                   # 离线机器退回伪向量
+```
+
+脚本把选定的后端写进 `C:\fisheries\embedder.txt` 并同步进 `run-server.bat` 的
+`FISHERIES_RAG_EMBEDDER`，重跑部署自动沿用。本机（非服务器）等价命令是
+`python scripts\setup_env.py --rebuild-kb`，或直接 `python scripts\build_knowledge_base.py --embedder fastembed`。
 
 ---
 

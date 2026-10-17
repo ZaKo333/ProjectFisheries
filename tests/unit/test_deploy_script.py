@@ -46,6 +46,32 @@ class TestLlmParameters:
         assert "Remove-Item -Path $LlmFile" in text
 
 
+class TestEmbedderSwitching:
+    """换向量化后端是线上最容易踩的坑：库里的后端与环境变量不一致时服务起不来。"""
+
+    def test_script_accepts_embedder_and_rebuild(self) -> None:
+        text = _text()
+        assert "[string]$Embedder" in text
+        assert "[switch]$RebuildKb" in text
+
+    def test_reads_backend_from_the_store_manifest(self) -> None:
+        text = _text()
+        # 必须读 manifest 里的 embedder 来判断要不要重建，而不是只看目录在不在。
+        assert "fisheries_manifest.json" in text
+        assert "ConvertFrom-Json" in text
+        assert ".StartsWith(" in text
+
+    def test_rebuild_stops_service_and_drops_the_store(self) -> None:
+        text = _text()
+        assert "/End /TN" in text, "重建前要先停服务，否则文件被占用"
+        assert "Remove-Item -Path $kbDir -Recurse -Force" in text
+
+    def test_selected_backend_is_persisted_for_the_launcher(self) -> None:
+        text = _text()
+        assert 'set "FISHERIES_RAG_EMBEDDER=$Embedder"' in text
+        assert 'Set-Content -Path $EmbedderFile -Value $Embedder -Encoding ascii' in text
+
+
 class TestScriptStaysPortable:
     def test_script_is_pure_ascii(self) -> None:
         # 服务器默认代码页（GBK/437）下的 PowerShell 5.1 读非 ASCII 脚本会出乱码。

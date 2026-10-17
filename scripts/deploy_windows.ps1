@@ -21,6 +21,13 @@ Options:
     -Extras "dev,rag,api" pip extras (default dev,rag,api)
     -Token "..."          access token; generated once and kept in C:\fisheries\token.txt when omitted
     -NoAuth               serve without a token (only for a machine that is not reachable from the internet)
+    -LlmProvider ...      real LLM backend (deepseek / openai / dashscope / aqua-7b-ollama ...)
+    -LlmApiKey ...        its key; kept in C:\fisheries\llm.txt and reused by later runs
+    -LlmModel / -LlmBaseUrl   override the preset model / endpoint
+    -NoLlm                drop the LLM config and fall back to the mock advisor
+    -Embedder fastembed   embedding backend for the knowledge base (default fastembed)
+    -Embedder hash        offline pseudo-vectors (no model download, 256-dim)
+    -RebuildKb            rebuild the knowledge base even if it is already there
     -SkipPython           do not download Python, only use what is present
     -NoTask               do not register the scheduled task, just print the command
 #>
@@ -35,6 +42,8 @@ param(
     [string]$LlmModel,
     [string]$LlmBaseUrl,
     [switch]$NoLlm,
+    [string]$Embedder,
+    [switch]$RebuildKb,
     [switch]$SkipPython,
     [switch]$NoTask
 )
@@ -147,17 +156,35 @@ if ($LASTEXITCODE -ne 0) { Fail "pip install -e .[$Extras] failed" }
 if ($LASTEXITCODE -ne 0) { Fail "the package does not import inside the venv" }
 
 # --- 4. knowledge base ---------------------------------------------------
-$Embedder = "fastembed"
+# The store records which embedder produced it; the service refuses to load a
+# store built by a different one (StoreMismatchError). So switching embedders
+# must rebuild, and the choice has to be persisted for the launcher.
 $EmbedderFile = Join-Path $Root "embedder.txt"
-if (Test-Path $EmbedderFile) {
-    $Embedder = (Get-Content $EmbedderFile -Raw).Trim()
+if (-not $Embedder) {
+    if (Test-Path $EmbedderFile) { $Embedder = (Get-Content $EmbedderFile -Raw).Trim() }
     if (-not $Embedder) { $Embedder = "fastembed" }
 }
-$kbManifest = Join-Path $App "knowledge\chroma\fisheries_manifest.json"
+$kbDir = Join-Path $App "knowledge\chroma"
+$kbManifest = Join-Path $kbDir "fisheries_manifest.json"
+$kbEmbedder = ""
 if (Test-Path $kbManifest) {
-    Step "knowledge base already present"
+    try { $kbEmbedder = [string](Get-Content $kbManifest -Raw | ConvertFrom-Json).embedder } catch { $kbEmbedder = "" }
+}
+$kbMatches = $kbEmbedder.ToLower().StartsWith($Embedder.ToLower())
+if ((Test-Path $kbManifest) -and $kbMatches -and (-not $RebuildKb)) {
+    Step "knowledge base already present (embedder=$kbEmbedder)"
 } else {
-    Step "building knowledge base with embedder=$Embedder"
+    if (Test-Path $kbManifest) {
+        Step "rebuilding knowledge base: have '$kbEmbedder', want '$Embedder'"
+    } else {
+        Step "building knowledge base with embedder=$Embedder"
+    }
+    # Release the store before deleting it: a running service keeps it open.
+    $ErrorActionPreference = "Continue"
+    $null = & schtasks /End /TN "FisheriesAPI" 2>&1
+    Start-Sleep -Seconds 2
+    $ErrorActionPreference = "Stop"
+    if (Test-Path $kbDir) { Remove-Item -Path $kbDir -Recurse -Force -ErrorAction SilentlyContinue }
     # HuggingFace is unreachable from many CN hosts; hf-mirror keeps fastembed usable.
     if (-not $env:HF_ENDPOINT) { $env:HF_ENDPOINT = "https://hf-mirror.com" }
     Step "HF_ENDPOINT=$env:HF_ENDPOINT"
@@ -165,14 +192,15 @@ if (Test-Path $kbManifest) {
     try {
         & $VenvPy "scripts\build_knowledge_base.py" --embedder $Embedder
         if ($LASTEXITCODE -ne 0) {
-            Step "fastembed build failed, retrying with --embedder hash (offline pseudo-vectors)"
+            if ($Embedder -eq "hash") { Fail "knowledge base build failed with --embedder hash" }
+            Step "$Embedder build failed, retrying with --embedder hash (offline pseudo-vectors)"
             & $VenvPy "scripts\build_knowledge_base.py" --embedder hash
             if ($LASTEXITCODE -ne 0) { Fail "knowledge base build failed for both embedders" }
             $Embedder = "hash"
-            Set-Content -Path $EmbedderFile -Value "hash" -Encoding ascii
         }
     } finally { Pop-Location }
 }
+Set-Content -Path $EmbedderFile -Value $Embedder -Encoding ascii
 Step "embedder for the service: $Embedder"
 
 # --- 4b. optional LLM ----------------------------------------------------
