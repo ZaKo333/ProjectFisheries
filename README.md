@@ -777,7 +777,9 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 │   ├── api/                 # 接口层：FastAPI 契约、路由与前端静态托管
 │   ├── tables.py            # 表格接入层：列名别名 / 时间轴 / 缺失与量纲
 │   └── evaluation/          # 外部验证（只做评测，不参与线上链路）
-└── tests/unit/              # 单元测试（见 §11）
+└── tests/
+    ├── unit/                # 单元测试（模型/检索/数据集用替身，见 §11.1）
+    └── integration/         # 端到端集成测试（真权重 + 真知识库，见 §11.2）
 ```
 
 > **为什么有一批中文名 `.bat` 只是转发？** `cmd.exe` 按控制台代码页分块解码批处理文件，
@@ -789,13 +791,21 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 
 ## 11. 测试
 
+测试分**两层**：`tests/unit/` 是单元测试（模型、检索、数据集全用替身，秒级到分钟级）；
+`tests/integration/` 是端到端集成测试（真权重、真知识库、真路由串起来跑，缺料就 `skip`）。
+两层分开跑、分开统计。
+
 ```bash
-python -m pytest                     # 全部 1220 项
+python -m pytest -m "not integration"        # 单元测试：1222 项（1221 通过 + 1 条件跳过）
+python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
+python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
 ```
 
 > ⚠ 统计行被吞时加 `-o addopts=""`：`pyproject.toml` 里已有 `addopts="-q"`，
 > 命令行再叠一个 `-q` 会变成 `-qq`，pytest 就不打印汇总行了。
+
+### 11.1 单元测试（1222 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -817,9 +827,27 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
+| `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_weights.py` | 42 | 权重注册表与哈希形状、md5/sha256 校验五情形、下载与缓存、坏包拒绝、镜像回退、`mock_notice` 文案与只喊一次、`.gitignore` 放行 `checksums.md5`、命令行三条子命令 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
+
+### 11.2 端到端集成测试（13 项）
+
+这层不 mock 任何路由函数，断言的是**真模型 / 真检索 / 真表格解析器串起来之后**的
+HTTP 状态码、响应字段和风险标签——单元测试把每一环都换成替身，恰恰测不到这里。
+
+| 测试文件 | 项数 | 覆盖的 P0 链路 |
+|---|---|---|
+| `test_p0_disease_image.py` | 2 | 上传真实烂鳃图片 → 200 + 契约字段 + `degraded_mode=False` + 类别/置信度/模型版本；同一张图喂 `/assess` → 等级 ≥ 预警、`VISION_*` 证据、病害处置动作带四字段 |
+| `test_p0_water_series.py` | 3 | 模板 CSV → 真解析器 → 评估：正常塘维持「正常」并给投影；缺氧模板「高危」+ 跌破 1.5 mg/L 的预计小时数；同一份水虾蟹「正常」而鲤科「预警」 |
+| `test_p0_fusion.py` | 2 | 双模态融合分比水质单模态高 10 分以上、`water`/`vision`/`fusion` 三类证据齐全、协同规则有名字（`SYN_LOW_DO_WITH_GILL`）、两种处置动作都在 |
+| `test_p0_knowledge_chat.py` | 3 | 答案正文带「【文档 > 章节】」引文、backend 含 chroma + bm25 + 向量维度、chunk 字段齐全且分数降序；溶氧 / 烂鳃查询命中对应文档 |
+| `test_p0_species_gate.py` | 3 | 可用性接口显式说明（缺权重时给补法）、图片识别出「鲤科」并带置信度与模型版本、识别出的品种与手选等价且区别于虾蟹 |
+
+**缺料就 `skip`**：没训权重、没装 `ultralytics`、没导数据集、没建知识库索引，集成测试会
+跳过并在 reason 里写清补的命令，不会伪装成通过。
+
 
 ---
 

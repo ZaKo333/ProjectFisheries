@@ -1,4 +1,4 @@
-"""环境自检：跑全部单元测试 + 全部演示脚本 + 检查知识库索引。
+"""环境自检：跑单元测试 + 端到端集成测试 + 全部演示脚本 + 检查知识库索引。
 
 这是「运行自检.bat」真正的实现。之所以从 .bat 搬进 Python：
 
@@ -110,15 +110,26 @@ def step_knowledge_base() -> bool:
 
 
 def step_unit_tests() -> bool:
-    print("  [4/5] 运行全部单元测试")
+    print("  [4/5] 运行测试：单元测试 + 端到端集成测试")
     print(_BAR)
-    rc = _run([PY, "-m", "pytest", "tests", "-o", "addopts=", "-q"])
+    # 两层分开跑、分开报：单元测试是「代码对不对」，集成测试是「串起来还成不成立」。
+    # 集成测试缺权重/缺索引会自己 skip（reason 里写补法），不会误判成失败。
+    rc_unit = _run([PY, "-m", "pytest", "tests/unit", "-o", "addopts=", "-q"])
     print(_BAR)
-    if rc != 0:
-        print(f"  单元测试未全部通过，退出码 {rc}")
-        return False
-    print("  单元测试全部通过。")
-    return True
+    rc_it = _run([PY, "-m", "pytest", "tests/integration", "-o", "addopts=", "-q"])
+    print(_BAR)
+    ok = True
+    if rc_unit != 0:
+        print(f"  单元测试未全部通过，退出码 {rc_unit}")
+        ok = False
+    else:
+        print("  单元测试全部通过。")
+    if rc_it != 0:
+        print(f"  集成测试未全部通过，退出码 {rc_it}")
+        ok = False
+    else:
+        print("  集成测试全部通过（缺权重/缺索引的用例会自动跳过并说明补法）。")
+    return ok
 
 
 def demo_scripts() -> list[pathlib.Path]:
