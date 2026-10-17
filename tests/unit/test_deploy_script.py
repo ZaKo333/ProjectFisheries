@@ -169,3 +169,29 @@ class TestLlmModelDefaults:
     def test_missing_api_key_is_warned(self) -> None:
         text = _text()
         assert "has no api key" in text
+
+
+class TestAccessTokenOverride:
+    def test_script_accepts_token_and_no_auth(self) -> None:
+        text = _text()
+        assert "[string]$Token" in text, "部署脚本缺少 -Token 参数"
+        assert "[switch]$NoAuth" in text
+
+    def test_explicit_token_is_persisted(self) -> None:
+        # 以前只在「-Token 没给」时才写 token.txt，于是用 -Token 改完口令后，
+        # 下一次部署不带它又会复活旧口令。显式口令必须同样落盘。
+        text = _text()
+        marker = "access token taken from -Token"
+        assert marker in text
+        before = text[: text.index(marker)]
+        assert "Set-Content -Path $TokenFile -Value $Token -Encoding ascii" in before
+
+    def test_short_token_is_warned(self) -> None:
+        text = _text()
+        assert "if ($Token.Length -lt 8)" in text
+        assert "access token is short" in text
+
+    def test_non_ascii_token_is_refused(self) -> None:
+        text = _text()
+        assert "[^\\x20-\\x7E]" in text
+        assert "must be printable ASCII" in text

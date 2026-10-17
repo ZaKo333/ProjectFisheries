@@ -361,14 +361,29 @@ if ($llm["provider"]) {
 # re-deploy keeps existing browser sessions working.
 $TokenFile = Join-Path $Root "token.txt"
 if (-not $NoAuth) {
-    if (-not $Token) {
+    $Token = "$Token".Trim()
+    if ($Token) {
+        if ($Token -match "[^\x20-\x7E]") {
+            Fail "access token must be printable ASCII (it is written into the launcher and token.txt)"
+        }
+        # An explicit -Token wins and replaces token.txt, so a later deploy
+        # without -Token does not resurrect the old secret.
+        Set-Content -Path $TokenFile -Value $Token -Encoding ascii
+        Step "access token taken from -Token (saved to $TokenFile)"
+    } else {
         if (Test-Path $TokenFile) { $Token = (Get-Content $TokenFile -Raw).Trim() }
         if (-not $Token) {
             $rnd = New-Object byte[] 16
             [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($rnd)
             $Token = ([System.BitConverter]::ToString($rnd) -replace "-", "").ToLower()
+            Set-Content -Path $TokenFile -Value $Token -Encoding ascii
+            Step "access token generated (saved to $TokenFile)"
+        } else {
+            Step "access token loaded from $TokenFile"
         }
-        Set-Content -Path $TokenFile -Value $Token -Encoding ascii
+    }
+    if ($Token.Length -lt 8) {
+        Warn "access token is short ($($Token.Length) chars) and the port may be public; 12+ random chars is safer"
     }
     Step "access token in use (see $TokenFile); browsers land on /login"
 } else {

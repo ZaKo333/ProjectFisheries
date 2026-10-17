@@ -702,6 +702,7 @@ curl -X POST http://127.0.0.1:8812/api/v1/assess \
   `/app/` 与登录/登出路由外，所有接口都要带 `Authorization: Bearer <token>`；
   浏览器首次访问会被 303 跳到 `/login`，登录后下发 `fisheries_auth` cookie（30 天，
   值是口令的 SHA-256 而非口令本身）。没设这个变量=完全开放，只适合本机或内网。
+  改口令：`& C:\fisheries\app\scripts\deploy_windows.ps1 -Token "新口令"`——它会同时写进 `C:\fisheries\token.txt`，之后不带 `-Token` 的部署沿用它，浏览器里旧的 `fisheries_auth` cookie 立刻失效（需要重新登录一次）。口令必须是可打印 ASCII；少于 8 位脚本只告警不拦，但公网端口**没有登录限流**，短口令能被暴力猜（见 §12.6）。
 - 知识库不可用时 `/assess` 仍返回 200，只在 `degraded_reasons` 里写明「未引用规范依据」；
   只有 `/chat` 本身是知识库功能，会返回 503。
 
@@ -824,7 +825,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1357 项
+python -m pytest -m "not integration"        # 单元测试：1361 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -837,7 +838,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1357 项）
+### 11.1 单元测试（1361 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -860,7 +861,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_deploy_script.py` | 23 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
+| `test_deploy_script.py` | 27 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、`-Token` 改口令会落盘且拒绝非 ASCII、脚本保持纯 ASCII |
 | `test_build_kb_script.py` | 3 | `build_knowledge_base.py --rebuild`：参数真的存在、会删旧库、`--check` 下不删 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
