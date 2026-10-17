@@ -302,7 +302,7 @@ class TestLevelFloors:
     """加权平均会把"一个模态没发现问题"当成"问题减半"的证据，这是错的。
 
     下面三组用例分别对应实测中发现的三处缺陷，输入取自 6 组边界演示案例
-    （见 docs/demo_cases_output.txt）：
+    （跑 scripts/demo_cases.py 能原样重现）：
 
         A. 水质独立判高危（100 分）+ 健康鱼 → 曾被稀释成 60 分/预警
         B. 等级被红线上调为高危，fused_score 却仍是 12 分 → 报告自相矛盾
