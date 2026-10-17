@@ -45,7 +45,11 @@ $RunBat = Join-Path $Root "run-server.bat"
 $ServerLog = Join-Path $LogDir "api.log"
 $DeployLog = Join-Path $LogDir "deploy.log"
 $PipIndex = "https://pypi.tuna.tsinghua.edu.cn/simple"
-$PyUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+$PyUrls = @(
+    "https://registry.npmmirror.com/-/binary/python/3.11.9/python-3.11.9-amd64.exe",
+    "https://mirrors.huaweicloud.com/python/3.11.9/python-3.11.9-amd64.exe",
+    "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+)
 $PyExe = Join-Path $env:TEMP "python-3.11.9-amd64.exe"
 
 function Step([string]$msg) {
@@ -97,9 +101,18 @@ function Resolve-Python {
 $sysPy = Resolve-Python
 if (-not $sysPy) {
     if ($SkipPython) { Fail "no CPython found and -SkipPython was given" }
-    Step "no CPython found, downloading Python 3.11.9"
-    & curl.exe -L --fail --silent --show-error -o $PyExe $PyUrl
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $PyExe)) { Fail "python installer download failed" }
+    Step "no CPython found, downloading Python 3.11.9 (python.org may be slow outside CN, mirrors first)"
+    $downloaded = $false
+    foreach ($u in $PyUrls) {
+        Write-Host "  trying $u"
+        & curl.exe -L --fail --silent --show-error --max-time 600 -o $PyExe $u
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $PyExe) -and ((Get-Item $PyExe).Length -gt 20MB)) {
+            $downloaded = $true
+            break
+        }
+        Write-Host "  -> failed (exit $LASTEXITCODE)" -ForegroundColor Yellow
+    }
+    if (-not $downloaded) { Fail "python installer download failed from every mirror" }
     Step "installing Python 3.11.9 silently"
     $proc = Start-Process -FilePath $PyExe -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1", "Include_pip=1", "Include_test=0" -Wait -PassThru
     if ($proc.ExitCode -ne 0) { Fail "python installer exited with $($proc.ExitCode)" }
