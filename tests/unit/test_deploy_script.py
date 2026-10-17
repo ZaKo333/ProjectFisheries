@@ -72,6 +72,32 @@ class TestEmbedderSwitching:
         assert 'Set-Content -Path $EmbedderFile -Value $Embedder -Encoding ascii' in text
 
 
+class TestVisionOptIn:
+    """视觉能力是「运行时 + 权重」两半，缺一半就只能 503，所以两半都要能靠参数装。"""
+
+    def test_script_accepts_vision_and_weights_source(self) -> None:
+        text = _text()
+        assert "[switch]$Vision" in text
+        assert "[string]$WeightsFrom" in text
+
+    def test_vision_installs_ultralytics_and_checks_the_import(self) -> None:
+        text = _text()
+        assert "pip install ultralytics" in text
+        # 装完必须真的 import 一次：torch 与 onnxruntime 版本不对时会装成功但跑不起来。
+        assert "import ultralytics" in text
+
+    def test_weights_are_copied_into_the_app_models_dir(self) -> None:
+        text = _text()
+        assert 'Join-Path $App "models"' in text
+        assert "Copy-Item -LiteralPath" in text
+        # 权重目录来源可能不存在（比如没开 RDP 驱动器重定向），不能因此整体失败。
+        assert "weights source not found" in text
+
+    def test_missing_weights_only_warn(self) -> None:
+        text = _text()
+        assert "function Warn" in text
+
+
 class TestScriptStaysPortable:
     def test_script_is_pure_ascii(self) -> None:
         # 服务器默认代码页（GBK/437）下的 PowerShell 5.1 读非 ASCII 脚本会出乱码。

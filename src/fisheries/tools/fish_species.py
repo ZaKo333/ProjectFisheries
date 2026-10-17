@@ -88,6 +88,28 @@ _WEIGHTS_CANDIDATES: tuple[str, ...] = ("yolov8-species.pt", "fish_species_cls.p
 #: 默认权重路径（对外文档与错误提示里引用的那一个）。
 DEFAULT_WEIGHTS_PATH = os.path.join(_MODELS_DIR, _WEIGHTS_CANDIDATES[0])
 
+#: 工程根（``models/`` 的上一级），用于把绝对路径收敛成对外可见的相对路径。
+_PROJECT_ROOT = os.path.dirname(_MODELS_DIR.rstrip("\\/"))
+
+
+def _public_path(path: str | None) -> str | None:
+    """把路径收敛成「相对工程根」的形式，绝不把服务器目录结构吐给客户端。
+
+    ``/api/v1/species`` 是公开的探测接口，以前直接回 ``C:\\fisheries\\app\\models\\…``
+    ——既泄露部署布局，也和「快照里不得出现本机路径」的守卫自相矛盾。
+    工程内的路径返回 ``models/yolov8-species.pt``；工程外的（比如测试传进来的
+    临时目录、用户自定义路径）只回文件名，够用来判断「是哪个文件」。
+    """
+    if not path:
+        return None
+    try:
+        rel = os.path.relpath(os.path.abspath(path), os.path.abspath(_PROJECT_ROOT))
+    except (OSError, ValueError):
+        return os.path.basename(path)
+    if rel.startswith("..") or os.path.isabs(rel):
+        return os.path.basename(path)
+    return rel.replace(os.sep, "/")
+
 #: 模型未就绪时 ``model_version`` 的取值。**不以 mock- 开头**——它不是 mock，
 #: 而是"这件事没做"。
 UNAVAILABLE_MODEL_VERSION = "unavailable"
@@ -405,11 +427,13 @@ def availability(weights_path: str | None = None) -> dict[str, Any]:
     Returns:
         ``{"available", "reason", "weights", "expected", "species", "message"}``；
         ``available=False`` 时 ``message`` 是可以直接显示给用户的一句话。
+        ``weights`` / ``expected`` 是**相对工程根**的路径（如 ``models/yolov8-species.pt``），
+        不暴露服务器上的绝对目录。
     """
     weights = resolve_weights(weights_path)
     base = {
         "species": list(SPECIES_LABELS),
-        "expected": DEFAULT_WEIGHTS_PATH,
+        "expected": _public_path(DEFAULT_WEIGHTS_PATH),
     }
     if weights is None:
         return {
@@ -431,7 +455,7 @@ def availability(weights_path: str | None = None) -> dict[str, Any]:
             **base,
             "available": False,
             "reason": "未安装 ultralytics",
-            "weights": weights,
+            "weights": _public_path(weights),
             "message": (
                 "权重文件在，但当前环境没装 ultralytics，鱼种模块已隐藏。"
                 '安装：.venv\\Scripts\\python.exe -m pip install -e ".[vision]"'
@@ -442,7 +466,7 @@ def availability(weights_path: str | None = None) -> dict[str, Any]:
         **base,
         "available": True,
         "reason": "",
-        "weights": weights,
+        "weights": _public_path(weights),
         "message": "",
     }
 

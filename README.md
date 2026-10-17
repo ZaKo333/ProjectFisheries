@@ -814,7 +814,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1322 项
+python -m pytest -m "not integration"        # 单元测试：1330 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -827,12 +827,12 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1322 项）
+### 11.1 单元测试（1330 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
 | `test_tools.py` | 95 | 阈值端点、红线、非离子氨换算（Emerson 公式 vs 表A1/A2）、缺失权重重归一化、NaN 拒绝、混合基线四条约束、图像确定性 |
-| `test_fish_species.py` | 38 | 品种别名映射、可用性探测（缺权重 / 缺 ultralytics / 可用）、无权重时不猜、错误码、不在 `TOOL_HANDLERS` 里 |
+| `test_fish_species.py` | 42 | 品种别名映射、可用性探测（缺权重 / 缺 ultralytics / 可用）、无权重时不猜、错误码、不在 `TOOL_HANDLERS` 里 |
 | `test_agent.py` | 114 | 单模态权重归一化、协同规则、护栏补调、等级下限不被稀释、输出契约 |
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
@@ -850,7 +850,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_deploy_script.py` | 10 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
+| `test_deploy_script.py` | 14 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
 | `test_session_store.py` | 29 | 会话标识的合法性、读数按会话/塘号隔离、`replace`、超上限丢最旧、历史与上传同样隔离、换实例后数据还在（模拟重启）、惰性建库 |
@@ -1085,6 +1085,39 @@ python scripts/train_lesion_seg.py --epochs 80   # 重新训练 + 评估
 脚本把选定的后端写进 `C:\fisheries\embedder.txt` 并同步进 `run-server.bat` 的
 `FISHERIES_RAG_EMBEDDER`，重跑部署自动沿用。本机（非服务器）等价命令是
 `python scripts\setup_env.py --rebuild-kb`，或直接 `python scripts\build_knowledge_base.py --embedder fastembed`。
+
+### 12.10 视觉能力要「运行时 + 权重」两半都有
+
+鱼种识别和病灶分割是**可选**能力，默认部署只装 `dev,rag,api`：`ultralytics` 不在里面，
+权重也不进 git（训练产物，见 §13.4）。两半缺任一半，`/api/v1/species/detect` 与
+`/api/v1/ingest/image` 都会回 503 并在 `message` 里说清缺什么，前端也会把这两个模块隐藏。
+
+补齐的方法（两条命令，`-Vision` 装运行时，`-WeightsFrom` 拷权重）：
+
+```powershell
+# 1) 服务器上：装 ultralytics（会带 torch/torchvision，约 1 GB，清华源几分钟）
+& C:\fisheries\app\scripts\deploy_windows.ps1 -Vision
+
+# 2) 同时把本机训练好的权重带上去。
+#    先把 RDP 客户端的「本地资源 → 详细信息 → 驱动器」勾上，
+#    会话里就能用 \\tsclient\C 或 \\tsclient\D 访问本机磁盘：
+& C:\fisheries\app\scripts\deploy_windows.ps1 -Vision -WeightsFrom "\\tsclient\D\设置\项目\Agent\project\models"
+```
+
+两个参数都是幂等的，重跑不会重复装；`-WeightsFrom` 只拷 `*.pt` 到 `C:\fisheries\app\models\`，
+来源不存在时只打一行 `WARN` 而不是整体失败（很好理解：有人没开驱动器重定向）。
+脚本结尾会打印 `VISION     N weight file(s) in …`，N 大于 0 就说明权重到位。
+
+验证（`/api/v1/species` 是公开探测接口，不暴露绝对路径，只回 `models/yolov8-species.pt` 这种相对路径）：
+
+```powershell
+curl.exe http://127.0.0.1:8000/api/v1/species     # available=true, reason=""
+curl.exe http://127.0.0.1:8000/api/v1/health      # fish_species_detect / fish_disease_detect 不再是 mock
+```
+
+权重文件也可以手动拖进远程桌面（驱动器/剪贴板重定向开着时直接复制粘贴即可），
+放到 `C:\fisheries\app\models\` 后 `schtasks /End /TN FisheriesAPI; schtasks /Run /TN FisheriesAPI` 重启即可生效
+（`/species` 每次请求都重新探测权重，但模型加载在进程内，所以还是要重启）。
 
 ---
 

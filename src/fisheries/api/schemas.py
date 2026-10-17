@@ -1,4 +1,4 @@
-"""后端接口层的数据契约（请求 / 响应模型）。
+﻿"""后端接口层的数据契约（请求 / 响应模型）。
 
 设计原则
 --------
@@ -265,9 +265,9 @@ class SpeciesAvailabilityResponse(_Strict):
     available: bool
     #: 不可用时的短原因（「缺失权重」「未安装 ultralytics」），可用时为空串
     reason: str = ""
-    #: 实际会被使用的权重绝对路径；不可用时为 None
+    #: 实际会被使用的权重路径（相对工程根，如 models/yolov8-species.pt）；不可用时为 None
     weights: str | None = None
-    #: 期望的权重路径（提示用户该放哪）
+    #: 期望的权重路径（相对工程根，提示用户该放哪）
     expected: str
     species: list[str] = Field(default_factory=list)
     #: 可直接显示给用户的一句话（不可用时才有内容）

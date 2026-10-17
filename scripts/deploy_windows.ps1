@@ -44,6 +44,8 @@ param(
     [switch]$NoLlm,
     [string]$Embedder,
     [switch]$RebuildKb,
+    [switch]$Vision,
+    [string]$WeightsFrom,
     [switch]$SkipPython,
     [switch]$NoTask
 )
@@ -82,6 +84,10 @@ function Fail([string]$msg) {
         Get-Content $ServerLog -Tail 40 | ForEach-Object { Write-Host $_ }
     }
     exit 1
+}
+
+function Warn([string]$msg) {
+    Write-Host ("[ {0} ] WARN {1}" -f (Get-Date -Format "HH:mm:ss"), $msg) -ForegroundColor Yellow
 }
 
 New-Item -ItemType Directory -Force -Path $Root, $LogDir, $DataDir, $UploadDir | Out-Null
@@ -154,6 +160,41 @@ if ($LASTEXITCODE -ne 0) { Fail "pip upgrade failed" }
 if ($LASTEXITCODE -ne 0) { Fail "pip install -e .[$Extras] failed" }
 & $VenvPy -c "import fisheries, fastapi; print('import ok:', fisheries.__file__)"
 if ($LASTEXITCODE -ne 0) { Fail "the package does not import inside the venv" }
+
+# --- 3b. optional vision (ultralytics + .pt weights) ---------------------
+# Species / lesion models are optional on purpose: without them the service
+# answers 503 from /api/v1/species/detect and /api/v1/ingest/image and the web
+# UI hides those modules. Enabling them needs two independent halves:
+#   * the runtime  -> ultralytics (which drags torch/torchvision along),
+#   * the weights  -> training products, so they are not in git.
+# Both are opt-in because the install is ~1 GB and the files live elsewhere.
+if ($Vision) {
+    Step "installing vision extras (ultralytics; pulls torch, this can take a while)"
+    & $VenvPy -m pip install ultralytics -i $PipIndex
+    if ($LASTEXITCODE -ne 0) { Fail "pip install ultralytics failed" }
+    & $VenvPy -c "import ultralytics; print('ultralytics', ultralytics.__version__)"
+    if ($LASTEXITCODE -ne 0) { Fail "ultralytics does not import inside the venv" }
+}
+
+if ($WeightsFrom) {
+    $modelsDir = Join-Path $App "models"
+    New-Item -ItemType Directory -Force $modelsDir | Out-Null
+    if (-not (Test-Path $WeightsFrom)) {
+        Warn "weights source not found: $WeightsFrom (skipped; /api/v1/species/detect keeps reporting the missing model)"
+    } else {
+        Step "copying *.pt weights from $WeightsFrom"
+        $copied = 0
+        Get-ChildItem -Path $WeightsFrom -Filter *.pt -File -ErrorAction SilentlyContinue | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $modelsDir $_.Name) -Force
+            $copied++
+        }
+        if ($copied -eq 0) {
+            Warn "no .pt file under $WeightsFrom"
+        } else {
+            Step "copied $copied weight file(s) into $modelsDir"
+        }
+    }
+}
 
 # --- 4. knowledge base ---------------------------------------------------
 # The store records which embedder produced it; the service refuses to load a
@@ -341,6 +382,11 @@ if ($llm["provider"]) {
     Write-Host "           (set in $LlmFile; /chat now answers with the model, answer_is_raw_retrieval=false)"
 } else {
     Write-Host "LLM        none: /chat returns the retrieved text verbatim and flags answer_is_raw_retrieval=true"
+}
+$ptCount = @(Get-ChildItem (Join-Path $App "models") -Filter *.pt -File -ErrorAction SilentlyContinue).Count
+Write-Host ("VISION     {0} weight file(s) in {1}" -f $ptCount, (Join-Path $App "models"))
+if ($ptCount -gt 0 -and -not $Vision) {
+    Write-Host "           (files present but ultralytics may be missing: re-run with -Vision)"
 }
 try { Stop-Transcript | Out-Null } catch { }
 exit 0

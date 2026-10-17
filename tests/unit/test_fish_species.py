@@ -193,7 +193,8 @@ class TestAvailability:
         assert info["available"] is False
         assert info["reason"] == "缺失权重"
         assert info["weights"] is None
-        assert info["expected"] == DEFAULT_WEIGHTS_PATH
+        # 对外只给「相对工程根」的路径：公开接口不能泄露部署目录结构
+        assert info["expected"] == "models/yolov8-species.pt"
         assert info["species"] == list(SPECIES_LABELS)
         # 提示里必须给出「怎么补」，否则用户只知道坏了、不知道怎么办
         assert "--fetch-weights" in info["message"]
@@ -213,8 +214,8 @@ class TestAvailability:
 
         assert info["available"] is False
         assert info["reason"] == "未安装 ultralytics"
-        # 文件确实在，所以要把路径报出来，而不是说「缺失」
-        assert info["weights"] == str(weights)
+        # 文件确实在，所以要把文件名报出来，而不是说「缺失」（但只报文件名，不报目录）
+        assert info["weights"] == "yolov8-species.pt"
         assert "ultralytics" in info["message"]
 
     def test_available_when_both_weights_and_ultralytics_exist(
@@ -231,7 +232,7 @@ class TestAvailability:
 
         assert info["available"] is True
         assert info["reason"] == ""
-        assert info["weights"] == str(weights)
+        assert info["weights"] == "yolov8-species.pt"
         assert info["message"] == ""
 
     def test_the_two_registries_agree_on_the_file(self):
@@ -244,3 +245,37 @@ class TestAvailability:
 
         assert wt.spec("fish_species").file == "models/yolov8-species.pt"
         assert os.path.basename(DEFAULT_WEIGHTS_PATH) == "yolov8-species.pt"
+
+
+class TestPublicPaths:
+    """`/api/v1/species` 是公开接口，绝不能把绝对路径吐给客户端。
+
+    生产上曾经直接回 `C:\\fisheries\\app\\models\\yolov8-species.pt`，
+    既泄露部署布局，又和「快照里不得出现本机路径」的守卫自相矛盾。
+    """
+
+    def test_availability_only_exposes_relative_paths(self):
+        info = availability()
+
+        for key in ("expected", "weights"):
+            value = info[key]
+            if value is None:
+                continue
+            assert not value.startswith(("/", "\\")), value
+            assert ":" not in value, value
+
+    def test_paths_inside_the_project_are_relative_to_it(self):
+        from fisheries.tools.fish_species import _public_path
+
+        assert _public_path(DEFAULT_WEIGHTS_PATH) == "models/yolov8-species.pt"
+
+    def test_paths_outside_the_project_are_reduced_to_the_file_name(self):
+        from fisheries.tools.fish_species import _public_path
+
+        assert _public_path(r"C:\Users\someone\else\yolov8-species.pt") == "yolov8-species.pt"
+
+    def test_empty_inputs_stay_none(self):
+        from fisheries.tools.fish_species import _public_path
+
+        assert _public_path(None) is None
+        assert _public_path("") is None
