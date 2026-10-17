@@ -110,13 +110,16 @@ def step_knowledge_base() -> bool:
 
 
 def step_unit_tests() -> bool:
-    print("  [4/5] 运行测试：单元测试 + 端到端集成测试")
+    print("  [4/5] 运行测试：单元测试 + 端到端集成测试，并核对文档里的测试数量")
     print(_BAR)
     # 两层分开跑、分开报：单元测试是「代码对不对」，集成测试是「串起来还成不成立」。
     # 集成测试缺权重/缺索引会自己 skip（reason 里写补法），不会误判成失败。
     rc_unit = _run([PY, "-m", "pytest", "tests/unit", "-o", "addopts=", "-q"])
     print(_BAR)
     rc_it = _run([PY, "-m", "pytest", "tests/integration", "-o", "addopts=", "-q"])
+    print(_BAR)
+    # 文档里的「N 项」不是手写的：这里拿 pytest 的收集结果对一遍，过期就点出来。
+    rc_doc = _run([PY, "scripts/sync_test_counts.py", "--check"])
     print(_BAR)
     ok = True
     if rc_unit != 0:
@@ -129,6 +132,9 @@ def step_unit_tests() -> bool:
         ok = False
     else:
         print("  集成测试全部通过（缺权重/缺索引的用例会自动跳过并说明补法）。")
+    if rc_doc != 0:
+        print(f"  文档里的测试数量已过期，退出码 {rc_doc}：跑 python scripts/sync_test_counts.py")
+        ok = False
     return ok
 
 

@@ -764,6 +764,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 │   ├── train_lesion_seg.py      # 训练 + 评估病灶分割模型（见 §12.4）
 │   ├── train_yolo_species.py    # 训练 + 评估鱼种三档分类模型（见 §12.5）
 │   ├── pack_dataset_mirror.py   # 把已导好的数据集 / 权重打成可上传的镜像包（见 §3.5、§3.6）
+│   ├── sync_test_counts.py      # 文档里的测试数量 = pytest 收集结果（见 §11）
 │   └── make_groundtruth_sample.py / evaluate_groundtruth.py  # 人工真值集抽样与评测（见 §12.2）
 ├── src/fisheries/
 │   ├── datasets.py          # 「数据集名字 → 磁盘位置」的唯一真相来源
@@ -796,7 +797,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1222 项（1221 通过 + 1 条件跳过）
+python -m pytest -m "not integration"        # 单元测试：1236 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -805,7 +806,11 @@ python -m pytest tests/unit/test_agent.py -v
 > ⚠ 统计行被吞时加 `-o addopts=""`：`pyproject.toml` 里已有 `addopts="-q"`，
 > 命令行再叠一个 `-q` 会变成 `-qq`，pytest 就不打印汇总行了。
 
-### 11.1 单元测试（1222 项）
+> 上面这些「N 项」不是手写的：`python scripts/sync_test_counts.py` 拿 `pytest --collect-only`
+> 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
+> （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
+
+### 11.1 单元测试（1236 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -828,6 +833,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
+| `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
 | `test_weights.py` | 42 | 权重注册表与哈希形状、md5/sha256 校验五情形、下载与缓存、坏包拒绝、镜像回退、`mock_notice` 文案与只喊一次、`.gitignore` 放行 `checksums.md5`、命令行三条子命令 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
