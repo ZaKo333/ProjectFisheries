@@ -87,9 +87,18 @@ def _print_doc_table(docs) -> None:
             f"{m.doc_id:<22} {m.category:<6} {m.disease or '-':<6} "
             f"{verified:<6} {m.title}"
         )
+    # 同一类告警合并成一行。每篇语料都带 verified=True 的自查提示，逐条打印会
+    # 刷出十几行黄字，让人以为构建出了问题——其实那只是催作者去核对原文。
+    buckets: dict[str, list[str]] = {}
     for d in docs:
         for w in d.warnings:
-            print(f"  {_console.warn()} [{d.meta.doc_id}] {w}")
+            buckets.setdefault(w, []).append(d.meta.doc_id)
+    for w, ids in buckets.items():
+        if len(ids) == 1:
+            print(f"  {_console.warn()} [{ids[0]}] {w}")
+        else:
+            print(f"  {_console.warn()} {len(ids)} 篇语料：{w}")
+            print(f"      {'、'.join(ids)}")
 
 def _print_chunk_report(pairs) -> None:
     lens = [len(t) for _m, t in pairs]

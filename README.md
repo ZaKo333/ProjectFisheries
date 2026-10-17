@@ -152,6 +152,43 @@ python -m fisheries.api                # 然后打开 http://127.0.0.1:8000/app/
 
 ### 3.2 安装
 
+#### 一键配置（推荐）
+
+下载或克隆本仓库后，**双击 `一键配置环境.bat`**（等价于 `setup.bat`）即可。
+它会依次做完五件事，重复运行是安全的（已经做过的步骤会跳过）：
+
+1. 检查 Python 版本（需 ≥ 3.10），挡掉 Windows 商店版的 python 转发器；
+2. 建 `.venv`；
+3. 升级 pip / setuptools / wheel；
+4. 装依赖 `.[dev,rag,api]`；
+5. 构建知识库向量库（**向量库不入库**，所以全新克隆必须做一次），然后验证依赖齐全。
+
+最后它会把「下一步双击哪个 .bat、打开哪个地址」打印出来。
+
+也可以走命令行，带参数：
+
+```bash
+python scripts/setup_env.py                     # 和双击等价
+python scripts/setup_env.py --mirror tsinghua   # 用国内镜像装依赖
+python scripts/setup_env.py --skip-kb           # 先不建向量库，只想看看页面
+python scripts/setup_env.py --recreate          # 删掉 .venv 重建
+python scripts/setup_env.py --extras api,rag,dev --python C:\Python313\python.exe
+```
+
+| 参数 | 作用 |
+|---|---|
+| `--mirror {official,tsinghua,aliyun,ustc}` | 换 PyPI 源，默认 `official` |
+| `--skip-kb` | 跳过向量库（知识问答会不可用，其余功能正常） |
+| `--rebuild-kb` | 向量库已存在也重建 |
+| `--recreate` | 删掉 `.venv` 重建（环境搞坏了用这个） |
+| `--extras` | 自选 extras，默认 `dev,rag,api` |
+| `--skip-install` / `--skip-verify` | 只跑其中几步 |
+
+> 装依赖失败多半是网络。加 `--mirror tsinghua` 重试；仍然失败就看脚本打印的
+> `[失败]` 那一行，它会指出是哪一步。
+
+#### 手动安装（不想用脚本时）
+
 ```bash
 # 建虚拟环境
 python -m venv .venv
@@ -201,7 +238,7 @@ python scripts/build_knowledge_base.py           # 首次构建（会下载向�
 python scripts/build_knowledge_base.py --check   # 只校验一致性，不重建
 ```
 
-### 3.4 三个常用命令
+### 3.4 两个常用命令（Windows 上双击对应 .bat 即可）
 
 ```bash
 # ① 起 HTTP 服务 + Web 前端（页面在 /app/，Swagger 在 /docs）
@@ -210,6 +247,9 @@ python -m fisheries.api                            # http://127.0.0.1:8000/app/
 # ② 环境体检（不开服务，逐项检查依赖、模型、知识库、数据集）
 python scripts/selftest.py
 ```
+
+对应的双击入口是 `启动接口服务.bat` 与 `运行自检.bat`（都是纯 ASCII 的薄壳，
+只负责找到 `.venv` 并转发，中文提示都由 Python 打印）。
 
 命令行 demo（每一个都能离线跑，输出是确定性的）：
 
@@ -574,6 +614,8 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ├── pyproject.toml
 ├── README.md                # 本文件
 ├── 使用说明.txt             # 面向非技术使用者（双击 .bat 之前先看这个）
+├── setup.bat                # 一键配置环境（建 .venv + 装依赖 + 建向量库 + 验证）
+├── 一键配置环境.bat         # 中文名 .bat 只做转发，见下方说明
 ├── run-api.bat              # 启动接口服务（同时托管 Web 前端）
 ├── run-selftest.bat         # 环境体检
 ├── 启动接口服务.bat         # 中文名 .bat 只做转发，见下方说明
@@ -589,7 +631,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 │   └── pond_demo_water.csv  # 演示用 24 小时水质读数
 ├── data/                    # 运行期产物（不进版本库；datasets/ 是可选的数据集落点）
 ├── models/                  # 模型权重（不进版本库，见 §3.3）
-├── scripts/                 # 全部 CLI：demo / 建库 / 建模板 / 取数据 / 训练 / 体检
+├── scripts/                 # 全部 CLI：一键配置 / demo / 建库 / 建模板 / 取数据 / 训练 / 体检
 ├── src/fisheries/
 │   ├── datasets.py          # 「数据集名字 → 磁盘位置」的唯一真相来源
 │   ├── console.py           # 控制台编码兜底
@@ -614,7 +656,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1034 项
+python -m pytest                     # 全部 1111 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -624,6 +666,7 @@ python -m pytest tests/unit/test_agent.py -v
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
 | `test_tools.py` | 83 | 阈值端点、红线、分子氨协同、缺失权重重归一化、NaN 拒绝、图像确定性 |
+| `test_fish_species.py` | 34 | 品种别名映射、无权重时不猜、错误码、不在 `TOOL_HANDLERS` 里 |
 | `test_agent.py` | 114 | 单模态权重归一化、协同规则、护栏补调、等级下限不被稀释、输出契约 |
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
@@ -635,7 +678,8 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_water_templates.py` | 68 | 模板预期等级 vs 规则引擎、CSV 往返、提交物与代码一致 |
 | `test_datasets.py` | 87 | 数据集注册表、解析优先级、绝对路径回归守卫 |
 | `test_console.py` | 27 | 编码兜底、符号降级、编码锁 |
-| `test_launchers.py` | 30 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
+| `test_launchers.py` | 34 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
+| `test_setup_env.py` | 39 | 一键配置：版本门、extras 与 `pyproject` 一致、镜像与 pip 命令拼装 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
 
