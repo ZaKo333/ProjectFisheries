@@ -169,9 +169,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Readings Api V1 Ponds  Pond Id  Readings Get"
+                  "$ref": "#/components/schemas/PondReadingsResponse"
                 }
               }
             }
@@ -1424,6 +1422,39 @@
           "buffered_total"
         ],
         "title": "IngestSensorResponse"
+      },
+      "PondReadingsResponse": {
+        "properties": {
+          "pond_id": {
+            "type": "string",
+            "title": "Pond Id"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "returned": {
+            "type": "integer",
+            "title": "Returned"
+          },
+          "readings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Readings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pond_id",
+          "total",
+          "returned"
+        ],
+        "title": "PondReadingsResponse",
+        "description": "会话缓冲里的读数快照（`GET /api/v1/ponds/{pond_id}/readings`）。\n\n以前这个路由没有响应模型，OpenAPI 里只剩 ``additionalProperties: true``，\n前端只能靠猜——现在把外壳钉住，``readings`` 里仍是**原样回吐**的传感器\npayload（字段由调用方决定，不在这里收窄）。"
       },
       "SpeciesAvailabilityResponse": {
         "properties": {

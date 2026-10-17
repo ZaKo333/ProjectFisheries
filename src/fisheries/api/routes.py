@@ -38,7 +38,7 @@ from ..water_templates import (
     get_template,
     render_csv,
 )
-from .deps import AppState, get_state
+from .deps import AppState, get_state, project_root
 from .schemas import (
     AdvisoryOut,
     AlertOut,
@@ -53,6 +53,7 @@ from .schemas import (
     IngestImageResponse,
     IngestSensorRequest,
     IngestSensorResponse,
+    PondReadingsResponse,
     SpeciesAvailabilityResponse,
     SpeciesDetectResponse,
     TemplateCatalogResponse,
@@ -189,6 +190,21 @@ def health(request: Request) -> HealthResponse:
     )
 
 
+def _knowledge_unavailable_detail(state: AppState) -> str:
+    """拼 /chat 的 503 文案，且**只提一次**建库命令。
+
+    ``knowledge_status["detail"]`` 往往已经写着「请先运行
+    scripts/build_knowledge_base.py。」，早先的实现无条件再追加一句
+    「；可先运行 scripts/build_knowledge_base.py 建库。」，于是同一句话
+    在同一个响应里出现两遍——用户会以为有两个不同的操作要做。
+    """
+    detail = str(state.knowledge_status.get("detail") or "未初始化").strip()
+    message = "知识库不可用：" + detail
+    if "build_knowledge_base" not in detail:
+        message += "；可先运行 scripts/build_knowledge_base.py 建库。"
+    return message
+
+
 def _session_id(request: Request) -> str:
     """取中间件挂上的会话标识。
 
@@ -202,6 +218,21 @@ def _session_id(request: Request) -> str:
             detail="会话标识未初始化（中间件未生效）",
         )
     return str(sid)
+
+
+def _stored_path(dest: Path) -> str:
+    """落盘位置的对外表示：**相对工程根**，例如 ``data/uploads/ab12.jpg``。
+
+    绝对路径（``C:\\fisheries\\app\\data\\uploads\\…``）会把服务器目录结构
+    泄露给任何上传者，而 ``upload_id`` 本身已经能唯一定位文件，所以对外
+    给相对路径既够用又安全；不在工程内（自定义 ``FISHERIES_API_UPLOAD_DIR``）
+    时退回文件名。
+    """
+    try:
+        return dest.resolve().relative_to(project_root().resolve()).as_posix()
+    except (OSError, ValueError):
+        return dest.name
+
 
 
 # --------------------------------------------------------------------------- #
@@ -373,18 +404,19 @@ def ingest_sensor(payload: IngestSensorRequest, request: Request) -> IngestSenso
 
 @router.get(
     "/ponds/{pond_id}/readings",
+    response_model=PondReadingsResponse,
     summary="读取会话缓冲里的读数",
 )
-def get_readings(pond_id: str, request: Request, limit: int = 200) -> dict[str, Any]:
+def get_readings(pond_id: str, request: Request, limit: int = 200) -> PondReadingsResponse:
     state: AppState = get_state(request)
     items = state.get_readings(_session_id(request), pond_id)
     limit = max(1, min(limit, state.settings.buffer_max))
-    return {
-        "pond_id": pond_id,
-        "total": len(items),
-        "returned": min(limit, len(items)),
-        "readings": items[-limit:],
-    }
+    return PondReadingsResponse(
+        pond_id=pond_id,
+        total=len(items),
+        returned=min(limit, len(items)),
+        readings=items[-limit:],
+    )
 
 
 @router.post(
@@ -417,7 +449,7 @@ async def ingest_image(
         filename=original.name,
         size_bytes=size,
         content_type=file.content_type,
-        stored_path=str(dest),
+        stored_path=_stored_path(dest),
         vision=result,
     )
 
@@ -472,10 +504,7 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     if state.knowledge_base is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "知识库不可用：" + str(state.knowledge_status.get("detail", "未初始化"))
-                + "；可先运行 scripts/build_knowledge_base.py 建库。"
-            ),
+            detail=_knowledge_unavailable_detail(state),
         )
 
     from ..rag.schemas import RetrievalQuery
@@ -784,6 +813,6 @@ async def detect_species(
         upload_id=upload_id,
         filename=original.name,
         size_bytes=size,
-        stored_path=str(dest),
+        stored_path=_stored_path(dest),
         species=result,
     )

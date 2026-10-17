@@ -2886,8 +2886,8 @@
   "GET /api/v1/species": {
     "available": true,
     "reason": "",
-    "weights": "<工程>\\models\\yolov8-species.pt",
-    "expected": "<工程>\\models\\yolov8-species.pt",
+    "weights": "models/yolov8-species.pt",
+    "expected": "models/yolov8-species.pt",
     "species": [
       "鲤科",
       "罗非鱼",

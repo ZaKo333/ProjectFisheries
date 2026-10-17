@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -183,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"单块目标字数（默认 {DEFAULT_MAX_CHARS}）")
     ap.add_argument("--overlap-chars", type=int, default=DEFAULT_OVERLAP_CHARS,
                     help=f"相邻块重叠字数（默认 {DEFAULT_OVERLAP_CHARS}）")
+    ap.add_argument("--rebuild", action="store_true",
+                    help="先删掉旧向量库再重建（换 embedder、库被写坏时用）")
     ap.add_argument("--check", action="store_true",
                     help="只报告当前状态，不构建")
     ap.add_argument("--dry-run", action="store_true",
@@ -216,6 +219,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print("\n  运行 `python scripts/build_knowledge_base.py` 构建。")
         return 0 if exists else 1
+
+    # --rebuild：先把旧库整个删掉，否则「换 embedder / 写坏的库」这两种
+    # 场景会继续读到旧向量（服务端也会因为维度不一致而 StoreMismatchError）。
+    if args.rebuild and not args.check and not args.dry_run and persist_dir.exists():
+        print(f"  --rebuild: 删除旧向量库 {persist_dir}")
+        shutil.rmtree(persist_dir, ignore_errors=True)
+        print(f"  {_console.mark(True)} 旧库已删除，将重新构建")
 
     if not corpus_dir.is_dir():
         print(f"  {_console.mark(False)} 语料目录不存在：{corpus_dir}", file=sys.stderr)

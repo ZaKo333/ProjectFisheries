@@ -639,9 +639,19 @@ export FISHERIES_TRANSLATOR_MODE=auto    # auto / local / glossary / llm / bypas
 ## 8. HTTP 接口
 
 ```bash
-python -m uvicorn fisheries.api.app:app --host 127.0.0.1 --port 8812
+# 方式 A（不需要装包）：--app-dir 让 uvicorn 去 src/ 里找 fisheries 包
+python -m uvicorn --app-dir src fisheries.api.app:app --host 127.0.0.1 --port 8812
+
+# 方式 B（已经 pip install -e . 之后）：直接用模块入口
+python -m fisheries.api.app
+
 # Swagger 文档： http://127.0.0.1:8812/docs
 ```
+
+> 注意别直接敲 `python -m uvicorn fisheries.api.app:app`：只有装过 editable 包
+> （`pip install -e .`）或设置过 `PYTHONPATH=src` 时才找得到 `fisheries`，否则报
+> `ModuleNotFoundError: No module named 'fisheries'`。仓库自带的 `启动接口服务.bat`
+> 已经处理好了这两件事。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -814,7 +824,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1330 项
+python -m pytest -m "not integration"        # 单元测试：1341 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -827,7 +837,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1330 项）
+### 11.1 单元测试（1341 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -837,7 +847,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
 | `test_rag.py` | 105 | front-matter、分块、RRF 融合、清单一致性守卫 |
-| `test_api.py` | 99 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
+| `test_api.py` | 107 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
 | `test_api_auth.py` | 32 | 访问口令：未配口令照常开放、配了之后 401 + `WWW-Authenticate`、Bearer 大小写、登录/登出与 cookie（值是口令的 SHA-256）、导航跳转、`next` 只收站内路径 |
 | `test_api_rag.py` | 34 | 接口层 × 真实知识库的一致性、溯源标记 |
 | `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |
@@ -851,6 +861,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
 | `test_deploy_script.py` | 14 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
+| `test_build_kb_script.py` | 3 | `build_knowledge_base.py --rebuild`：参数真的存在、会删旧库、`--check` 下不删 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
 | `test_session_store.py` | 29 | 会话标识的合法性、读数按会话/塘号隔离、`replace`、超上限丢最旧、历史与上传同样隔离、换实例后数据还在（模拟重启）、惰性建库 |

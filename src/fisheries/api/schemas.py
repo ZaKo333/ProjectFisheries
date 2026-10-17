@@ -310,6 +310,23 @@ class ChatResponse(_Strict):
     warnings: list[str] = Field(default_factory=list)
 
 
+class PondReadingsResponse(_Strict):
+    """会话缓冲里的读数快照（`GET /api/v1/ponds/{pond_id}/readings`）。
+
+    以前这个路由没有响应模型，OpenAPI 里只剩 ``additionalProperties: true``，
+    前端只能靠猜——现在把外壳钉住，``readings`` 里仍是**原样回吐**的传感器
+    payload（字段由调用方决定，不在这里收窄）。
+    """
+
+    pond_id: str
+    #: 该会话 + 该塘口缓冲里的总条数（可能大于 ``returned``）
+    total: int
+    #: 本次实际返回的条数（``limit`` 截断后）
+    returned: int
+    #: 读数本体，按写入时间升序；元素是 ``/ingest/sensor`` 收到的 payload
+    readings: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class HistoryResponse(_Strict):
     pond_id: str
     total: int

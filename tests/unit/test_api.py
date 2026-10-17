@@ -705,6 +705,86 @@ class TestToolCall:
 # --------------------------------------------------------------------------- #
 
 
+class TestNoServerPathsInResponses:
+    """公开响应里不许出现服务器绝对路径。
+
+    这条曾经真实发生过：`/api/v1/species` 回 `C:\\fisheries\\app\\models\\…`，
+    `/ingest/image` 回 `C:\\fisheries\\app\\data\\uploads\\…`。前者泄露部署布局，
+    后者把落盘位置直接告诉任何上传者——都只需要「相对工程根」就够用。
+    """
+
+    def test_upload_reports_a_relative_stored_path(self, client):
+        body = client.post(
+            "/api/v1/ingest/image",
+            files={"file": ("fish.png", b"\x89PNG\r\n\x1a\n" + b"0" * 400, "image/png")},
+        ).json()
+
+        stored = body["stored_path"]
+        assert ":" not in stored, stored
+        assert not stored.startswith(("/", "\\")), stored
+        # 测试里 upload_dir 是临时目录（不在工程内）→ 退回文件名；
+        # 生产用默认 data/uploads 时是 data/uploads/<id>.png，两者都不含盘符。
+        assert stored.endswith(".png"), stored
+        if "/" in stored:
+            assert stored.startswith("data/uploads/"), stored
+
+    def test_species_detect_reports_a_relative_stored_path(self, client, monkeypatch):
+        from fisheries.api import routes as routes_mod
+
+        monkeypatch.setattr(
+            routes_mod,
+            "fish_species_detect",
+            lambda path: {"status": "ok", "detected": False, "note": "stub"},
+        )
+        body = client.post(
+            "/api/v1/species/detect",
+            files={"file": ("fish.png", b"\x89PNG\r\n\x1a\n" + b"0" * 400, "image/png")},
+        ).json()
+
+        stored = body["stored_path"]
+        assert ":" not in stored, stored
+        assert stored.endswith(".png"), stored
+
+
+class TestStoredPathHelper:
+    """`_stored_path` 单独钉一遍：工程内给相对工程根，工程外只给文件名。"""
+
+    def test_path_inside_the_project_is_relative_to_it(self):
+        from fisheries.api.deps import project_root
+        from fisheries.api.routes import _stored_path
+
+        target = project_root() / "data" / "uploads" / "ab12.png"
+        assert _stored_path(target) == "data/uploads/ab12.png"
+
+    def test_path_outside_the_project_falls_back_to_the_file_name(self):
+        from pathlib import Path as _Path
+
+        from fisheries.api.routes import _stored_path
+
+        assert _stored_path(_Path("C:/elsewhere/uploads/ab12.png")) == "ab12.png"
+
+
+class TestReadingsResponseModel:
+    def test_readings_route_is_typed_in_openapi(self, client):
+        schema = client.get("/openapi.json").json()
+        op = schema["paths"]["/api/v1/ponds/{pond_id}/readings"]["get"]
+        ref = op["responses"]["200"]["content"]["application/json"]["schema"]
+
+        assert ref.get("$ref", "").endswith("/PondReadingsResponse"), ref
+
+    def test_readings_body_matches_the_model(self, client):
+        client.post(
+            "/api/v1/ingest/sensor",
+            json={"pond_id": "p1", "readings": good_water()},
+        )
+        body = client.get("/api/v1/ponds/p1/readings").json()
+
+        assert set(body) == {"pond_id", "total", "returned", "readings"}
+        assert body["pond_id"] == "p1"
+        assert body["total"] >= 1
+        assert body["returned"] == len(body["readings"])
+
+
 class TestImageUpload:
     def test_upload_returns_vision_immediately(self, client):
         resp = client.post(
@@ -939,6 +1019,31 @@ class TestChatAndConfig:
         resp = client.post("/api/v1/chat", json={"query": "溶氧低怎么办"})
         assert resp.status_code == 503
         assert "知识库不可用" in str(resp.json())
+
+    def test_unavailable_hint_is_not_repeated(self, client):
+        """同一句「跑哪个脚本」在同一个响应里只许出现一次。
+
+        早先的实现把 ``knowledge_status["detail"]``（本身已含「请先运行
+        scripts/build_knowledge_base.py。」）又接了一句「；可先运行
+        scripts/build_knowledge_base.py 建库。」，用户会以为有两件事要做。
+        """
+        state = client.app.state.fisheries_state
+        state.knowledge_status = {
+            "status": "unavailable",
+            "detail": "知识库不可用：还没建库。请先运行 scripts/build_knowledge_base.py。",
+        }
+
+        body = client.post("/api/v1/chat", json={"query": "溶氧低怎么办"}).json()
+        message = body["detail"]
+
+        assert message.count("build_knowledge_base") == 1, message
+
+    def test_hint_is_added_when_the_detail_does_not_mention_the_script(self, client):
+        state = client.app.state.fisheries_state
+        state.knowledge_status = {"status": "unavailable", "detail": "还没建库"}
+
+        body = client.post("/api/v1/chat", json={"query": "溶氧低怎么办"}).json()
+        assert "build_knowledge_base" in body["detail"]
 
     def test_chat_query_too_short_is_422(self, client):
         assert client.post("/api/v1/chat", json={"query": "x"}).status_code == 422
