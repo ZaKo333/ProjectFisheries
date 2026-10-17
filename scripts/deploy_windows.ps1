@@ -30,6 +30,11 @@ param(
     [string]$Extras = "dev,rag,api",
     [string]$Token,
     [switch]$NoAuth,
+    [string]$LlmProvider,
+    [string]$LlmApiKey,
+    [string]$LlmModel,
+    [string]$LlmBaseUrl,
+    [switch]$NoLlm,
     [switch]$SkipPython,
     [switch]$NoTask
 )
@@ -170,6 +175,46 @@ if (Test-Path $kbManifest) {
 }
 Step "embedder for the service: $Embedder"
 
+# --- 4b. optional LLM ----------------------------------------------------
+# The API ships with a deterministic mock advisor: /chat then answers with the
+# retrieved text verbatim and flags answer_is_raw_retrieval=true. Supplying a
+# provider here switches it to a real OpenAI-compatible backend. The choice is
+# persisted in llm.txt (provider / model / base_url / api_key) so a re-deploy
+# without parameters keeps it - and so the key does not live in the .bat only.
+$LlmFile = Join-Path $Root "llm.txt"
+$llm = @{}
+if (Test-Path $LlmFile) {
+    foreach ($line in Get-Content $LlmFile) {
+        if ($line -match "^\s*([A-Za-z_]+)\s*=\s*(.*)$") { $llm[$Matches[1]] = $Matches[2].Trim() }
+    }
+}
+if ($NoLlm) {
+    $llm = @{}
+    Remove-Item -Path $LlmFile -ErrorAction SilentlyContinue
+} else {
+    if ($LlmProvider) { $llm["provider"] = $LlmProvider }
+    if ($LlmApiKey) { $llm["api_key"] = $LlmApiKey }
+    if ($LlmModel) { $llm["model"] = $LlmModel }
+    if ($LlmBaseUrl) { $llm["base_url"] = $LlmBaseUrl }
+    if ($llm["provider"] -eq "mock") {
+        $llm = @{}
+        Remove-Item -Path $LlmFile -ErrorAction SilentlyContinue
+    } elseif ($llm.Count -gt 0) {
+        $llm.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" } |
+            Set-Content -Path $LlmFile -Encoding ascii
+    }
+}
+$llmLines = ""
+if ($llm["provider"]) { $llmLines += "set `"FISHERIES_LLM_PROVIDER=$($llm['provider'])`"`r`n" }
+if ($llm["model"]) { $llmLines += "set `"FISHERIES_LLM_MODEL=$($llm['model'])`"`r`n" }
+if ($llm["base_url"]) { $llmLines += "set `"FISHERIES_LLM_BASE_URL=$($llm['base_url'])`"`r`n" }
+if ($llm["api_key"]) { $llmLines += "set `"FISHERIES_LLM_API_KEY=$($llm['api_key'])`"`r`n" }
+if ($llm["provider"]) {
+    Step "llm: provider=$($llm['provider']) model=$($llm['model']) (config kept in $LlmFile)"
+} else {
+    Step "llm: none (mock advisor - /chat returns raw retrieval and says so)"
+}
+
 # --- 5. launcher ---------------------------------------------------------
 # The port is usually mapped to the public internet, so the generated launcher
 # carries an access token unless -NoAuth was given. Reusing the same value on a
@@ -205,6 +250,7 @@ set "FISHERIES_API_MAX_UPLOAD_MB=10"
 set "FISHERIES_API_ALLOW_LOCAL_PATH=0"
 set "FISHERIES_API_ENABLE_CORS=0"
 set "FISHERIES_RAG_EMBEDDER=$Embedder"
+$llmLines
 set "PYTHONIOENCODING=utf-8"
 cd /d "$App"
 if not exist "$ServerLog" type nul > "$ServerLog"
@@ -261,6 +307,12 @@ if ($Token) {
     Write-Host "           (also saved in $TokenFile; open /login once and the browser remembers it)"
 } else {
     Write-Host "LOGIN      no token (-NoAuth): anyone who can reach the port can use the service"
+}
+if ($llm["provider"]) {
+    Write-Host "LLM        provider=$($llm['provider']) model=$($llm['model'])" -ForegroundColor Green
+    Write-Host "           (set in $LlmFile; /chat now answers with the model, answer_is_raw_retrieval=false)"
+} else {
+    Write-Host "LLM        none: /chat returns the retrieved text verbatim and flags answer_is_raw_retrieval=true"
 }
 try { Stop-Transcript | Out-Null } catch { }
 exit 0

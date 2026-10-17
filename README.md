@@ -589,6 +589,8 @@ export FISHERIES_LLM_ADVISOR_MODEL=aqua-7b
 
 Windows PowerShell 用 `$env:名字 = "值"` 的写法。
 
+部署到 Windows 服务器时不用手改配置：`scripts\deploy_windows.ps1` 支持 `-LlmProvider deepseek -LlmApiKey sk-xxx`（可选 `-LlmModel` / `-LlmBaseUrl`），它会把这几项写进 `run-server.bat` 并持久化到 `C:\fisheries\llm.txt`，重跑部署自动复用（`-NoLlm` 可关掉）。验证方法：`POST /api/v1/chat` 的响应里 `answer_is_raw_retrieval` 从 `true` 变 `false`。
+
 内置预置后端：
 
 | provider | 说明 |
@@ -812,7 +814,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1312 项
+python -m pytest -m "not integration"        # 单元测试：1318 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -825,7 +827,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1312 项）
+### 11.1 单元测试（1318 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -848,6 +850,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
+| `test_deploy_script.py` | 6 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
 | `test_session_store.py` | 29 | 会话标识的合法性、读数按会话/塘号隔离、`replace`、超上限丢最旧、历史与上传同样隔离、换实例后数据还在（模拟重启）、惰性建库 |
