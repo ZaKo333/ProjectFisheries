@@ -156,6 +156,7 @@
     COMPUTE_FAILED:    "计算失败，请检查数据后重试",
     UNKNOWN_TOOL:      "调用了未注册的工具",
     BAD_ARGUMENTS:     "工具参数不合法",
+    BAD_JSON_ARGUMENTS: "大模型给出的工具参数不是合法 JSON，本轮未执行",
     TOOL_CRASHED:      "工具执行时抛出异常",
     DUPLICATE_CALL:    "同一工具在一次评估里被重复调用",
     UNKNOWN:           "原因未知",

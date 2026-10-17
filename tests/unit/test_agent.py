@@ -717,6 +717,88 @@ class TestOrchestrator:
         dumped = r.model_dump(mode="json")
         assert json.dumps(dumped, ensure_ascii=False)
 
+class TestBrokenJsonArguments:
+    """模型把 arguments 写成非法 JSON 时的三道防线。
+
+    线上真实故障（2026-10-17，qwen-plus）：第一轮把 ``water_risk_predict`` 的
+    arguments 写坏，于是出现两个连带问题——
+
+    1. ``{"__parse_error__": ...}`` 被当关键字参数塞进工具函数，对外报
+       ``unexpected keyword argument '__parse_error__'``（用户完全看不懂）；
+    2. 坏原文被原样回灌进下一轮请求，DashScope 返回 400
+       ``function.arguments must be in JSON format``，整次调度降级。
+
+    再加上第三点：护栏把「参数坏了」误报成「模型漏调」。三处都要堵住。
+    """
+
+    @staticmethod
+    def _broken_call() -> ToolCall:
+        return ToolCall(
+            id="c1",
+            name="water_risk_predict",
+            arguments={"__parse_error__": "{readings: 7.2"},
+            raw_arguments="{readings: 7.2",
+        )
+
+    class _BrokenThenFixed:
+        """第一轮给坏参数，之后不再调工具。"""
+
+        def __init__(self) -> None:
+            self.seen: list[list[dict[str, Any]]] = []
+
+        def chat(self, messages, tools=None):
+            self.seen.append([dict(m) for m in messages])
+            if len(self.seen) == 1:
+                return ChatResponse(finish_reason="tool_calls",
+                                    tool_calls=[TestBrokenJsonArguments._broken_call()])
+            return ChatResponse(content="好了", finish_reason="stop")
+
+    class _BrokenOnly:
+        """始终只给坏参数——验证护栏会用确定性输入补调。"""
+
+        def chat(self, messages, tools=None):
+            return ChatResponse(finish_reason="tool_calls",
+                                tool_calls=[TestBrokenJsonArguments._broken_call()])
+
+    def test_tool_call_reports_json_error_instead_of_kwargs_crash(self):
+        payload = AquacultureAgent()._execute_tool(
+            "water_risk_predict", {"__parse_error__": "{readings: 7.2"}
+        )
+
+        assert payload["error_code"] == "BAD_JSON_ARGUMENTS"
+        assert "JSON" in payload["error_message"]
+        assert "__parse_error__" not in payload["error_message"]
+
+    def test_arguments_sent_back_are_always_valid_json(self):
+        raw = AquacultureAgent._json_arguments(self._broken_call())
+
+        assert json.loads(raw) == {}
+
+    def test_valid_raw_arguments_are_passed_through_unchanged(self):
+        call = ToolCall(id="c1", name="f", arguments={"a": 1}, raw_arguments='{"a": 1}')
+
+        assert AquacultureAgent._json_arguments(call) == '{"a": 1}'
+
+    def test_follow_up_request_never_carries_broken_arguments(self):
+        client = self._BrokenThenFixed()
+        agent = AquacultureAgent(scheduler_client=client, advisor_client=MockLLMClient())
+        agent.run(AgentInput(pond_id="P1", water_readings=GOOD_READINGS))
+
+        assert len(client.seen) >= 2, "第一轮之后应该还有一次请求"
+        for msg in client.seen[1]:
+            for call in msg.get("tool_calls") or []:
+                assert isinstance(json.loads(call["function"]["arguments"]), dict)
+
+    def test_guardrail_refills_an_unusable_call(self):
+        agent = AquacultureAgent(scheduler_client=self._BrokenOnly(),
+                                 advisor_client=MockLLMClient())
+        r = agent.run(AgentInput(pond_id="P1", water_readings=GOOD_READINGS))
+
+        assert r.water is not None, "参数坏了不等于可以不做水质分析"
+        combined = " ".join(f"{s.title}{s.detail}" for s in r.trace)
+        assert "不是合法 JSON" in combined
+        assert any("不是合法 JSON" in x for x in r.degraded_reasons)
+
 
 # --------------------------------------------------------------------------- #
 # 九、输入契约

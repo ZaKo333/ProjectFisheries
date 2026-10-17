@@ -278,6 +278,9 @@ class AquacultureAgent:
 
         self.trace: list[TraceStep] = []
         self.degraded_reasons: list[str] = []
+        #: 最近一次 run() 里因为「参数不是合法 JSON」而没被采纳的工具名。
+        #: 这些工具不算调用过，护栏要补调，日志也要说清是参数坏了而不是漏调。
+        self._bad_json_calls: set[str] = set()
 
         # ---- D12：提示词语言 + 回译后端 ----
         # 语言默认跟着建议角色后端走：aqua-7b / mistral 这类英文底座用英文提示词，
@@ -320,6 +323,19 @@ class AquacultureAgent:
 
     def _execute_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """执行一次工具调用。任何异常都转成结构化错误，绝不让 Agent 断链。"""
+        if "__parse_error__" in arguments:
+            # 模型把 arguments 写成了非法 JSON（llm.py 只做记号，不做猜测）。
+            # 绝不能把记号当关键字参数塞进工具函数——那会变成
+            # "unexpected keyword argument '__parse_error__'" 这种对外看不懂的报错。
+            raw = str(arguments.get("__parse_error__") or "")
+            return {
+                "status": "error",
+                "error_code": "BAD_JSON_ARGUMENTS",
+                "error_message": (
+                    f"工具参数不是合法 JSON（原文：{raw[:120]}），本轮调用没有执行；"
+                    f"请重新调用 {name}，并把 arguments 写成 JSON 对象。"
+                ),
+            }
         if name not in self.tool_handlers:
             return {
                 "status": "error",
@@ -377,6 +393,7 @@ class AquacultureAgent:
 
         results: dict[str, dict[str, Any]] = {}
         seen_calls: set[str] = set()
+        self._bad_json_calls = set()
 
         for round_idx in range(1, self.max_rounds + 1):
             try:
@@ -411,7 +428,12 @@ class AquacultureAgent:
                     self._log("tool_call", f"调用工具 {call.name}",
                               json.dumps(call.arguments, ensure_ascii=False)[:300])
                     payload = self._execute_tool(call.name, call.arguments)
-                    results[call.name] = payload
+                    if payload.get("error_code") == "BAD_JSON_ARGUMENTS":
+                        # 参数是坏的 ⇒ 这一轮等于没调成，不算 results，
+                        # 留给护栏用确定性输入补调（否则水质分析会静默缺席）。
+                        self._bad_json_calls.add(call.name)
+                    else:
+                        results[call.name] = payload
                     self._log("tool_result", f"{call.name} 返回 status={payload.get('status')}",
                               str(payload.get("error_message") or payload.get("degradation_summary")
                                   or payload.get("disease_type") or "")[:200])
@@ -444,7 +466,26 @@ class AquacultureAgent:
         return "\n".join(parts)
 
     @staticmethod
-    def _assistant_msg(resp: Any) -> dict[str, Any]:
+    def _json_arguments(call: Any) -> str:
+        """回灌给后端的 ``function.arguments`` 必须是**合法 JSON 字符串**。
+
+        DashScope 见到坏 JSON 会把整轮请求打成 400（"The function.arguments
+        parameter of the code model must be in JSON format"），也就是说模型自己
+        写坏一条参数，后面的轮次会全部连坐。这里兜底成 ``{}``：坏原文已经通过
+        tool 消息回灌给模型了，不需要再让后端因它整轮失败。
+        """
+        raw = getattr(call, "raw_arguments", "") or ""
+        if raw.strip():
+            try:
+                if isinstance(json.loads(raw), dict):
+                    return raw
+            except json.JSONDecodeError:
+                pass
+        data = {k: v for k, v in (getattr(call, "arguments", None) or {}).items()
+                if k != "__parse_error__"}
+        return json.dumps(data, ensure_ascii=False)
+
+    def _assistant_msg(self, resp: Any) -> dict[str, Any]:
         return {
             "role": "assistant",
             "content": resp.content,
@@ -452,8 +493,8 @@ class AquacultureAgent:
                 {
                     "id": c.id,
                     "type": "function",
-                    "function": {"name": c.name, "arguments": c.raw_arguments or
-                                 json.dumps(c.arguments, ensure_ascii=False)},
+                    "function": {"name": c.name,
+                                 "arguments": self._json_arguments(c)},
                 }
                 for c in resp.tool_calls
             ],
@@ -466,10 +507,15 @@ class AquacultureAgent:
         if not missing:
             return
 
+        bad = sorted(missing & self._bad_json_calls)
+        note = f"其中 {'、'.join(bad)} 的调用参数不是合法 JSON，未被采纳" if bad else ""
         self._log("guardrail", f"LLM 漏调 {len(missing)} 个必需工具，调度层补调",
-                  f"补调：{'、'.join(sorted(missing))}（说明模型本轮工具选择不完整）")
-        self.degraded_reasons.append(
-            f"LLM 漏调工具，已由护栏补调：{'、'.join(sorted(missing))}")
+                  f"补调：{'、'.join(sorted(missing))}（说明模型本轮工具选择不完整）"
+                  + (f"；{note}" if note else ""))
+        degraded = f"LLM 漏调工具，已由护栏补调：{'、'.join(sorted(missing))}"
+        if bad:
+            degraded += f"（{'、'.join(bad)} 的调用参数不是合法 JSON，已改用原始输入重算）"
+        self.degraded_reasons.append(degraded)
 
         if "water_risk_predict" in missing:
             results["water_risk_predict"] = self._execute_tool("water_risk_predict", {
