@@ -149,6 +149,9 @@ if (Test-Path $kbManifest) {
     Step "knowledge base already present"
 } else {
     Step "building knowledge base with embedder=$Embedder"
+    # HuggingFace is unreachable from many CN hosts; hf-mirror keeps fastembed usable.
+    if (-not $env:HF_ENDPOINT) { $env:HF_ENDPOINT = "https://hf-mirror.com" }
+    Step "HF_ENDPOINT=$env:HF_ENDPOINT"
     Push-Location $App
     try {
         & $VenvPy "scripts\build_knowledge_base.py" --embedder $Embedder
@@ -194,11 +197,22 @@ else { Step "firewall rule $ruleName allows TCP $Port" }
 
 if (-not $NoTask) {
     Step "registering scheduled task FisheriesAPI (on boot, as SYSTEM)"
-    & schtasks /Delete /TN "FisheriesAPI" /F 2>&1 | Out-Null
-    & schtasks /Create /TN "FisheriesAPI" /TR "`"$RunBat`"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F 2>&1 | Write-Host
-    if ($LASTEXITCODE -ne 0) { Fail "schtasks /Create failed" }
-    & schtasks /Run /TN "FisheriesAPI" 2>&1 | Write-Host
-    if ($LASTEXITCODE -ne 0) { Fail "schtasks /Run failed" }
+    # schtasks writes "not found" to stderr for a missing task; do not let that abort the run.
+    $ErrorActionPreference = "Continue"
+    $null = & schtasks /Query /TN "FisheriesAPI" 2>&1
+    if ($LASTEXITCODE -eq 0) { $null = & schtasks /Delete /TN "FisheriesAPI" /F 2>&1 }
+    $null = & schtasks /Create /TN "FisheriesAPI" /TR "`"$RunBat`"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F 2>&1
+    $taskOk = ($LASTEXITCODE -eq 0)
+    if ($taskOk) {
+        Step "task registered, starting it now"
+        $null = & schtasks /Run /TN "FisheriesAPI" 2>&1
+        if ($LASTEXITCODE -ne 0) { $taskOk = $false }
+    }
+    if (-not $taskOk) {
+        Write-Host "WARN: autostart task not available, starting the server for this session" -ForegroundColor Yellow
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$RunBat`"" -WindowStyle Hidden
+    }
+    $ErrorActionPreference = "Stop"
 }
 
 # --- 7. wait for health -------------------------------------------------
