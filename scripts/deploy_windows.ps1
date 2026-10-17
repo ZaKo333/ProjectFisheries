@@ -25,6 +25,9 @@ Options:
     -LlmApiKey ...        its key; kept in C:\fisheries\llm.txt and reused by later runs
     -LlmModel / -LlmBaseUrl   override the preset model / endpoint
     -NoLlm                drop the LLM config and fall back to the mock advisor
+    -CodeSha <sha>        download that exact commit archive from a mirror and copy
+                          it over the app dir (immutable, so a cached mirror cannot
+                          serve a stale tree); data/ and models/ are kept
     -Embedder fastembed   embedding backend for the knowledge base (default fastembed)
     -Embedder hash        offline pseudo-vectors (no model download, 256-dim)
     -RebuildKb            rebuild the knowledge base even if it is already there
@@ -46,6 +49,7 @@ param(
     [switch]$RebuildKb,
     [switch]$Vision,
     [string]$WeightsFrom,
+    [string]$CodeSha,
     [switch]$SkipPython,
     [switch]$NoTask
 )
@@ -96,7 +100,46 @@ Start-Transcript -Path $DeployLog -Append | Out-Null
 Step "host: $env:COMPUTERNAME / user: $env:USERNAME / port: $Port"
 
 # --- 1. project sources --------------------------------------------------
-if (Test-Path (Join-Path $App ".git")) {
+# -CodeSha pulls the archive of that exact commit from a CN mirror and copies it
+# over the previous tree. A commit archive is immutable, so the mirror cache can
+# never hand back a stale copy - which is exactly what bit us with
+# archive/refs/heads/main.zip (the mirror kept serving the old tree, and tar
+# happily re-extracted it while the deploy still printed DEPLOY_OK).
+if ($CodeSha) {
+    $short = $CodeSha.Substring(0, [Math]::Min(7, $CodeSha.Length))
+    $codeZip = Join-Path $Root "code-$short.zip"
+    $codeUrls = @(
+        "https://ghfast.top/https://github.com/ZaKo333/ProjectFisheries/archive/$CodeSha.zip",
+        "https://ghproxy.net/https://github.com/ZaKo333/ProjectFisheries/archive/$CodeSha.zip"
+    )
+    Remove-Item -LiteralPath $codeZip -ErrorAction SilentlyContinue
+    $got = $false
+    foreach ($u in $codeUrls) {
+        & curl.exe -L --fail --silent --show-error --max-time 900 -o $codeZip $u
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $codeZip) -and ((Get-Item $codeZip).Length -gt 500KB)) {
+            $got = $true
+            break
+        }
+        Warn "code archive download failed from $u"
+    }
+    if (-not $got) { Fail "cannot download code archive for $CodeSha" }
+    $codeTmp = Join-Path $Root "code-$short"
+    Remove-Item -LiteralPath $codeTmp -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $codeTmp | Out-Null
+    & tar.exe -xf $codeZip -C $codeTmp
+    if ($LASTEXITCODE -ne 0) { Fail "tar.exe could not extract $codeZip" }
+    $inner = @(Get-ChildItem -Path $codeTmp -Directory)
+    if ($inner.Count -ne 1) { Fail "archive $codeZip should hold exactly one root folder, found $($inner.Count)" }
+    if (-not $inner[0].Name.EndsWith($short)) {
+        Fail "archive root is '$($inner[0].Name)' but the requested commit is $short"
+    }
+    New-Item -ItemType Directory -Force -Path $App | Out-Null
+    # /E copies without deleting: data/ and models/ inside $App must survive.
+    & robocopy $inner[0].FullName $App /E /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "robocopy failed with code $LASTEXITCODE" }
+    Remove-Item -LiteralPath $codeTmp -Recurse -Force -ErrorAction SilentlyContinue
+    Step "code updated to $short from $codeZip"
+} elseif (Test-Path (Join-Path $App ".git")) {
     Step "updating sources in $App"
     & git -C $App fetch --depth 1 origin main 2>&1 | Write-Host
     & git -C $App reset --hard FETCH_HEAD 2>&1 | Write-Host
@@ -265,6 +308,26 @@ if ($NoLlm) {
     if ($LlmApiKey) { $llm["api_key"] = $LlmApiKey }
     if ($LlmModel) { $llm["model"] = $LlmModel }
     if ($LlmBaseUrl) { $llm["base_url"] = $LlmBaseUrl }
+    if ($llm["provider"] -and -not $llm["model"]) {
+        # The OpenAI-compatible SDK rejects an empty model, and the failure only
+        # shows up later as a ValidationError inside /chat, so a
+        # missing -LlmModel is filled with the provider default instead.
+        $modelDefaults = @{
+            "dashscope"      = "qwen-plus"
+            "deepseek"       = "deepseek-chat"
+            "openai"         = "gpt-4o-mini"
+            "aqua-7b-ollama" = "aqua-7b"
+            "aqua-7b-vllm"   = "KurmaAI/AQUA-7B"
+        }
+        $fallbackModel = $modelDefaults[$llm["provider"]]
+        if ($fallbackModel) {
+            $llm["model"] = $fallbackModel
+            Step "llm: -LlmModel not given, using '$fallbackModel' for provider '$($llm['provider'])'"
+        }
+    }
+    if ($llm["provider"] -and -not $llm["api_key"]) {
+        Warn "llm provider '$($llm['provider'])' has no api key; /chat will fall back to raw retrieval"
+    }
     if ($llm["provider"] -eq "mock") {
         $llm = @{}
         Remove-Item -Path $LlmFile -ErrorAction SilentlyContinue

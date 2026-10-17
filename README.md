@@ -824,7 +824,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1341 项
+python -m pytest -m "not integration"        # 单元测试：1348 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -837,7 +837,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1341 项）
+### 11.1 单元测试（1348 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -860,7 +860,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_deploy_script.py` | 14 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
+| `test_deploy_script.py` | 21 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
 | `test_build_kb_script.py` | 3 | `build_knowledge_base.py --rebuild`：参数真的存在、会删旧库、`--check` 下不删 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
@@ -1129,6 +1129,35 @@ curl.exe http://127.0.0.1:8000/api/v1/health      # fish_species_detect / fish_d
 权重文件也可以手动拖进远程桌面（驱动器/剪贴板重定向开着时直接复制粘贴即可），
 放到 `C:\fisheries\app\models\` 后 `schtasks /End /TN FisheriesAPI; schtasks /Run /TN FisheriesAPI` 重启即可生效
 （`/species` 每次请求都重新探测权重，但模型加载在进程内，所以还是要重启）。
+
+---
+
+### 12.11 服务器更新代码：用 SHA 归档，别用 main.zip
+
+`https://ghfast.top/https://github.com/ZaKo333/ProjectFisheries/archive/refs/heads/main.zip`
+这类**分支归档会被镜像缓存**：镜像给你一份旧的 `main.zip`，`tar` 照常解包成功，
+部署脚本照样打印 `DEPLOY_OK`——于是线上跑的是旧代码，而你以为已经更新了（这个坑真的踩到过：
+`/api/v1/species` 里还是绝对路径、`/openapi.json` 里没有新 schema）。
+
+按提交 SHA 取归档就没有这个问题：归档内容对某个 SHA 是**不可变**的，镜像缓存再多也只会给到同一份。
+
+```powershell
+# 一行到位：按 SHA 拉代码（脚本会校验解包出的根目录名以短 SHA 结尾）+ 重启
+& C:\fisheries\app\scripts\deploy_windows.ps1 -CodeSha <完整 40 位 SHA>
+```
+
+第一次从「旧脚本」切到「带 -CodeSha 的新脚本」时，先用显式命令把新脚本取下来：
+
+```powershell
+Remove-Item C:\fisheries\src.zip -ErrorAction SilentlyContinue
+curl.exe -L --fail -o C:\fisheries\src.zip https://ghfast.top/https://github.com/ZaKo333/ProjectFisheries/archive/<完整 SHA>.zip
+tar.exe -xf C:\fisheries\src.zip -C C:\fisheries\app --strip-components 1
+```
+
+两个细节：① 先删旧 zip——`curl` 失败而 `tar` 成功，等于把旧包又解了一遍；
+② 命令用 `;` 连起来时，`curl` 的失败**不会**阻止后面的 `tar`，务必看 `curl` 的返回码或
+直接把两条写成 `if ($LASTEXITCODE -eq 0) { … }`。之后 `-CodeSha` 分支用 `robocopy /E`
+覆盖代码（**不用 `/MIR`**，否则 `app\models` 与 `app\data` 会被顺手删掉）。
 
 ---
 

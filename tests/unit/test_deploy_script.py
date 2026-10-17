@@ -110,3 +110,46 @@ class TestScriptStaysPortable:
         text = _text()
         assert text.count("param(") == 1
         assert text.count('@"') == text.count('"@')
+
+
+class TestCodeUpdate:
+    """`-CodeSha` 这个分支是「镜像给了旧代码」的唯一解药，必须钉住。"""
+
+    def test_script_accepts_a_commit_sha(self) -> None:
+        assert "[string]$CodeSha" in _text()
+
+    def test_archive_url_is_pinned_to_the_commit(self) -> None:
+        text = _text()
+        # 用 main.zip 会被镜像缓存成旧树；按 SHA 取归档才是不可变的。
+        assert "/archive/$CodeSha.zip" in text
+        assert "ProjectFisheries/archive/refs/heads/main.zip" not in text
+
+    def test_two_mirrors_are_tried(self) -> None:
+        text = _text()
+        assert "ghfast.top" in text and "ghproxy.net" in text
+        assert "code archive download failed" in text
+
+    def test_extracted_root_must_match_the_sha(self) -> None:
+        text = _text()
+        assert 'EndsWith($short)' in text, "必须校验解包出来的根目录名以短 SHA 结尾，否者等于没校验"
+
+    def test_copy_never_deletes_data_or_models(self) -> None:
+        text = _text()
+        # robocopy /MIR 会顺手删掉 app\\models 与 app\\data；只允许 /E。
+        assert "robocopy" in text and "/E" in text
+        assert "/MIR" not in text
+
+
+class TestLlmModelDefaults:
+    def test_empty_model_gets_a_provider_default(self) -> None:
+        text = _text()
+        for provider, model in (
+            ("dashscope", "qwen-plus"),
+            ("deepseek", "deepseek-chat"),
+            ("openai", "gpt-4o-mini"),
+        ):
+            assert f'"{provider}"' in text and f'"{model}"' in text
+
+    def test_missing_api_key_is_warned(self) -> None:
+        text = _text()
+        assert "has no api key" in text
