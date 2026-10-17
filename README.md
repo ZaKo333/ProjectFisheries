@@ -178,6 +178,7 @@ python scripts/setup_env.py --extras api,rag,dev --python C:\Python313\python.ex
 | 参数 | 作用 |
 |---|---|
 | `--mirror {official,tsinghua,aliyun,ustc}` | 换 PyPI 源，默认 `official` |
+| `--hf-mirror` | 下向量模型时直接用 `hf-mirror.com`（默认源失败会自动切一次） |
 | `--skip-kb` | 跳过向量库（知识问答会不可用，其余功能正常） |
 | `--rebuild-kb` | 向量库已存在也重建 |
 | `--recreate` | 删掉 `.venv` 重建（环境搞坏了用这个） |
@@ -186,6 +187,11 @@ python scripts/setup_env.py --extras api,rag,dev --python C:\Python313\python.ex
 
 > 装依赖失败多半是网络。加 `--mirror tsinghua` 重试；仍然失败就看脚本打印的
 > `[失败]` 那一行，它会指出是哪一步。
+>
+> 第 5 步要下约 91 MB 的中文向量模型。`huggingface.co` 在国内经常直连超时，
+> 脚本会在默认源失败后**自动换 `hf-mirror.com` 重试一次**；也可以一开始就加
+> `--hf-mirror` 跳过那 40 秒的等待。这一步失败不影响页面与接口，只是「知识问答」
+> 不可用，之后可以单独补建。
 
 #### 手动安装（不想用脚本时）
 
