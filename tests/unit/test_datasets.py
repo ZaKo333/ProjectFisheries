@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from fisheries import datasets as ds
+from fisheries import paths
 
 # --------------------------------------------------------------------------- #
 # 夹具：把三个根目录和索引文件全部搬到 tmp_path，环境变量清干净
@@ -526,6 +527,93 @@ class TestNoHardcodedDataPaths:
 
     def test_tests_have_no_hardcoded_dataset_paths(self):
         assert self._offenders(ds.PROJECT_ROOT / "tests") == []
+
+
+class TestPathStabilization:
+    """``fisheries.paths`` 的占位符替换。
+
+    钉住的是**产物可重现性**：同一个脚本在任何机器上跑，写出的 JSON 必须逐
+    字节相同（``docs/_m8_metrics.json``、``docs/_api_samples.json`` 都在版本
+    库里，跑一遍就 diff 出一堆与代码无关的路径差异，那条不变量就断了）。
+
+    这里所有路径都在运行时从 ``ds.PROJECT_ROOT`` / ``ds.LEGACY_ROOT`` /
+    ``ds.LOCAL_ROOT`` 拼出来，源码里不出现完整的本机路径——否则会被上面
+    ``TestNoHardcodedDataPaths`` 的三条守卫自己抓到。这既是规避也是正确做法：
+    要测的正是「这些根会被认出来」，根当然该从代码里取，而不是再抄一份。
+    """
+
+    def test_roots_put_dataset_before_project_root(self):
+        # ``data/datasets`` 在工程根之下：工程根若先替换，数据集那条会被它
+        # 吃掉、变成 ``<工程>\data\datasets\...``，产物就跟着机器的目录布局变。
+        names = [str(root) for root, _ in paths.ROOTS]
+        assert names.index(str(ds.LOCAL_ROOT)) < names.index(str(ds.PROJECT_ROOT))
+        assert paths.ROOTS[-1] == (ds.PROJECT_ROOT, paths.PROJECT_PLACEHOLDER)
+
+    def test_project_root_becomes_placeholder(self):
+        out = paths.stabilize(str(ds.PROJECT_ROOT) + "\\models\\yolov8-fish.pt")
+        assert out == paths.PROJECT_PLACEHOLDER + "\\models\\yolov8-fish.pt"
+
+    def test_both_dataset_roots_collapse_to_the_same_placeholder(self):
+        # 两个位置必须收敛到同一个占位符：否则「这台机器的数据放在哪一级」
+        # 会决定产物内容，同一份代码在两台机器上生成出不同的文件。
+        tail = "\\Sensor Based Aquaponics Fish Pond Datasets\\IoTpond1.csv"
+        for root in (ds.LEGACY_ROOT, ds.LOCAL_ROOT):
+            out = paths.stabilize(str(root) + tail)
+            assert out == paths.DATASET_PLACEHOLDER + tail
+            assert str(root) not in out
+
+    def test_local_dataset_root_does_not_keep_the_project_prefix(self):
+        # 上一条的强化版：只看结果前缀，钉住「数据集根排在工程根前面」。
+        out = paths.stabilize(str(ds.LOCAL_ROOT) + "\\x.csv")
+        assert not out.startswith(paths.PROJECT_PLACEHOLDER)
+
+    def test_doubled_backslashes_are_recognised(self):
+        # 字符串化的 JSON（错误响应的 detail 字段）里每个反斜杠都翻倍了。
+        doubled = str(ds.LEGACY_ROOT).replace("\\", "\\\\")
+        tail = "\\\\Fish Disease Dataset\\\\a.jpg"
+        out = paths.stabilize(doubled + tail)
+        assert out == paths.DATASET_PLACEHOLDER + tail
+
+    def test_path_embedded_in_a_long_string_is_replaced(self):
+        # 数据集路径当初正是从这里漏进 ``docs/_api_samples.json`` 的：detail
+        # 是**字符串化的 JSON**，路径在中间，不在开头。只认前缀的实现会漏。
+        doubled = str(ds.LEGACY_ROOT).replace("\\", "\\\\")
+        body = '{"image_path": "' + doubled + '\\\\a.jpg"}'
+        out = paths.stabilize(body)
+        assert out == '{"image_path": "' + paths.DATASET_PLACEHOLDER + '\\\\a.jpg"}'
+        assert str(ds.LEGACY_ROOT) not in out
+
+    def test_sibling_directory_with_the_same_prefix_is_left_alone(self):
+        # ``...\project`` 不该把 ``...\project2`` 也吃掉；
+        # ``...\数据集`` 不该吃掉 ``...\数据集备份``。
+        sibling = str(ds.PROJECT_ROOT) + "2\\x.csv"
+        assert paths.stabilize(sibling) == sibling
+        sibling = str(ds.LEGACY_ROOT) + "备份\\x.csv"
+        assert paths.stabilize(sibling) == sibling
+
+    def test_tree_walks_nested_containers(self):
+        payload = {
+            "data_per_file": [{"pond_id": "IoTpond1", "path": str(ds.PROJECT_ROOT) + "\\a.csv"}],
+            "vision": {"n": 3, "ok": True, "dataset": str(ds.LEGACY_ROOT)},
+            "plain": None,
+        }
+        out = paths.stabilize_tree(payload)
+        assert out["data_per_file"][0]["path"] == paths.PROJECT_PLACEHOLDER + "\\a.csv"
+        assert out["data_per_file"][0]["pond_id"] == "IoTpond1"
+        assert out["vision"]["dataset"] == paths.DATASET_PLACEHOLDER
+        assert out["vision"]["n"] == 3 and out["vision"]["ok"] is True
+        assert out["plain"] is None
+
+    def test_non_string_leaves_pass_through(self):
+        for leaf in (7, 0.5, True, None):
+            assert paths.stabilize_tree(leaf) == leaf
+
+    @pytest.mark.parametrize("name", ["_m8_metrics.json", "_api_samples.json"])
+    def test_committed_snapshots_have_no_machine_paths(self, name: str):
+        # 快照本身也要守：改了生成逻辑却忘了重跑，这条会红。
+        text = (ds.PROJECT_ROOT / "docs" / name).read_text(encoding="utf-8")
+        assert not re.search(r"(?<![\w\"'])[A-Za-z]:\\+(?![ntr0u])", text)
+        assert paths.DATASET_PLACEHOLDER in text
 
 
 # --------------------------------------------------------------------------- #

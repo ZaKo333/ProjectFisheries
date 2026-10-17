@@ -40,6 +40,7 @@ from fisheries import console as _console  # noqa: E402
 
 _console.install()
 
+from fisheries import paths as _paths  # noqa: E402
 from fisheries.evaluation import (  # noqa: E402
     AGGREGATE_MINUTES,
     DEFAULT_HISTORY_POINTS,
@@ -252,6 +253,9 @@ def main(argv: list[str] | None = None) -> int:
     by_pond, totals = load_ponds(
         paths, aggregate_minutes=args.aggregate_minutes, limit_files=args.limit_files
     )
+    # 数据一进来就把本机绝对路径压成占位符。报告与 JSON 两条出口都在下游，
+    # 在这里收口，两条都不会漏（占位符定义见 fisheries.paths）。
+    totals["per_file"] = _paths.stabilize_tree(totals["per_file"])
     if not by_pond:
         print("[错误] 没有读到任何数据")
         return 1
@@ -350,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     # ---- 图像模态（附录） -------------------------------------------------
-    vision = load_vision_metrics(Path(args.vision_metrics))
+    vision = _paths.stabilize_tree(load_vision_metrics(Path(args.vision_metrics)))
     print(f"\n[附录] 图像模态指标：{'已载入' if vision else '未运行（文件不存在）'}")
 
     # ---- 出报告 -----------------------------------------------------------

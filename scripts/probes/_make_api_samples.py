@@ -34,6 +34,7 @@ from fisheries import console as _console  # noqa: E402
 _console.install()
 
 from fisheries import datasets as _datasets  # noqa: E402
+from fisheries import paths as _paths  # noqa: E402
 
 GILL_IMAGE = _datasets.resolve(
     "fish_disease", "Test", "Bacterial gill disease", "Bacterial gill disease (100).jpg"
@@ -61,29 +62,6 @@ _VISION_POINTER = (
     "<mock 识别结果。字段结构与 POST /api/v1/assess (图像单模态) 的 vision 字段完全一致，"
     "请看那份样例——那份走的是固定图片路径，数值是稳定的真值。"
     "这里不固化的原因：上传后的落盘路径含随机 id，而 mock 分值由路径派生，每次不同。>"
-)
-
-#: 本机绝对路径 → 稳定占位符。
-#:
-#: 每个根都出**两种写法**：单反斜杠（普通字符串值）与双反斜杠（字符串化的
-#: JSON —— FastAPI 的 ``detail`` 字段里就嵌着这样一层）。只写单反斜杠会漏掉
-#: 后者，数据集路径当初正是从 ``detail`` 里漏进 ``docs/_api_samples.json`` 的。
-#:
-#: 数据集根的两种可能位置（工程外的历史目录、工程内的 ``data/datasets``）都
-#: 收敛到同一个占位符：否则「这台机器的数据放在哪一级」会决定产物内容，同一份
-#: 代码在两台机器上生成出不同的样例文件，可重现性就没了。替换按列表顺序进行，
-#: 数据集根必须排在工程根前面。
-_PATH_REWRITES: tuple[tuple[str, str], ...] = tuple(
-    pair
-    for root, placeholder in (
-        (_datasets.LEGACY_ROOT, "<数据集根目录>"),
-        (_datasets.LOCAL_ROOT, "<数据集根目录>"),
-        (_datasets.PROJECT_ROOT, "<工程>"),
-    )
-    for pair in (
-        (str(root), placeholder),
-        (str(root).replace("\\", "\\\\"), placeholder.replace("\\", "\\\\")),
-    )
 )
 
 
@@ -116,9 +94,9 @@ def _scrub(value: object) -> object:
     if isinstance(value, list):
         return [_scrub(v) for v in value]
     if isinstance(value, str):
-        for prefix, placeholder in _PATH_REWRITES:
-            value = value.replace(prefix, placeholder)
-        return value
+        # 占位符定义在 fisheries.paths —— 和 evaluate_water_rules.py 共用一份，
+        # 否则「哪些算本机路径」会分叉成两套说法。
+        return _paths.stabilize(value)
     return value
 
 def main() -> int:

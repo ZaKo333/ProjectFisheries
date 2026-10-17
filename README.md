@@ -612,7 +612,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1022 项
+python -m pytest                     # 全部 1034 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -631,7 +631,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |
 | `test_web_contract.py` | 26 | 前端静态托管、`dict.js` 枚举码 vs 后端源码、`api.js` 路径 vs OpenAPI |
 | `test_water_templates.py` | 68 | 模板预期等级 vs 规则引擎、CSV 往返、提交物与代码一致 |
-| `test_datasets.py` | 76 | 数据集注册表、解析优先级、绝对路径回归守卫 |
+| `test_datasets.py` | 87 | 数据集注册表、解析优先级、绝对路径回归守卫 |
 | `test_console.py` | 27 | 编码兜底、符号降级、编码锁 |
 | `test_launchers.py` | 30 | `.bat` 纯 ASCII 守卫、转发、横幅文案 |
 
