@@ -3,7 +3,7 @@
 输出两份文件，**它们是「前端拿到的接口长什么样」的唯一真相来源**：
 
 * ``docs/openapi.json``        —— FastAPI 自动生成的机器可读规格（端点、模型、错误码）
-* ``docs/_api_samples.json``   —— 18 个真实响应的样例（含 4xx 错误响应）
+* ``docs/_api_samples.json``   —— 20 个真实响应的样例（含 4xx 错误响应）
 
 两个文件都做了**可重现化**：时间、耗时、随机 id、落盘路径这类每次都会变的字段
 被换成固定占位符，所以重复运行产物逐字节一致，能进版本库、能 diff。业务字段
@@ -167,6 +167,17 @@ def main() -> int:
                 "/api/v1/ingest/image",
                 files={"file": (GILL_IMAGE.name, fh, "image/jpeg")},
             ).json()
+
+        # 鱼种识别：可用性探测永远 200；识别则取决于本机有没有 ylov8-species.pt。
+        # 没有权重时这一条给的是 503 的说明体（"鱼种识别不可用：…"），
+        # 这也正是前端「隐藏鱼种块」时要读的那句话，比编一个假响应有用。
+        samples["GET /api/v1/species"] = client.get("/api/v1/species").json()
+        with GILL_IMAGE.open("rb") as fh:
+            _species = client.post(
+                "/api/v1/species/detect",
+                files={"file": (GILL_IMAGE.name, fh, "image/jpeg")},
+            )
+        samples["POST /api/v1/species/detect"] = _species.json()
 
         samples["POST /api/v1/chat"] = client.post(
             "/api/v1/chat", json={"query": "溶氧低怎么办", "k": 3}

@@ -2883,6 +2883,51 @@
     "stored_path": "<服务端落盘路径，前缀是 data/uploads/>",
     "vision": "<mock 识别结果。字段结构与 POST /api/v1/assess (图像单模态) 的 vision 字段完全一致，请看那份样例——那份走的是固定图片路径，数值是稳定的真值。这里不固化的原因：上传后的落盘路径含随机 id，而 mock 分值由路径派生，每次不同。>"
   },
+  "GET /api/v1/species": {
+    "available": true,
+    "reason": "",
+    "weights": "<工程>\\models\\yolov8-species.pt",
+    "expected": "<工程>\\models\\yolov8-species.pt",
+    "species": [
+      "鲤科",
+      "罗非鱼",
+      "虾蟹"
+    ],
+    "message": ""
+  },
+  "POST /api/v1/species/detect": {
+    "upload_id": "<每次上传生成的 id>",
+    "filename": "Bacterial gill disease (100).jpg",
+    "size_bytes": 2508,
+    "stored_path": "<服务端落盘路径，前缀是 data/uploads/>",
+    "species": {
+      "tool": "fish_species_detect",
+      "status": "ok",
+      "image_path": "<服务端落盘路径，前缀是 data/uploads/>",
+      "detected": true,
+      "species": "鲤科",
+      "confidence": 0.9951,
+      "is_low_confidence": false,
+      "all_scores": {
+        "鲤科": 0.9951,
+        "虾蟹": 0.0049,
+        "罗非鱼": 0.0
+      },
+      "raw_class": "鲤科",
+      "unmapped_classes": [],
+      "model_version": "yolov8-species.pt",
+      "degraded_mode": false,
+      "image_meta": {
+        "format": "jpeg",
+        "size_bytes": 2508,
+        "resolved_path": "<服务端落盘路径，前缀是 data/uploads/>",
+        "is_remote": false
+      },
+      "note": "从图片识别为鲤科（置信度 1.00），已按该品种的阈值档案判定。",
+      "error_code": null,
+      "error_message": null
+    }
+  },
   "POST /api/v1/chat": {
     "query": "溶氧低怎么办",
     "answer": "【淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 3. 投喂频次与时间安排 > 3.2 关键禁忌（务必遵守）】（依据 GB 11607-1989；核验日期 2026-10-15）\n1. **严禁在溶氧低谷时投喂**——\n   凌晨至日出前（**约 2 – 6 时**）是池塘溶氧最低的时段，\n   此时投喂会因鱼类摄食活动加剧耗氧而**直接诱发泛塘**；\n2. **严禁在雷雨前、闷热天、气压低时投喂**——\n   这类天气本身溶氧就低，投喂等于雪上加霜；\n3. **严禁在水质异常时按常规量投喂**——\n   氨氮、亚硝酸盐超标时鱼体处于中毒状态，摄食后代谢负担更重，\n   且残饵与粪便会**进一步恶化水质，形成恶性循环**；\n4. **严禁带病投喂常规量**——\n   发病期应先停料 1 – 2 天再改投药饵（见病害处置方案）。\n\n【细菌性烂鳃病——症状识别、发病条件与处置方案 > 3. 处置方案 > 3.1 第一步：立即措施（0 – 2 小时）】（依据 GB 11607-1989、SC/T 7201.2-2006、SC/T 7011.1-2021、NY/T 755-2022；核验日期 2026-10-15）\n1. **立即开启全部增氧设备**，并持续运行；\n   - 烂鳃病鱼的鳃丝已受损，**氧摄取能力下降**，对溶氧的需求高于健康鱼，\n     因此维持高溶氧是首要措施；\n2. **停料**——病鱼摄食量低，投料只会转化为残饵污染水质，\n   进一步恶化病原繁殖环境；\n3. **换注新水**：排出部分底层水，注入新水，降低病原浓度与有机物负荷；\n4. **降低养殖密度**（条件允许时）：分池或起捕部分商品鱼，\n   减小单位水体负荷。\n\n【淡水池塘投料管理规范——投喂量、频次、时机与饲料管理 > 4. 投喂量必须下调的四种情况（本项目 Agent 的决策依据） > 4.4 溶氧出现快速下降趋势时提前减料】（依据 GB 11607-1989；核验日期 2026-10-15）\n即使当前溶氧仍在适宜区间，若 `water_risk_predict` 返回\n`trends.dissolved_oxygen.direction == \"下降\"` 且斜率明显，\n应**提前减料**——这是**预防性措施**，\n等到溶氧真的跌破危险线时已经来不及。",

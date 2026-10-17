@@ -22,6 +22,9 @@
     lastAssess: null,
     lastWater: null,        // { readings, species, pondId, intervalMinutes }
     lastVision: null,       // ingest/image 响应
+    lastImageFile: null,    // 最近一次上传的图片（鱼种识别复用它，不必再传一次）
+    lastSpecies: null,      // species/detect 响应里的 species 段
+    speciesInfo: undefined, // undefined = 还没问过；null = 禁用/接口没响应；否则是 /species 的响应
     uploadId: null,
     imagePreviewUrl: null,
     question: "",
@@ -360,6 +363,89 @@
     }
   }
 
+  /* ================= 鱼种识别（按权重可用性显隐） =================
+     品种决定阈值档位（虾蟹的红线比鲤科严一倍），所以「判不出品种」和
+     「默认按鲤科算」不能混为一谈：权重在就给出品种并允许一键切换档位，
+     权重不在就把模块收起来并明说原因，而不是悄悄按鲤科走。 */
+  async function loadSpeciesAvailability() {
+    if (state.speciesInfo !== undefined) return state.speciesInfo;
+    try {
+      state.speciesInfo = await api.speciesAvailable();
+    } catch (e) {
+      state.speciesInfo = null;
+    }
+    return state.speciesInfo;
+  }
+
+  function speciesBlockHtml() {
+    const info = state.speciesInfo;
+    if (info === undefined) {
+      return '<div class="hint mt-1"><span class="spinner"></span>检查鱼种识别权重…</div>';
+    }
+    if (info === null) {
+      return '<div class="alert-box warn mt-1">鱼种识别模块已隐藏：接口没有返回可用性（后端未连接或版本不匹配）。</div>';
+    }
+    if (!info.available) {
+      return `<div class="alert-box warn mt-1">鱼种识别模块已隐藏：${esc(info.message || info.reason || "权重缺失")}</div>`;
+    }
+    const species = Array.isArray(info.species) ? info.species : [];
+    return `<div class="alert-box ok mt-1">✓ 鱼种识别已启用（可判 ${esc(species.join(" / ") || "—")}）
+        <div class="small faint">权重：<span class="mono">${esc(info.weights || "")}</span>　选定图片后会自动判断品种</div></div>
+      <div id="species-result"></div>`;
+  }
+
+  function refreshSpeciesBlock() {
+    const box = $("#species-box");
+    if (box) box.innerHTML = speciesBlockHtml();
+    renderSpeciesResult();
+  }
+
+  function renderSpeciesResult() {
+    const box = $("#species-result");
+    if (!box) return;
+    const s = state.lastSpecies;
+    if (!s) { box.innerHTML = ""; return; }
+
+    if (!s.detected) {
+      box.innerHTML = `<div class="alert-box warn mt-1">这张照片没判出养殖品种：图片里没有鱼、鱼太小或被遮挡时都会这样。品种档位仍按下方手动选择（当前：<strong>${esc(state.waterParams.species)}</strong>），不做猜测。</div>`;
+      return;
+    }
+
+    const conf = pct(s.confidence);
+    const low = s.is_low_confidence
+      ? `<div class="alert-box warn mt-1">置信度偏低（${conf}），建议人工确认后再切换档位。</div>`
+      : "";
+    box.innerHTML = `<div class="alert-box ok mt-1">识别品种：<strong>${esc(s.species)}</strong> · 置信度 ${conf}
+        <div class="flex gap-8 wrap mt-1">
+          <button class="btn" id="btn-use-species" type="button">按「${esc(s.species)}」切换水质档位</button>
+        </div></div>${low}`;
+    const btn = $("#btn-use-species");
+    if (btn) btn.addEventListener("click", () => applySpeciesToWater(s.species));
+  }
+
+  function applySpeciesToWater(species) {
+    if (!species) return;
+    state.waterParams.species = species;
+    const sel = $("#water-species");
+    if (sel && Array.from(sel.options).some((o) => o.value === species)) sel.value = species;
+    const box = $("#species-result");
+    if (box) {
+      box.innerHTML = `<div class="alert-box ok mt-1">✓ 水质档位已切到 <strong>${esc(species)}</strong>：下次评估按该品种的阈值与红线计算。</div>`;
+    }
+  }
+
+  async function detectSpecies(file) {
+    const box = $("#species-result");
+    if (box) box.innerHTML = '<div class="loading-veil mt-1"><span class="spinner"></span>判断养殖品种…</div>';
+    try {
+      const r = await api.speciesDetect(file);
+      state.lastSpecies = r.species || null;
+      renderSpeciesResult();
+    } catch (e) {
+      if (box) box.innerHTML = `<div class="alert-box warn mt-1">品种识别失败：${esc(e.message)}</div>`;
+    }
+  }
+
   /* ================= 智能评估页（水质 + 病害 + 融合 合一） ================= */
   function viewEvaluate(c) {
     const parsed = state.waterParsed;
@@ -385,7 +471,7 @@
             <textarea id="water-paste" class="mt-1" style="min-height:92px" placeholder="timestamp,water_temp,ph,dissolved_oxygen,ammonia_n,nitrite_n&#10;2026-10-13 00:00,27.5,7.9,6.4,0.1,0.05"></textarea>
             <div class="form-row">
               <div class="field"><label class="field-label">塘口编号</label><input type="text" id="water-pond" value="POND-03" maxlength="64"></div>
-              <div class="field"><label class="field-label">品种（决定阈值档位）</label>
+              <div class="field"><label class="field-label">品种（决定阈值档位；也可由上方图片识别给出）</label>
                 <select id="water-species">${fallbackSpecies().map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("")}</select></div>
             </div>
             <div class="form-row">
@@ -402,6 +488,7 @@
           </div>
           <div>
             <div class="sub-head">◉ 鱼体图片（可选）</div>
+            <div id="species-box">${speciesBlockHtml()}</div>
             <div class="dropzone" id="disease-drop">
               <span class="dz-icon">🖼</span>
               <div><strong>点击选择 / 拖拽图片到此处</strong></div>
@@ -457,6 +544,19 @@
       updateTemplateDownload($("#water-template").value);
     }
 
+    // 鱼种识别可用性也是异步探测的：回来之前显示「检查中」，失败就收起模块
+    if (state.speciesInfo === undefined) {
+      loadSpeciesAvailability().then(() => {
+        refreshSpeciesBlock();
+        const info = state.speciesInfo;
+        if (info && info.available && state.lastImageFile && !state.lastSpecies) {
+          detectSpecies(state.lastImageFile);
+        }
+      });
+    } else {
+      renderSpeciesResult();
+    }
+
     // 图片上传绑定
     const dz = $("#disease-drop");
     const file = $("#disease-file");
@@ -481,6 +581,10 @@
     state.waterParsed = null;
     state.uploadId = null;
     state.lastVision = null;
+    state.lastImageFile = null;
+    state.lastSpecies = null;
+    // 重新探测一次可用性：补上/删掉权重后点「清空重来」就能看到状态变化
+    state.speciesInfo = undefined;
     state.lastAssess = null;
     state.lastWater = null;
     state.question = "";
@@ -816,6 +920,7 @@
   async function handleImageFile(file) {
     const preview = $("#disease-preview");
     const status = $("#image-status");
+    state.lastImageFile = file;
     // 本地预览（objectURL，不显示 stored_path）
     if (state.imagePreviewUrl) URL.revokeObjectURL(state.imagePreviewUrl);
     state.imagePreviewUrl = URL.createObjectURL(file);
@@ -832,6 +937,11 @@
       if (status) status.innerHTML = `<div class="alert-box ok">✓ 已识别：<strong>${esc(disease)}</strong>（${esc(group)}）· 置信度 ${pct(vision.confidence)}${vision.degraded_mode ? ' · <span class="badge badge-warn">模拟</span>' : ""}</div>`;
       const runBtn = $("#btn-evaluate-run");
       if (runBtn) runBtn.disabled = false;
+
+      // 病害识别与品种识别是两件事：品种可用性由后端/权重决定，
+      // 不可用时那段提示已经显示在图片框上方，这里就不再追问一次。
+      const info = state.speciesInfo;
+      if (info && info.available) detectSpecies(file);
     } catch (e) {
       if (status) status.innerHTML = `<div class="alert-box error">识别失败：${esc(e.message)}</div>`;
     }

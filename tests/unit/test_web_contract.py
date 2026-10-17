@@ -188,7 +188,7 @@ class TestStaticHosting:
     def test_root_json_points_at_the_frontend(self, client: TestClient) -> None:
         body = client.get("/").json()
         assert body["app"] == "/app"
-        assert isinstance(body["endpoints"], list) and len(body["endpoints"]) == 12
+        assert isinstance(body["endpoints"], list) and len(body["endpoints"]) == 14
 
     @pytest.mark.parametrize(
         "name",
@@ -210,7 +210,7 @@ class TestStaticHosting:
 
     def test_openapi_still_lists_every_route(self, client: TestClient) -> None:
         paths = client.get("/openapi.json").json()["paths"]
-        assert len(paths) == 12
+        assert len(paths) == 14
         assert "/api/v1/config/templates" in paths
 
 

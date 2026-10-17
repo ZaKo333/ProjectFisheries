@@ -259,6 +259,30 @@ class IngestImageResponse(_Strict):
     vision: dict[str, Any]
 
 
+class SpeciesAvailabilityResponse(_Strict):
+    """鱼种识别可用性——前端据此决定显示还是隐藏鱼种模块。"""
+
+    available: bool
+    #: 不可用时的短原因（「缺失权重」「未安装 ultralytics」），可用时为空串
+    reason: str = ""
+    #: 实际会被使用的权重绝对路径；不可用时为 None
+    weights: str | None = None
+    #: 期望的权重路径（提示用户该放哪）
+    expected: str
+    species: list[str] = Field(default_factory=list)
+    #: 可直接显示给用户的一句话（不可用时才有内容）
+    message: str = ""
+
+
+class SpeciesDetectResponse(_Strict):
+    upload_id: str
+    filename: str
+    size_bytes: int
+    stored_path: str
+    #: `fish_species_detect` 的原始返回体（含 detected / species / confidence / note）
+    species: dict[str, Any]
+
+
 class ChatChunkOut(_Strict):
     chunk_id: str
     title: str

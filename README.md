@@ -11,7 +11,7 @@
 | **输出** | 风险等级（正常 / 预警 / 高危）+ 告警 + 水质调控与病害处置建议 + 证据链 + 引用出处 + 完整推理链路 |
 | **离线可用** | 不配 API key、不联网也能跑通全链路（内置确定性离线模型 + 规则模板建议） |
 | **两个工具** | 水质时序风险预测、鱼体病害图像识别（烂鳃 / 细菌性出血 / 水霉 / 健康） |
-| **三种入口** | Web 前端（与接口同源托管在 `/app`）、HTTP 接口（FastAPI，12 个端点）、命令行 |
+| **三种入口** | Web 前端（与接口同源托管在 `/app`）、HTTP 接口（FastAPI，14 个端点）、命令行 |
 
 ---
 
@@ -245,6 +245,7 @@ python -m pip install -e ".[rag,api]"
 | `models/fastembed/` 中文向量模型 | ≈ 91 MB | **首次检索时自动下载**。离线环境请先联网跑一次，或预先放进该目录 |
 | `models/yolov8-fish.pt` 病害识别权重 | ≈ 3 MB | 仓库**不附带**，走外部托管：`python scripts/fetch_datasets.py --fetch-weights fish_disease` 一条命令拉回来并自动核 md5（见 [§3.6](#36-模型权重托管校验与缺失时会发生什么)）。也可以自己训练，见 [docs/模型训练说明.md](docs/模型训练说明.md) |
 | `models/yolov8-fish-lesion-seg.pt` 病灶定位权重 | ≈ 6 MB | 同上，`--fetch-weights fish_lesion`；或 `python scripts/train_lesion_seg.py` 训练产出（见 §12.4）。缺失时只是没有病灶数量/面积，病害结论照旧 |
+| `models/yolov8-species.pt` 鱼种分类权重 | ≈ 3 MB | 同上，`--fetch-weights fish_species`；或 `python scripts/train_yolo_species.py` 训练产出（见 §12.5）。缺失时鱼种模块直接隐藏，水质按默认品种（鲤科）判定 |
 | `models/translate/` 离线回译模型 | ≈ 315 MB | 可选，`python scripts/fetch_translate_model.py` |
 
 **向量库不随仓库分发**（`knowledge/chroma/` 在 `.gitignore` 里）：它是约 2 MB 的
@@ -328,18 +329,16 @@ python scripts/fetch_datasets.py --fetch all
 
 ### 3.6 模型权重：托管、校验与缺失时会发生什么
 
-图像链路要用两个权重：病害识别 `models/yolov8-fish.pt`（≈ 3 MB）与病灶定位
-`models/yolov8-fish-lesion-seg.pt`（≈ 7 MB）。它们**不提交 git**——二进制大文件会让每次
-提交都带上一块 review 不了的 delta，而权重只会在重训时变。仓库里放的是
-**`models/checksums.md5`**（标准 `md5sum` 格式，两行哈希 + 两行注释），本体走外部托管。
-
-一条命令拉回来：
+图像链路要用三个权重：病害识别 `models/yolov8-fish.pt`（≈ 3 MB）、病灶定位
+`models/yolov8-fish-lesion-seg.pt`（≈ 7 MB）、鱼种分类 `models/yolov8-species.pt`（≈ 3 MB）。
+它们**不提交 git**——二进制大文件会让每次提交都带上一块 review 不了的 delta，而权重只会在重训时变。
+仓库里放的是**`models/checksums.md5`**（标准 `md5sum` 格式，三行哈希 + 两行注释），本体走外部托管。
 
 ```bash
-python scripts/fetch_datasets.py --fetch-weights all           # 两个都拉，下载完自动校验
-python scripts/fetch_datasets.py --fetch-weights fish_disease  # 只拉一个
-python scripts/fetch_datasets.py --weights                     # 只看状态，不下载
-python scripts/fetch_datasets.py --weights --verify            # 重新算一遍哈希
+python scripts/fetch_datasets.py --fetch-weights all            # 三个都拉，下载完自动校验
+python scripts/fetch_datasets.py --fetch-weights fish_disease   # 只拉一个
+python scripts/fetch_datasets.py --weights                      # 只看状态，不下载
+python scripts/fetch_datasets.py --weights --verify             # 重新算一遍哈希
 ```
 
 镜像地址取 `FISHERIES_WEIGHTS_MIRROR`；没配就回退到数据集的 `FISHERIES_DATASET_MIRROR`
@@ -371,14 +370,19 @@ WARNING fisheries.weights: fish_disease | 权重缺失，将启用 mock 模拟�
 三个入口都会说：工具层第一次落兜底时、API 启动的 lifespan 里、`python scripts/selftest.py`
 的「检查可选依赖」那一步（逐项列「就绪 / 缺失」，缺失的给获取命令）。
 
+**鱼种识别是唯一例外**：它缺权重时不会 mock 一个品种——猜错品种会直接换错水质阈值档位，
+比不显示更糟——所以它的提示是「权重缺失，鱼种识别模块将隐藏」，页面上那一块直接不出现，
+水质按默认品种（鲤科）判定，下拉框仍然可以手动选。
+
 #### 申报用：权重清单
 
 | 文件 | 大小（B） | md5 | sha256 | 用途 | 缺失后果 |
 |---|---|---|---|---|---|
 | `models/yolov8-fish.pt` | 2,980,669 | `9c93b4614b8e879dfcd33d854495b572` | `95a9bb0d62e9032ed515f4d43f61b4733fdf53ae443b6875bdbe17684ba96da7` | 鱼病分类（YOLOv8-cls 微调） | 图像工具落 mock，响应标 `degraded_mode=true` |
 | `models/yolov8-fish-lesion-seg.pt` | 7,053,685 | `93ce235e828481c003e1f577ab0f7149` | `d814df5155324b65dc62df3c718a6e43a99ee92f01ce9342a9562e15fa1e4e10` | 病灶分割，给病灶数量与面积 | 病害结论照旧，只是没有位置与面积 |
+| `models/yolov8-species.pt` | 2,976,829 | `f8578ae043c7feb0fd5c637e704972db` | `8518796b626b5b29e7355b1d1508011f7a914e0bbda268f2918dbe6532497f79` | 鱼种分类（鲤科 / 罗非鱼 / 虾蟹） | 鱼种模块隐藏、不猜品种，水质按默认档位（鲤科）判定 |
 
-托管位置：`FISHERIES_WEIGHTS_MIRROR` 指向的 `<地址>/weights/`，两个文件同名存放；
+托管位置：`FISHERIES_WEIGHTS_MIRROR` 指向的 `<地址>/weights/`，三个文件同名存放；
 校验值同时写在仓库内的 `models/checksums.md5` 里，评委拿到文件后可当场核 md5。
 
 另外两个官方预训练权重（`models/pretrained/yolov8n-cls.pt`、`yolov8n-seg.pt`）只在重训时
@@ -647,6 +651,8 @@ python -m uvicorn fisheries.api.app:app --host 127.0.0.1 --port 8812
 | GET | `/api/v1/ponds/{pond_id}/history` | 该塘口的历史评估记录 |
 | GET | `/api/v1/config/thresholds` | 当前生效的阈值表与品种档位（前端画仪表盘用） |
 | GET | `/api/v1/config/tools` | 导出函数调用 schema（供前端或其它 Agent 复用） |
+| GET | `/api/v1/species` | 鱼种识别是否可用（前端据此显示或隐藏鱼种模块） |
+| POST | `/api/v1/species/detect` | 上传鱼体图片判品种档位；不可用时返回 503 并说明原因 |
 | GET | `/api/v1/config/templates` | 12 个内置水质模板目录 |
 | GET | `/api/v1/config/templates/{key}/csv` | 下载某个模板的 CSV |
 
@@ -756,6 +762,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ├── scripts/                 # 全部 CLI：一键配置 / demo / 建库 / 建模板 / 取数据 / 训练 / 体检
 │   ├── build_lesion_dataset.py  # 清洗真实多边形标注 → fish_lesion_seg 数据集
 │   ├── train_lesion_seg.py      # 训练 + 评估病灶分割模型（见 §12.4）
+│   ├── train_yolo_species.py    # 训练 + 评估鱼种三档分类模型（见 §12.5）
 │   ├── pack_dataset_mirror.py   # 把已导好的数据集 / 权重打成可上传的镜像包（见 §3.5、§3.6）
 │   └── make_groundtruth_sample.py / evaluate_groundtruth.py  # 人工真值集抽样与评测（见 §12.2）
 ├── src/fisheries/
@@ -783,7 +790,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 ## 11. 测试
 
 ```bash
-python -m pytest                     # 全部 1209 项
+python -m pytest                     # 全部 1220 项
 python -m pytest tests/unit/test_agent.py -v
 ```
 
@@ -793,12 +800,12 @@ python -m pytest tests/unit/test_agent.py -v
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
 | `test_tools.py` | 95 | 阈值端点、红线、非离子氨换算（Emerson 公式 vs 表A1/A2）、缺失权重重归一化、NaN 拒绝、混合基线四条约束、图像确定性 |
-| `test_fish_species.py` | 34 | 品种别名映射、无权重时不猜、错误码、不在 `TOOL_HANDLERS` 里 |
+| `test_fish_species.py` | 38 | 品种别名映射、可用性探测（缺权重 / 缺 ultralytics / 可用）、无权重时不猜、错误码、不在 `TOOL_HANDLERS` 里 |
 | `test_agent.py` | 114 | 单模态权重归一化、协同规则、护栏补调、等级下限不被稀释、输出契约 |
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
 | `test_rag.py` | 105 | front-matter、分块、RRF 融合、清单一致性守卫 |
-| `test_api.py` | 84 | 契约校验、错误状态码、上传校验、并发 |
+| `test_api.py` | 90 | 契约校验、错误状态码、上传校验、并发、鱼种端点（503 / 415 / 422 与 upload_id 复用） |
 | `test_api_rag.py` | 34 | 接口层 × 真实知识库的一致性、溯源标记 |
 | `test_tables.py` | 51 | 表格接入、列名别名、时间轴、缺失与量纲 |
 | `test_web_contract.py` | 26 | 前端静态托管、`dict.js` 枚举码 vs 后端源码、`api.js` 路径 vs OpenAPI |
@@ -810,7 +817,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_weights.py` | 41 | 权重注册表与哈希形状、md5/sha256 校验五情形、下载与缓存、坏包拒绝、镜像回退、`mock_notice` 文案与只喊一次、`.gitignore` 放行 `checksums.md5`、命令行三条子命令 |
+| `test_weights.py` | 42 | 权重注册表与哈希形状、md5/sha256 校验五情形、下载与缓存、坏包拒绝、镜像回退、`mock_notice` 文案与只喊一次、`.gitignore` 放行 `checksums.md5`、命令行三条子命令 |
 
 **数据集缺失不会让测试失败**：对应用例会 `skip`，脚本会打印一行「该数据集未导入」而不是崩掉。
 
@@ -945,18 +952,40 @@ python scripts/train_lesion_seg.py --epochs 80   # 重新训练 + 评估
 训练完成后把 `enable_gate` 的默认值改回 `True` 就有意义了。数据集怎么清洗、怎么划分、
 每张图的 sha256 记在哪里，见 `data/derived/fish_lesion_seg/info.json`。
 
-### 12.5 会话缓冲是内存态
+### 12.5 鱼种识别：只分三个粗档位，100% 是因为任务本身粗
+
+新增 `models/yolov8-species.pt`（YOLOv8n-cls），三分类：**鲤科 / 罗非鱼 / 虾蟹**。
+数据来自孟加拉淡水鱼图像集 BFF-15（5,577 张、15 个当地鱼种），按别名归到三个档位：
+鲤科 2,569 张（GRASS CARP / KATLA / MRIGAL / MIRROR CARP / PUTI / RUI / SILVER CARP 共 7 类）、
+罗非鱼 383 张（数据集拼作 `TELAPIA`）、虾蟹 403 张（`ShrimpImages` 里的健康虾）；
+另有 500 张增强虾图**只进训练集**。8:2 划分 → **3,186 训练 / 669 验证**，
+60 轮上限、早停于第 39 轮（best 在第 19 轮），验证集 Top-1 **100%**。
+
+这个 100% 不能当成「识别很准」来宣传：三个档位是「银灰侧扁的鲤科 / 罗非鱼 / 带壳的虾」，
+差异大到颜色直方图都能分；真正难的是**同档位内认到种**，那需要分种标注，而 BFF-15 的
+15 个类里有 7 类不属于本工程的档位，被 `--drop-unmapped` 丢掉了
+（TENGRA / PANGAS / KOI / PABDA / SHOL / MAGUR / ILISH，共 2,625 张）。
+所以界面只说「鲤科 / 罗非鱼 / 虾蟹」，从不说具体鱼种；置信度低于 0.55 时明说「不确定，
+请自己在下拉框里选」，不替用户猜。三个档位正好对上阈值表的三套档案，
+「粗」不影响它唯一的用途——决定用哪套水质阈值。
+
+还有两个边界得写明：**蟹类没有训练图像**（找到的蟹类数据集只有 CSV，没有图），
+所以「虾蟹」档实际上只有虾；**训练图与验证图同源**，同一条鱼的不同增强可能两边都出现，
+100% 里有多少是「记住了原图」无法排除——它只服务粗档位，不值得为它重新组织划分。
+真要提升，缺的是分种标注与蟹类图片。
+
+### 12.6 会话缓冲是内存态
 
 接口层的塘口读数缓冲与历史记录都在进程内存里，**重启即丢**。
 做演示够用；要做成长期监测需要落到数据库，并补上鉴权与限流。
 
-### 12.6 工程不自带数据集
+### 12.7 工程不自带数据集
 
 仓库里只有代码与语料。数据集（约 1.37 GB）放在工程目录之外，
 `src/fisheries/datasets.py` 是「名字 → 磁盘位置」的唯一真相来源，
 查找顺序见 [§13.1](#131-数据集是可选的)。缺失时模块仍然 import 得进去，对应用例 `skip`。
 
-### 12.7 首次运行需要联网下载向量模型
+### 12.8 首次运行需要联网下载向量模型
 
 向量库与**向量化模型都不随仓库分发**（模型约 91 MB）。克隆后第一次构建知识库时会
 自动下载向量模型；纯离线部署请预先联网跑一次，或把模型预置到 `models/fastembed/`。
@@ -1046,9 +1075,10 @@ python scripts/build_knowledge_base.py --check   # 只校验一致性
 ### 13.4 模型权重同样外托管
 
 权重不上仓库（二进制、每次提交带不可 review 的 delta），但**可获取性受约束**：仓库内的
-`models/checksums.md5` 钉住 md5，§3.6 的清单给出两个文件的大小、md5、sha256、托管位置与
+`models/checksums.md5` 钉住 md5，§3.6 的清单给出三个文件的大小、md5、sha256、托管位置与
 下载命令。评委拿到文件后 `md5sum -c models/checksums.md5` 即可确认没被损坏或替换；
-拿不到权重时程序会打 `权重缺失，将启用 mock 模拟模式` 并继续跑完其他能力，不会假装有结果。
+拿不到权重时程序会打 `权重缺失，将启用 mock 模拟模式` 并继续跑完其他能力，不会假装有结果
+（鱼种权重是例外：缺了就把鱼种模块藏起来，不猜品种）。
 
 ---
 

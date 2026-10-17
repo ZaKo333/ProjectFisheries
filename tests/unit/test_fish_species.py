@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import base64
+import os
 
 import pytest
 
@@ -22,6 +23,7 @@ from fisheries.tools.fish_species import (
     RAW_SPECIES_ALIASES,
     SPECIES_LABELS,
     UNAVAILABLE_MODEL_VERSION,
+    availability,
     fish_species_detect,
     map_raw_species,
     resolve_weights,
@@ -178,3 +180,67 @@ class TestInputValidation:
         assert out["degraded_mode"] is True
         assert out["detected"] is False
         assert out["note"]
+
+
+# --------------------------------------------------------------------------- #
+# 五、可用性探测（前端据此显示或隐藏鱼种模块）
+# --------------------------------------------------------------------------- #
+
+class TestAvailability:
+    def test_missing_weights_hide_the_module_and_say_how_to_get_them(self, tmp_path):
+        info = availability(str(tmp_path / "absent.pt"))
+
+        assert info["available"] is False
+        assert info["reason"] == "缺失权重"
+        assert info["weights"] is None
+        assert info["expected"] == DEFAULT_WEIGHTS_PATH
+        assert info["species"] == list(SPECIES_LABELS)
+        # 提示里必须给出「怎么补」，否则用户只知道坏了、不知道怎么办
+        assert "--fetch-weights" in info["message"]
+        assert "隐藏" in info["message"]
+
+    def test_weights_without_ultralytics_are_reported_separately(
+        self, tmp_path, monkeypatch
+    ):
+        """两种不可用要能分开：缺文件 vs 缺依赖，补法完全不同。"""
+        import sys
+
+        weights = tmp_path / "yolov8-species.pt"
+        weights.write_bytes(b"stub")
+        monkeypatch.setitem(sys.modules, "ultralytics", None)  # import 时会抛 ImportError
+
+        info = availability(str(weights))
+
+        assert info["available"] is False
+        assert info["reason"] == "未安装 ultralytics"
+        # 文件确实在，所以要把路径报出来，而不是说「缺失」
+        assert info["weights"] == str(weights)
+        assert "ultralytics" in info["message"]
+
+    def test_available_when_both_weights_and_ultralytics_exist(
+        self, tmp_path, monkeypatch
+    ):
+        import sys
+        import types
+
+        weights = tmp_path / "yolov8-species.pt"
+        weights.write_bytes(b"stub")
+        monkeypatch.setitem(sys.modules, "ultralytics", types.SimpleNamespace(__version__="test"))
+
+        info = availability(str(weights))
+
+        assert info["available"] is True
+        assert info["reason"] == ""
+        assert info["weights"] == str(weights)
+        assert info["message"] == ""
+
+    def test_the_two_registries_agree_on_the_file(self):
+        """权重注册表（weights.py）与工具默认路径必须指向同一个文件。
+
+        两处各写一份路径迟早会漂：注册表改了、工具没改，于是
+        `--fetch-weights` 下了一个没人用的文件，模块照样隐藏。
+        """
+        from fisheries import weights as wt
+
+        assert wt.spec("fish_species").file == "models/yolov8-species.pt"
+        assert os.path.basename(DEFAULT_WEIGHTS_PATH) == "yolov8-species.pt"

@@ -20,6 +20,8 @@ from .. import __version__
 from ..agent.orchestrator import AdvisorReport, AgentInput, AgentResult
 from ..tools import TOOL_HANDLERS, get_tool_schemas
 from ..tools.fish_disease import fish_disease_detect
+from ..tools.fish_species import availability as species_availability
+from ..tools.fish_species import fish_species_detect
 from ..tools.water_risk import (
     ACTION_THRESHOLDS,
     BASE_WEIGHTS,
@@ -51,6 +53,8 @@ from .schemas import (
     IngestImageResponse,
     IngestSensorRequest,
     IngestSensorResponse,
+    SpeciesAvailabilityResponse,
+    SpeciesDetectResponse,
     TemplateCatalogResponse,
     TemplateInfo,
     ThresholdResponse,
@@ -368,6 +372,40 @@ async def ingest_image(
     request: Request, file: UploadFile = File(..., description="鱼体图片")
 ) -> IngestImageResponse:
     state: AppState = get_state(request)
+    upload_id, dest, original, size = await _store_upload(state, file)
+
+    result = await run_in_threadpool(fish_disease_detect, str(dest))
+    if result.get("status") != "ok":
+        # 格式不合法（魔数对不上）等情况下不要把垃圾文件留在磁盘上。
+        dest.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": result.get("error_code", "UNKNOWN"),
+                "error_message": result.get("error_message", "图像识别失败"),
+            },
+        )
+
+    state.register_upload(upload_id, dest)
+    return IngestImageResponse(
+        upload_id=upload_id,
+        filename=original.name,
+        size_bytes=size,
+        content_type=file.content_type,
+        stored_path=str(dest),
+        vision=result,
+    )
+
+
+async def _store_upload(
+    state: AppState, file: UploadFile
+) -> tuple[str, Path, Path, int]:
+    """校验扩展名与大小、把上传内容落盘，返回 ``(upload_id, 路径, 原文件名, 字节数)``。
+
+    文件名由服务端生成，**不使用客户端文件名**——这样路径穿越在源头就不成立。
+    ``/ingest/image`` 与 ``/species/detect`` 共用这一份校验，避免两处各写一遍
+    允许的扩展名与大小上限。
+    """
     original = Path(file.filename or "upload")
     ext = original.suffix.lower()
     if ext not in _ALLOWED_UPLOAD_EXT:
@@ -391,34 +429,12 @@ async def ingest_image(
             status_code=status.HTTP_400_BAD_REQUEST, detail="上传内容为空"
         )
 
-    # 文件名由服务端生成，**不使用客户端文件名**——这样路径穿越在源头就不成立。
     upload_id = uuid.uuid4().hex
     dest_dir = state.settings.upload_dir
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{upload_id}{ext}"
     dest.write_bytes(data)
-
-    result = await run_in_threadpool(fish_disease_detect, str(dest))
-    if result.get("status") != "ok":
-        # 格式不合法（魔数对不上）等情况下不要把垃圾文件留在磁盘上。
-        dest.unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "error_code": result.get("error_code", "UNKNOWN"),
-                "error_message": result.get("error_message", "图像识别失败"),
-            },
-        )
-
-    state.register_upload(upload_id, dest)
-    return IngestImageResponse(
-        upload_id=upload_id,
-        filename=original.name,
-        size_bytes=len(data),
-        content_type=file.content_type,
-        stored_path=str(dest),
-        vision=result,
-    )
+    return upload_id, dest, original, len(data)
 
 
 # --------------------------------------------------------------------------- #
@@ -689,4 +705,59 @@ def get_template_csv(key: str, request: Request) -> Response:
             "Content-Disposition": f'attachment; filename="{template.csv_filename}"',
             "X-Template-Key": template.key,
         },
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 鱼种识别
+# --------------------------------------------------------------------------- #
+
+@router.get(
+    "/species",
+    response_model=SpeciesAvailabilityResponse,
+    summary="鱼种识别是否可用（前端据此显示或隐藏鱼种模块）",
+)
+def get_species() -> SpeciesAvailabilityResponse:
+    """`available=False` 时前端隐藏鱼种模块，并把 `message` 原样显示给用户。
+
+    这里**不缓存**：每次请求都重新探测 `models/`，所以补上权重后刷新页面即可生效。
+    """
+    return SpeciesAvailabilityResponse(**species_availability())
+
+
+@router.post(
+    "/species/detect",
+    response_model=SpeciesDetectResponse,
+    summary="上传鱼体图片，判断养殖品种（鲤科 / 罗非鱼 / 虾蟹）",
+)
+async def detect_species(
+    request: Request, file: UploadFile = File(..., description="鱼体图片")
+) -> SpeciesDetectResponse:
+    state: AppState = get_state(request)
+    avail = species_availability()
+    if not avail["available"]:
+        # 没有权重时返回 503 而不是「猜一个品种」：品种判错会直接换掉阈值档案。
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=avail["message"]
+        )
+
+    upload_id, dest, original, size = await _store_upload(state, file)
+    result = await run_in_threadpool(fish_species_detect, str(dest))
+    if result.get("status") != "ok":
+        dest.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": result.get("error_code", "UNKNOWN"),
+                "error_message": result.get("error_message", "品种识别失败"),
+            },
+        )
+
+    state.register_upload(upload_id, dest)
+    return SpeciesDetectResponse(
+        upload_id=upload_id,
+        filename=original.name,
+        size_bytes=size,
+        stored_path=str(dest),
+        species=result,
     )

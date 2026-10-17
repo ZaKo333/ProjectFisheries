@@ -45,8 +45,11 @@
                         图像模型的权重也不在安装包里：缺了会明确提示
                         「权重缺失，将启用 mock 模拟模式」，不会假装识别。
                         补的办法见 README 第 3.6 节（--fetch-weights all）。
+                        鱼种识别权重同样不在包里，缺了它鱼种那一块会直接
+                        隐藏（不猜品种），水质按默认品种（鲤科）判定，
+                        下拉框仍可手动选。
 
-  运行自检.bat          环境体检。会跑一遍全部单元测试（1209 项）+ 全部演示
+  运行自检.bat          环境体检。会跑一遍全部单元测试（1220 项）+ 全部演示
                        脚本 + 检查知识库索引。答辩前点一次，全绿就放心了。
                        它不会启动服务，跑完自己就结束。
 
@@ -211,7 +214,7 @@
 
       .venv\Scripts\python.exe scripts\fetch_datasets.py --status
 
-  模型权重：看状态 / 补下载（两个约 10 MB，下载完自动核 md5）：
+  模型权重：看状态 / 补下载（三个约 13 MB，下载完自动核 md5）：
 
       .venv\Scripts\python.exe scripts\fetch_datasets.py --weights
       .venv\Scripts\python.exe scripts\fetch_datasets.py --fetch-weights all
@@ -221,6 +224,12 @@
       .venv\Scripts\python.exe scripts\train_yolo_fish.py --report   先体检
       .venv\Scripts\python.exe scripts\train_yolo_fish.py            正式训练
       训练完权重写到 models\yolov8-fish.pt，图像模态自动切到真实模型。
+
+  想重新训练鱼种三档分类模型（鲤科 / 罗非鱼 / 虾蟹，需要显卡，约 10 分钟）：
+
+      .venv\Scripts\python.exe scripts\train_yolo_species.py --check   先看数据
+      .venv\Scripts\python.exe scripts\train_yolo_species.py           正式训练
+      训练完权重写到 models\yolov8-species.pt，鱼种那一块自动出现在页面上。
 
 
 --------------------------------------------------------------------------------
@@ -245,6 +254,8 @@
       scripts\train_yolo_fish.py     训练病害识别模型（可选，需显卡）
       src\fisheries\datasets.py      「数据集名字 → 磁盘位置」的唯一定义处
       models\yolov8-fish.pt          训练好的病害识别权重（约 3 MB；有这个才走真模型）
+      models\yolov8-species.pt       鱼种三档分类权重（约 3 MB；缺了鱼种块就隐藏）
+      scripts\train_yolo_species.py  训练鱼种分类模型（可选，需显卡）
       models\checksums.md5           权重校验值（md5），跟着仓库走，随时能核
       models\translate\              本地离线翻译模型（有这个就不必配翻译 Key）
       data\datasets\                 原始数据集（1.37 GB，28,794 文件，不进 Git）

@@ -168,7 +168,7 @@
     return s ? "?" + s : "";
   }
 
-  /* ---------------- 12 个端点 ---------------- */
+  /* ---------------- 端点 ---------------- */
 
   const api = {
     getBaseURL: () => state.baseURL,
@@ -192,6 +192,15 @@
       const fd = new FormData();
       fd.append("file", file);
       return request("POST", "/api/v1/ingest/image", { body: fd });
+    },
+
+    /** 鱼种识别是否可用。前端据此显示或隐藏「品种识别」模块。 */
+    speciesAvailable() { return request("GET", "/api/v1/species", { timeoutMs: 8000 }); },
+
+    speciesDetect(file) {
+      const fd = new FormData();
+      fd.append("file", file);
+      return request("POST", "/api/v1/species/detect", { body: fd });
     },
 
     chat(payload) { return request("POST", "/api/v1/chat", { json: payload }); },

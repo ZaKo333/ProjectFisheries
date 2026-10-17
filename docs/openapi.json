@@ -402,6 +402,63 @@
           }
         }
       }
+    },
+    "/api/v1/species": {
+      "get": {
+        "summary": "鱼种识别是否可用（前端据此显示或隐藏鱼种模块）",
+        "description": "`available=False` 时前端隐藏鱼种模块，并把 `message` 原样显示给用户。\n\n这里**不缓存**：每次请求都重新探测 `models/`，所以补上权重后刷新页面即可生效。",
+        "operationId": "get_species_api_v1_species_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeciesAvailabilityResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/species/detect": {
+      "post": {
+        "summary": "上传鱼体图片，判断养殖品种（鲤科 / 罗非鱼 / 虾蟹）",
+        "operationId": "detect_species_api_v1_species_detect_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_detect_species_api_v1_species_detect_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeciesDetectResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -870,6 +927,21 @@
         ],
         "title": "AssessResponse",
         "description": "融合评估结果。字段名与 ``AgentResult`` 保持一致，便于前端与 CLI 共用一套理解。"
+      },
+      "Body_detect_species_api_v1_species_detect_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "鱼体图片"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_detect_species_api_v1_species_detect_post"
       },
       "Body_ingest_image_api_v1_ingest_image_post": {
         "properties": {
@@ -1352,6 +1424,89 @@
           "buffered_total"
         ],
         "title": "IngestSensorResponse"
+      },
+      "SpeciesAvailabilityResponse": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weights"
+          },
+          "expected": {
+            "type": "string",
+            "title": "Expected"
+          },
+          "species": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Species"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "available",
+          "expected"
+        ],
+        "title": "SpeciesAvailabilityResponse",
+        "description": "鱼种识别可用性——前端据此决定显示还是隐藏鱼种模块。"
+      },
+      "SpeciesDetectResponse": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "stored_path": {
+            "type": "string",
+            "title": "Stored Path"
+          },
+          "species": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Species"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "upload_id",
+          "filename",
+          "size_bytes",
+          "stored_path",
+          "species"
+        ],
+        "title": "SpeciesDetectResponse"
       },
       "TemplateCatalogResponse": {
         "properties": {

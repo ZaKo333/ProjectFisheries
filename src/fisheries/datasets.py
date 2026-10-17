@@ -372,8 +372,40 @@ DATASETS: dict[str, DatasetSpec] = {
         name="fish_species_images",
         entry="fish-species-image-data",
         kaggle_id="sripaadsrinivasan/fish-species-image-data",
-        label="鱼种图像数据",
-        note="工程当前未使用，备选。",
+        label="鱼种图像数据（海洋礁鱼）",
+        note=(
+            "**不适合训本工程的品种分类器**：这是 4411 行的海洋/礁鱼数据集"
+            "（acanthaluteres 等），与鲤科/罗非鱼/虾蟹三个阈值档案没有交集。"
+            "保留条目只为让 `--fetch` 清单完整（体积 1.31 GB），训练请用 "
+            "``fish_species_freshwater``。"
+        ),
+        size_hint="1.31 GB / 13234 文件",
+    ),
+    "fish_species_freshwater": DatasetSpec(
+        name="fish_species_freshwater",
+        entry="BD-FISH15-CLEAN-DATASET",
+        kaggle_id="theshahidul/bangladeshi-freshwater-fish-image-dataset-bff-15",
+        label="孟加拉淡水鱼 15 种图像（BFF-15）",
+        note=(
+            "**品种分类器实际使用的训练集**：15 类 5577 张，含 grass/mirror/silver "
+            "carp、katla、mrigal、rui、puti（归入鲤科）与 telapia（罗非鱼）。"
+            "另 7 类（ilish/magur/pabda/pangas/shol/tengra/koi）不在三个档案里，"
+            "训练时用 ``--drop-unmapped`` 丢弃。没有虾蟹类图像。"
+        ),
+        size_hint="212 MB / 5577 张",
+    ),
+    "fish_species_shrimp": DatasetSpec(
+        name="fish_species_shrimp",
+        entry="shrimp-disease-image-bd",
+        kaggle_id="lokotwist/shrimp-disease-image-bd",
+        label="对虾图像（含 WSSV 病虾）",
+        note=(
+            "**虾蟹档的唯一样本来源**：`ShrimpImages/ShrimpImages/Healthy` 403 张"
+            "健康虾 + `Augmented_shrimp/Healthy` 500 张增强副本。只取 Healthy 两个目录，"
+            "病虾（WSSV）与空背景（BG）不要——分类器认的是「是不是虾」，不是「有没有病」。"
+            "**没有任何蟹类图像**，蟹只能靠未识别→手动选择。"
+        ),
+        size_hint="204 MB / 3149 张",
     ),
 }
 

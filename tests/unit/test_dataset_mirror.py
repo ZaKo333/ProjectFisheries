@@ -9,7 +9,8 @@
 三件事必须成立，否则镜像这条路等于没做：
 
 1. **可复现**：同一份数据重复打包得到同一个 sha256——不然校验值没法写进注册表。
-2. **不依赖 kagglehub**：测试环境本来就没装它，走的正是「kaggle 失败」这条路。
+2. **不依赖 kagglehub**：镜像那一路只用标准库；测试里把 kaggle 那一路换成必然
+   抛错，于是无论测试机装没装 kagglehub、有没有凭证，走的都是「kaggle 失败」。
 3. **错了就拒绝**：sha256 对不上、zip 里有目录穿越，都必须是明确的错误而不是猜。
 """
 
@@ -146,11 +147,19 @@ class TestPack:
 # --------------------------------------------------------------------------- #
 
 class TestFallback:
-    def test_kaggle_missing_falls_back_to_mirror(
-        self, installed: ds.DatasetSpec, mirror: Path
+    def test_kaggle_failure_falls_back_to_mirror(
+        self, installed: ds.DatasetSpec, mirror: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """当前环境没装 kagglehub，所以这条断言走的就是「kaggle 失败」分支。"""
-        assert importlib.util.find_spec("kagglehub") is None
+        """kaggle 那一路失败（没凭证 / 没装 kagglehub / 上游变了）都要自动切镜像。
+
+        不靠「测试机恰好没装 kagglehub」来制造失败：装了它之后 ``fetch`` 会真的
+        去联网，这条断言就成了看运气的。直接把 kaggle 那一路换成必然抛错。
+        """
+
+        def boom(spec: ds.DatasetSpec) -> Path:
+            raise ds.DatasetNotFoundError(spec.name, "kagglehub 下载失败：模拟")
+
+        monkeypatch.setattr(ds, "_fetch_kaggle", boom)
         path = ds.fetch(DATASET_NAME)
         assert path == ds.LOCAL_ROOT / DATASET_ENTRY
         assert (path / "Test" / "a.jpg").read_bytes() == b"fake-jpeg-bytes"

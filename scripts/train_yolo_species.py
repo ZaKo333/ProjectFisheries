@@ -7,10 +7,18 @@
 
 数据从哪来
 ----------
-默认读 :data:`fisheries.datasets` 注册表里的 ``fish_species_images``
-（Kaggle: ``sripaadsrinivasan/fish-species-image-data``）。也可以 ``--data-root``
-直接指定任意"每个子目录一个类别"的目录树（允许外面多套一层壳目录，
-脚本会自己往下钻）。
+默认读 :data:`fisheries.datasets` 注册表里的 ``fish_species_freshwater``
+（Kaggle: ``theshahidul/bangladeshi-freshwater-fish-image-dataset-bff-15``，15 类
+5577 张，含 grass/mirror/silver carp、katla、mrigal、rui、puti 与 telapia）。
+
+老的 ``fish_species_images``（``sripaadsrinivasan/fish-species-image-data``）是
+**海洋礁鱼**数据集，与三个阈值档案没有交集，只作兜底，不要拿它训。
+
+也可以 ``--data-root`` 直接指定任意"每个子目录一个类别"的目录树（允许外面多套
+一层壳目录，脚本会自己往下钻）。「虾蟹」档的样本来自 ``fish_species_shrimp``
+（对虾图集），其中 ``Augmented_shrimp/Healthy`` 是原图的增强副本——用
+``--extra-root 虾蟹=<目录>`` 让它们**只进 train**，否则原图与增强图会被随机
+切到 train/val 两边，验证准确率虚高。
 
     python scripts/train_yolo_species.py --check                 # 只看数据够不够、类别怎么映射
     python scripts/train_yolo_species.py                         # 建布局 + 训练 + 导出权重
@@ -86,17 +94,44 @@ def _images_in(directory: Path) -> list[Path]:
 
 
 def default_data_root() -> Path:
-    """注册表里的鱼种数据集路径；注册表不认识时退回约定目录。"""
-    hit = None
-    try:
-        from fisheries import datasets as _datasets
+    """注册表里的淡水鱼种数据集路径；注册表不认识时退回约定目录。
 
-        hit = _datasets.default_path("fish_species_images")
-    except Exception:  # noqa: BLE001 —— 注册表不可用不该挡住 --data-root
-        hit = None
-    if hit is not None:
-        return Path(hit)
-    return PROJECT_ROOT / "data" / "datasets" / "fish-species-image-data"
+    优先 ``fish_species_freshwater``（BFF-15，15 类 5577 张，含鲤科/罗非鱼）。
+    老的 ``fish_species_images`` 是海洋礁鱼数据集，训不出可用模型，只作兜底。
+    """
+    for name in ("fish_species_freshwater", "fish_species_images"):
+        try:
+            from fisheries import datasets as _datasets
+
+            hit = _datasets.default_path(name)
+        except Exception:  # noqa: BLE001 —— 注册表不可用不该挡住 --data-root
+            hit = None
+        if hit is not None and Path(hit).is_dir():
+            return Path(hit)
+    return PROJECT_ROOT / "data" / "datasets" / "BD-FISH15-CLEAN-DATASET"
+
+
+def parse_extra_roots(items: list[str]) -> dict[str, list[Path]]:
+    """解析 ``--extra-root 品种=目录``（可重复）。
+
+    这些图片**只进 train**，不参与验证集划分。用途是「同一批原图的增强副本」：
+    随机切分会让原图与它的增强图分处 train/val 两侧，验证准确率虚高。
+    """
+    extras: dict[str, list[Path]] = {}
+    for item in items or []:
+        species, sep, raw = item.partition("=")
+        species, raw = species.strip(), raw.strip()
+        if not sep or not species or not raw:
+            raise SystemExit(f"--extra-root 需要「品种=目录」形式，收到 {item!r}")
+        if species not in SPECIES_LABELS:
+            raise SystemExit(
+                f"--extra-root 的品种必须是 {'/'.join(SPECIES_LABELS)} 之一，收到 {species!r}"
+            )
+        directory = Path(raw)
+        if not directory.is_dir():
+            raise SystemExit(f"--extra-root 目录不存在：{directory}（品种 {species}）")
+        extras.setdefault(species, []).extend(_images_in(directory))
+    return extras
 
 
 def discover_class_root(root: Path) -> Path | None:
@@ -188,28 +223,33 @@ def build_layout(
     val_ratio: float,
     seed: int,
     out_dir: Path | None = None,
+    extra_train: dict[str, list[Path]] | None = None,
 ) -> dict[str, dict[str, int]]:
     """把映射好的图片按品种写进 ``train/`` ``val/`` 两层目录。
 
     重名文件用序号前缀消歧（不同类别目录下常有同名 ``1.jpg``）。
     ``out_dir`` 默认 :data:`DATASET_OUT`；测试传临时目录以免动到工程产物。
+    ``extra_train`` 里的图片只进 ``train``，不参与验证集随机切分。
     """
     target_root = out_dir or DATASET_OUT
     rnd = random.Random(seed)
     if target_root.exists():
         shutil.rmtree(target_root)
 
+    extra_train = extra_train or {}
     counts: dict[str, dict[str, int]] = {}
     for species in SPECIES_LABELS:
         images = list(mapped.get(species, []))
-        if not images:
+        extras = list(extra_train.get(species, []))
+        if not images and not extras:
             continue
         rnd.shuffle(images)
         n_val = max(1, int(len(images) * val_ratio)) if len(images) > 1 else 0
         split = {"val": images[:n_val], "train": images[n_val:]}
-        if not split["train"]:  # 图片太少时至少留一张给 train
+        if not split["train"] and split["val"]:  # 图片太少时至少留一张给 train
             split["train"] = split["val"][:1]
             split["val"] = split["val"][1:]
+        split["train"] = split["train"] + extras
 
         counts[species] = {}
         for part, files in split.items():
@@ -221,7 +261,11 @@ def build_layout(
     return counts
 
 
-def write_manifest(class_root: Path, counts: dict[str, dict[str, int]]) -> None:
+def write_manifest(
+    class_root: Path,
+    counts: dict[str, dict[str, int]],
+    extra_train: dict[str, list[Path]] | None = None,
+) -> None:
     payload = {
         "source": str(class_root),
         "layout": str(DATASET_OUT),
@@ -229,6 +273,8 @@ def write_manifest(class_root: Path, counts: dict[str, dict[str, int]]) -> None:
         "counts": counts,
         "weights": str(WEIGHTS_OUT),
     }
+    if extra_train:
+        payload["extra_train"] = {k: len(v) for k, v in extra_train.items()}
     MANIFEST_OUT.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST_OUT.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -320,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--data-root", default=None,
                         help="按类别分目录的原始数据根目录（默认取数据集注册表）")
+    parser.add_argument("--extra-root", action="append", default=None, metavar="品种=目录",
+                        help="额外图片，只进 train（用于增强副本，避免与原图跨集泄漏）；可重复")
     parser.add_argument("--check", action="store_true", help="只做数据体检，不训练")
     parser.add_argument("--drop-unmapped", action="store_true",
                         help="丢弃无法归入三个品种的类别（默认遇到就中止）")
@@ -334,11 +382,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.data_root) if args.data_root else default_data_root()
+    extra_train = parse_extra_roots(args.extra_root or [])
     class_root = discover_class_root(root)
     raw = collect_classes(class_root) if class_root else {}
     mapped, unmapped = map_classes(raw)
 
     print_report(root, class_root, mapped, unmapped)
+    if extra_train:
+        print("  额外图片（只进 train）：")
+        for species, images in extra_train.items():
+            print(f"    + {species:6s} {len(images):6d} 张")
+        print()
 
     if args.check:
         return 0 if class_root and mapped else 1
@@ -353,15 +407,15 @@ def main(argv: list[str] | None = None) -> int:
         print("✗ 有类别无法归入品种档案，已中止。确认后加 --drop-unmapped。")
         return 1
 
-    if not mapped:
+    if not mapped and not extra_train:
         print("✗ 一个品种都没映射上，检查数据集的目录名。")
         return 1
 
-    counts = build_layout(mapped, args.val_ratio, args.seed)
+    counts = build_layout(mapped, args.val_ratio, args.seed, extra_train=extra_train)
     print("  布局：")
     for species, parts in counts.items():
         print(f"    {species:6s} train={parts.get('train', 0):6d} val={parts.get('val', 0):6d}")
-    write_manifest(class_root, counts)
+    write_manifest(class_root, counts, extra_train)
 
     weights = train(args)
     verify(weights)

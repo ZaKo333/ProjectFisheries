@@ -67,6 +67,10 @@ class WeightSpec:
     size: int = 0
     upstream: str = ""
     pinned: bool = True
+    #: 缺失时怎么提示。留空 = 走 :data:`MOCK_NOTICE`（真的退化成 mock）；
+    #: 少数模块缺权重时**不做 mock**，而是把自己藏起来（鱼种识别就是这样：
+    #: 硬猜一个品种只会换错阈值档位，比不显示更糟），那就把话说清楚。
+    missing_notice: str = ""
 
     @property
     def path(self) -> Path:
@@ -116,6 +120,17 @@ WEIGHTS: dict[str, WeightSpec] = {
         md5="93ce235e828481c003e1f577ab0f7149",
         sha256="d814df5155324b65dc62df3c718a6e43a99ee92f01ce9342a9562e15fa1e4e10",
         size=7053685,
+    ),
+    "fish_species": WeightSpec(
+        name="fish_species",
+        file="models/yolov8-species.pt",
+        label="鱼种分类权重",
+        purpose="从鱼体图片判断品种档位（鲤科 / 罗非鱼 / 虾蟹），决定水质阈值",
+        fallback="鱼种模块隐藏，水质按默认品种（鲤科）判定；不猜测替代结果",
+        md5="f8578ae043c7feb0fd5c637e704972db",
+        sha256="8518796b626b5b29e7355b1d1508011f7a914e0bbda268f2918dbe6532497f79",
+        size=2976829,
+        missing_notice="权重缺失，鱼种识别模块将隐藏",
     ),
     "yolov8n-cls": WeightSpec(
         name="yolov8n-cls",
@@ -380,7 +395,8 @@ def mock_notice(name: str | None = None, reason: str = "") -> str:
     if name is None:
         return MOCK_NOTICE + (f"：{reason}" if reason else "")
     item = spec(name)
-    text = f"{MOCK_NOTICE}：{item.label}（{item.file}）"
+    head = item.missing_notice or f"{MOCK_NOTICE}：{item.label}（{item.file}）"
+    text = head
     if reason:
         text += f"，原因：{reason}"
     text += f"。{item.fallback}。"

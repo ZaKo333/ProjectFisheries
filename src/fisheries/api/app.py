@@ -153,6 +153,8 @@ def create_app(
                     "GET  /api/v1/config/tools",
                     "GET  /api/v1/config/templates",
                     "GET  /api/v1/config/templates/{key}/csv",
+                    "GET  /api/v1/species",
+                    "POST /api/v1/species/detect",
                 ],
             }
         )

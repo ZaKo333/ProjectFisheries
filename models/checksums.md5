@@ -4,5 +4,6 @@
 # 重新生成：python scripts/fetch_datasets.py --write-checksums
 9c93b4614b8e879dfcd33d854495b572  models/yolov8-fish.pt
 93ce235e828481c003e1f577ab0f7149  models/yolov8-fish-lesion-seg.pt
+f8578ae043c7feb0fd5c637e704972db  models/yolov8-species.pt
 # models/pretrained/yolov8n-cls.pt  —— 官方上游权重，哈希随版本变化，不在此钉
 # models/pretrained/yolov8n-seg.pt  —— 官方上游权重，哈希随版本变化，不在此钉

@@ -161,6 +161,8 @@ class TestAppWiring:
             "/api/v1/config/tools",
             "/api/v1/config/templates",
             "/api/v1/config/templates/{key}/csv",
+            "/api/v1/species",
+            "/api/v1/species/detect",
         }
 
     def test_cors_can_be_disabled(self):
@@ -800,6 +802,132 @@ class TestImageUpload:
 
 
 # --------------------------------------------------------------------------- #
+# /species 与 /species/detect
+# --------------------------------------------------------------------------- #
+
+
+class TestSpecies:
+    """鱼种识别的两条接口。
+
+    与病害不同，这里**没有 mock 兜底**：判不出品种时宁可 503 并说明，
+    也不猜一个 —— 品种直接决定阈值档位，猜错会把红线判松。
+    """
+
+    @staticmethod
+    def _patch_availability(monkeypatch, *, available: bool, message: str = ""):
+        from fisheries.api import routes
+
+        monkeypatch.setattr(
+            routes,
+            "species_availability",
+            lambda *a, **k: {
+                "available": available,
+                "reason": "" if available else "缺失权重",
+                "weights": "C:/m/models/yolov8-species.pt" if available else None,
+                "expected": "C:/m/models/yolov8-species.pt",
+                "species": ["鲤科", "罗非鱼", "虾蟹"],
+                "message": message,
+            },
+        )
+
+    def test_availability_explains_how_to_get_the_weights(self, client, monkeypatch):
+        msg = "鱼种识别权重缺失：models/yolov8-species.pt 不存在。获取方式：python scripts/fetch_datasets.py --fetch-weights fish_species"
+        self._patch_availability(monkeypatch, available=False, message=msg)
+        body = client.get("/api/v1/species").json()
+        assert body["available"] is False
+        assert body["reason"] == "缺失权重"
+        assert body["weights"] is None
+        assert body["expected"].endswith("yolov8-species.pt")
+        assert body["species"] == ["鲤科", "罗非鱼", "虾蟹"]
+        assert body["message"] == msg
+
+    def test_availability_reports_true_when_weights_exist(self, client, monkeypatch):
+        self._patch_availability(monkeypatch, available=True)
+        body = client.get("/api/v1/species").json()
+        assert body["available"] is True
+        assert body["weights"].endswith("yolov8-species.pt")
+        assert body["message"] == ""
+
+    def test_detect_is_503_when_unavailable(self, client, monkeypatch):
+        self._patch_availability(monkeypatch, available=False, message="权重缺失")
+        resp = client.post(
+            "/api/v1/species/detect",
+            files={"file": ("fish.png", b"\x89PNG\r\n\x1a\n" + b"0" * 400, "image/png")},
+        )
+        assert resp.status_code == 503
+        assert "权重缺失" in str(resp.json())
+
+    def test_detect_shares_the_upload_validation(self, client, monkeypatch):
+        """品种识别复用 `_store_upload`：扩展名白名单与大小上限只有一份。"""
+        self._patch_availability(monkeypatch, available=True)
+        resp = client.post(
+            "/api/v1/species/detect", files={"file": ("a.txt", b"hi", "text/plain")}
+        )
+        assert resp.status_code == 415
+
+    def test_detect_returns_species_and_registers_upload(self, client, monkeypatch):
+        from fisheries.api import routes
+
+        self._patch_availability(monkeypatch, available=True)
+        monkeypatch.setattr(
+            routes,
+            "fish_species_detect",
+            lambda path, *a, **k: {
+                "status": "ok",
+                "detected": True,
+                "species": "虾蟹",
+                "confidence": 0.91,
+                "is_low_confidence": False,
+                "all_scores": {"虾蟹": 0.91},
+            },
+        )
+        resp = client.post(
+            "/api/v1/species/detect",
+            files={"file": ("prawn.png", b"\x89PNG\r\n\x1a\n" + b"0" * 400, "image/png")},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["species"]["species"] == "虾蟹"
+        assert body["upload_id"]
+        assert body["filename"] == "prawn.png"
+        assert body["stored_path"].endswith(f"{body['upload_id']}.png")
+
+        # 落盘的图还能直接拿去评估（复用同一个 upload_id）
+        assessed = client.post(
+            "/api/v1/assess",
+            json={
+                "readings": good_water(),
+                "upload_id": body["upload_id"],
+                "species": "虾蟹",
+            },
+        )
+        assert assessed.status_code == 200
+
+    def test_detect_failure_leaves_no_file_behind(
+        self, client, monkeypatch, upload_dir
+    ):
+        from fisheries.api import routes
+
+        self._patch_availability(monkeypatch, available=True)
+        monkeypatch.setattr(
+            routes,
+            "fish_species_detect",
+            lambda path, *a, **k: {
+                "status": "error",
+                "error_code": "UNSUPPORTED_IMAGE",
+                "error_message": "不是图片",
+            },
+        )
+        resp = client.post(
+            "/api/v1/species/detect",
+            files={"file": ("fake.png", b"not really a png", "image/png")},
+        )
+        assert resp.status_code == 422
+        assert resp.json()["detail"]["error_code"] == "UNSUPPORTED_IMAGE"
+        assert not list(upload_dir.glob("*"))
+
+
+# --------------------------------------------------------------------------- #
 # /chat 与 /config/*
 # --------------------------------------------------------------------------- #
 
@@ -840,6 +968,8 @@ class TestChatAndConfig:
     def test_tools_expose_openai_schemas(self, client):
         tools = client.get("/api/v1/config/tools").json()["tools"]
         names = {t["function"]["name"] for t in tools}
+        # 品种识别刻意**不**注册成 LLM 工具：它的输入是页面上传的图片，
+        # 让模型自己决定「要不要看图」只会调出一个不存在的路径。
         assert names == {"water_risk_predict", "fish_disease_detect"}
         for t in tools:
             assert t["type"] == "function"

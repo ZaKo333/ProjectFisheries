@@ -59,11 +59,13 @@ SPECIES_LABELS: tuple[str, ...] = tuple(SPECIES_PROFILES)
 RAW_SPECIES_ALIASES: dict[str, tuple[str, ...]] = {
     "鲤科": (
         "cyprinidae", "cyprinid", "grass carp", "silver carp", "bighead carp",
-        "common carp", "crucian", "goldfish", "tench", "rohu", "catla", "mrigal",
+        "mirror carp", "common carp", "crucian", "goldfish", "tench",
+        "rohu", "rui", "catla", "katla", "mrigal", "puti", "puntius", "barb",
         "carp", "鲤", "鲫", "草鱼", "鲢", "鳙", "青鱼", "鳊",
     ),
     "罗非鱼": (
-        "oreochromis", "tilapia", "nile tilapia", "罗非", "非洲鲫",
+        "oreochromis", "tilapia", "telapia", "nile tilapia", "mossambicus",
+        "罗非", "非洲鲫", "吴郭鱼",
     ),
     "虾蟹": (
         "freshwater prawn", "giant river prawn", "macrobrachium",
@@ -394,6 +396,57 @@ def fish_species_detect(
     ).model_dump(mode="json")
 
 
+def availability(weights_path: str | None = None) -> dict[str, Any]:
+    """品种识别能不能用——给接口与前端决定「显示还是隐藏鱼种模块」。
+
+    前端**不猜**文件在不在：它每次加载都问后端，后端每次都重新探测权重。
+    这样 ``fetch_datasets.py --fetch-weights all`` 补上权重后不用改配置、不用重启。
+
+    Returns:
+        ``{"available", "reason", "weights", "expected", "species", "message"}``；
+        ``available=False`` 时 ``message`` 是可以直接显示给用户的一句话。
+    """
+    weights = resolve_weights(weights_path)
+    base = {
+        "species": list(SPECIES_LABELS),
+        "expected": DEFAULT_WEIGHTS_PATH,
+    }
+    if weights is None:
+        return {
+            **base,
+            "available": False,
+            "reason": "缺失权重",
+            "weights": None,
+            "message": (
+                "鱼种识别模型未就绪（models/ 下没有 yolov8-species.pt），"
+                "鱼种模块已隐藏，水质按默认品种判定。"
+                "补权重：python scripts/fetch_datasets.py --fetch-weights all"
+                "（或 python scripts/train_yolo_species.py 自己训）。"
+            ),
+        }
+    try:
+        import ultralytics  # noqa: F401
+    except ImportError:
+        return {
+            **base,
+            "available": False,
+            "reason": "未安装 ultralytics",
+            "weights": weights,
+            "message": (
+                "权重文件在，但当前环境没装 ultralytics，鱼种模块已隐藏。"
+                '安装：.venv\\Scripts\\python.exe -m pip install -e ".[vision]"'
+            ),
+        }
+    _console.install()  # ultralytics 导入会把 stdout 改成 UTF-8
+    return {
+        **base,
+        "available": True,
+        "reason": "",
+        "weights": weights,
+        "message": "",
+    }
+
+
 def _error(image_path: str, code: str, message: str) -> dict[str, Any]:
     """构造统一的错误返回体。"""
     return FishSpeciesOutput(
@@ -415,6 +468,7 @@ __all__ = [
     "SPECIES_LABELS",
     "UNAVAILABLE_MODEL_VERSION",
     "FishSpeciesOutput",
+    "availability",
     "fish_species_detect",
     "map_raw_species",
     "resolve_weights",

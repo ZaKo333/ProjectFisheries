@@ -355,6 +355,21 @@ class TestMockNotice:
             wt.warn_mock("component", "fake")
         assert len([r for r in caplog.records if "component" in r.getMessage()]) == 2
 
+    def test_species_weight_does_not_claim_to_fall_back_to_mock(self) -> None:
+        """鱼种识别缺权重时是「藏起来」，不是「mock 一个品种」。
+
+        写成 mock 会让人以为还有结果可用，而它其实什么都没给——这个区别
+        必须落在文案里，因为评委和用户只会看到这句话。
+        """
+        text = wt.mock_notice("fish_species")
+
+        assert wt.spec("fish_species").missing_notice == "权重缺失，鱼种识别模块将隐藏"
+        assert "鱼种识别模块将隐藏" in text
+        assert "不猜" in text or "隐藏" in text
+        # 只有这一项例外：其它三项仍然是「退化成 mock」
+        for name in ("fish_disease", "fish_lesion"):
+            assert wt.MOCK_NOTICE in wt.mock_notice(name)
+
 
 # --------------------------------------------------------------------------- #
 # 六、接线：工具层与接口层必须喊出来
