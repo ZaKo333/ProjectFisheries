@@ -824,7 +824,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1355 项
+python -m pytest -m "not integration"        # 单元测试：1357 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -837,7 +837,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1355 项）
+### 11.1 单元测试（1357 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -860,7 +860,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_deploy_script.py` | 21 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
+| `test_deploy_script.py` | 23 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、脚本保持纯 ASCII |
 | `test_build_kb_script.py` | 3 | `build_knowledge_base.py --rebuild`：参数真的存在、会删旧库、`--check` 下不删 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
@@ -1094,7 +1094,10 @@ python scripts/train_lesion_seg.py --epochs 80   # 重新训练 + 评估
 ```
 
 脚本把选定的后端写进 `C:\fisheries\embedder.txt` 并同步进 `run-server.bat` 的
-`FISHERIES_RAG_EMBEDDER`，重跑部署自动沿用。本机（非服务器）等价命令是
+`FISHERIES_RAG_EMBEDDER`，重跑部署自动沿用。**不传 `-Embedder` 时沿用 `embedder.txt`，两者都没有就用 `hash`**
+——`fastembed` 要下载 91 MB 的 ONNX 模型，国内机器上 `huggingface.co` 与 `hf-mirror.com` 都可能超时
+（实测三次重试共 2 分半后失败），所以只在显式要求时才试；要换语义后端就明确写 `-Embedder fastembed`，
+并把模型预置到 `C:\fisheries\app\models\fastembed\`（断网可用）。本机（非服务器）等价命令是
 `python scripts\setup_env.py --rebuild-kb`，或直接 `python scripts\build_knowledge_base.py --embedder fastembed`。
 
 ### 12.10 视觉能力要「运行时 + 权重」两半都有

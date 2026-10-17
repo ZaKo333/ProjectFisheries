@@ -132,11 +132,11 @@ if ($CodeSha) {
     if ($inner.Count -ne 1) { Fail "archive $codeZip should hold exactly one root folder, found $($inner.Count)" }
     # GitHub names the folder after the FULL sha (ProjectFisheries-<40 chars>),
     # so a 7-char short sha never matches - accept either form.
-    $root = $inner[0].Name
-    $rootOk = $root.StartsWith("ProjectFisheries-") -and
-        ($root.EndsWith($CodeSha) -or $root.EndsWith($short))
+    $rootName = $inner[0].Name
+    $rootOk = $rootName.StartsWith("ProjectFisheries-") -and
+        ($rootName.EndsWith($CodeSha) -or $rootName.EndsWith($short))
     if (-not $rootOk) {
-        Fail "archive root is '$root' but the requested commit is $CodeSha"
+        Fail "archive root is '$rootName' but the requested commit is $CodeSha"
     }
     New-Item -ItemType Directory -Force -Path $App | Out-Null
     # /E copies without deleting: data/ and models/ inside $App must survive.
@@ -251,7 +251,10 @@ if ($WeightsFrom) {
 $EmbedderFile = Join-Path $Root "embedder.txt"
 if (-not $Embedder) {
     if (Test-Path $EmbedderFile) { $Embedder = (Get-Content $EmbedderFile -Raw).Trim() }
-    if (-not $Embedder) { $Embedder = "fastembed" }
+    # Default: offline pseudo-vectors. fastembed has to download its ONNX
+    # model, which times out on many CN hosts and stalls the deploy for
+    # minutes; ask for it explicitly with -Embedder fastembed.
+    if (-not $Embedder) { $Embedder = "hash" }
 }
 $kbDir = Join-Path $App "knowledge\chroma"
 $kbManifest = Join-Path $kbDir "fisheries_manifest.json"

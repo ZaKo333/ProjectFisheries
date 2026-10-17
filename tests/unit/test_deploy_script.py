@@ -70,6 +70,18 @@ class TestEmbedderSwitching:
         text = _text()
         assert 'set "FISHERIES_RAG_EMBEDDER=$Embedder"' in text
         assert 'Set-Content -Path $EmbedderFile -Value $Embedder -Encoding ascii' in text
+    def test_default_embedder_stays_offline(self) -> None:
+        """fastembed 要下 ONNX 模型，国内经常超时：不能当默认值。"""
+        text = _text()
+        assert '$Embedder = "fastembed"' not in text, "默认值不能是 fastembed"
+        assert 'if (-not $Embedder) { $Embedder = "hash" }' in text
+
+    def test_no_lowercase_root_variable(self) -> None:
+        """``$root`` 与 ``$Root``（C:\fisheries）同名：PowerShell 变量不分大小写，
+        一旦覆盖，后面的 ``Join-Path $Root`` 全部落到当前目录。"""
+        text = _text()
+        assert "$root =" not in text, "不要用 $root 作临时变量"
+        assert "$rootName = " in text
 
 
 class TestVisionOptIn:
