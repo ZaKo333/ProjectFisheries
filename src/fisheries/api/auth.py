@@ -95,6 +95,17 @@ def cookie_value(token: str) -> str:
     return hashlib.sha256((_COOKIE_SALT + token).encode("utf-8")).hexdigest()
 
 
+def _same_secret(given: str, expected: str) -> bool:
+    """定长比较两个口令。
+
+    ``hmac.compare_digest`` 只接受 ASCII 的 ``str``，用户把口令敲成全角数字
+    （``１１４３``）或带中文时会抛 ``TypeError: comparing strings with
+    non-ASCII characters is not supported``，登录页直接 500。统一先编码成
+    UTF-8 字节再比较，比较的仍是字节长度相同的摘要式比对，时序特性不变。
+    """
+    return hmac.compare_digest(given.encode("utf-8"), expected.encode("utf-8"))
+
+
 def is_public_path(path: str) -> bool:
     """这个路径是否免口令。"""
     if path in PUBLIC_PATHS:
@@ -105,10 +116,10 @@ def is_public_path(path: str) -> bool:
 def is_authorized(request: Request, token: str) -> bool:
     """请求是否携带了有效凭证（Bearer 头或登录 cookie，任一即可）。"""
     header = request.headers.get("Authorization", "")
-    if header[:7].lower() == "bearer " and hmac.compare_digest(header[7:].strip(), token):
+    if header[:7].lower() == "bearer " and _same_secret(header[7:].strip(), token):
         return True
     cookie = request.cookies.get(AUTH_COOKIE, "")
-    return bool(cookie) and hmac.compare_digest(cookie, cookie_value(token))
+    return bool(cookie) and _same_secret(cookie, cookie_value(token))
 
 
 def safe_next(raw: str | None) -> str:
@@ -245,7 +256,7 @@ def register_auth_routes(app: FastAPI) -> None:
         target = safe_next(next)
         if expected is None:
             return RedirectResponse(target, status_code=303)
-        if not token or not hmac.compare_digest(token.strip(), expected):
+        if not token or not _same_secret(token.strip(), expected):
             return HTMLResponse(
                 _login_html(error="口令不正确。", next_path=target),
                 status_code=401,

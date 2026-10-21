@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 
 import pytest
+from starlette.requests import Request
 from starlette.testclient import TestClient
 
 from fisheries.api.app import create_app
@@ -25,6 +26,7 @@ from fisheries.api.auth import (
     LOGOUT_PATH,
     TOKEN_ENV,
     cookie_value,
+    is_authorized,
     safe_next,
 )
 from fisheries.api.deps import ApiSettings
@@ -167,6 +169,43 @@ class TestLoginFlow:
         )
         assert resp.status_code == 401
         assert not secured_client.cookies.get(AUTH_COOKIE)
+
+    @pytest.mark.parametrize("typed", ["１１４３", "口令", "ｓ3cret-token"])
+    def test_non_ascii_login_is_rejected_not_crashed(self, secured_client, typed):
+        """全角数字 / 中文口令只会被判错，不能让登录页 500。
+
+        ``hmac.compare_digest`` 拒收非 ASCII 的 ``str``（TypeError），线上曾因此
+        把「输错口令」变成「服务器内部错误」。
+        """
+        resp = secured_client.post(
+            LOGIN_SUBMIT_PATH, data={"token": typed, "next": "/app/"}, follow_redirects=False
+        )
+        assert resp.status_code == 401
+        assert not secured_client.cookies.get(AUTH_COOKIE)
+
+    def test_latin1_bearer_header_is_compared_as_bytes(self):
+        """HTTP 头按 latin-1 解码，高位字节仍是「非 ASCII 字符」，同样不能抛 TypeError。"""
+        token = "pässword"
+        request = Request(
+            {
+                "type": "http",
+                "headers": [(b"authorization", b"Bearer " + token.encode("latin-1"))],
+            }
+        )
+        assert is_authorized(request, token) is True
+        assert is_authorized(request, "another") is False
+
+    def test_non_ascii_configured_token_can_be_used(self, tmp_path, clean_env):
+        """口令本身就允许非 ASCII：配成中文时，照抄一遍必须能登录。"""
+        clean_env.setenv(TOKEN_ENV, "口令１２３")
+        app = create_app(ApiSettings(upload_dir=tmp_path / "uploads"))
+        with TestClient(app) as c:
+            assert c.get("/api/v1/config/tools").status_code == 401
+            resp = c.post(
+                LOGIN_SUBMIT_PATH, data={"token": "口令１２３"}, follow_redirects=False
+            )
+            assert resp.status_code == 303
+            assert c.get("/api/v1/config/tools").status_code == 200
 
     def test_cookie_does_not_contain_the_token(self, secured_client):
         secured_client.post(LOGIN_SUBMIT_PATH, data={"token": TOKEN})
