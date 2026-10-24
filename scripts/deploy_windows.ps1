@@ -17,7 +17,10 @@ What it does (idempotent, safe to re-run):
   7. waits for /api/v1/health and prints DEPLOY_OK / DEPLOY_FAIL
 
 Options:
-    -Port 8000            listen port (default 8000)
+    -Port 8000            listen port (default 8000; the public mapping on a router box
+                          usually points at 8000, see README 12.12)
+    -AgentBudgetSeconds 70  wall-clock budget for one Agent run; when it runs out /assess
+                          downgrades to rule-based advice instead of making the browser time out
     -Extras "dev,rag,api" pip extras (default dev,rag,api)
     -Token "..."          access token; generated once and kept in C:\fisheries\token.txt when omitted
     -NoAuth               serve without a token (only for a machine that is not reachable from the internet)
@@ -37,6 +40,7 @@ Options:
 [CmdletBinding()]
 param(
     [int]$Port = 8000,
+    [int]$AgentBudgetSeconds = 70,
     [string]$Extras = "dev,rag,api",
     [string]$Token,
     [switch]$NoAuth,
@@ -414,6 +418,9 @@ set "FISHERIES_API_MAX_UPLOAD_MB=10"
 set "FISHERIES_API_ALLOW_LOCAL_PATH=0"
 set "FISHERIES_API_ENABLE_CORS=0"
 set "FISHERIES_RAG_EMBEDDER=$Embedder"
+rem Time budget for one Agent run: when it runs out, /assess downgrades to the
+rem rule-based advisor instead of letting the browser sit there until it times out.
+set "FISHERIES_AGENT_BUDGET_SECONDS=$AgentBudgetSeconds"
 $llmLines
 set "PYTHONIOENCODING=utf-8"
 cd /d "$App"
@@ -490,5 +497,6 @@ if ($ptCount -gt 0) {
         Write-Host "           (runtime ok: image recognition is live)"
     }
 }
+Write-Host "AGENT      time budget ${AgentBudgetSeconds}s per run: /assess downgrades to rule-based advice when it runs out"
 try { Stop-Transcript | Out-Null } catch { }
 exit 0

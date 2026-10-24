@@ -49,6 +49,7 @@ from fisheries.agent.llm import (
     LLMConfig,
     LLMUnavailableError,
     MockLLMClient,
+    OpenAICompatibleClient,
     build_client,
     describe_backend,
     load_llm_config,
@@ -89,6 +90,57 @@ def knowledge_enabled_by_default() -> bool:
     """读环境变量决定是否默认启用 RAG。"""
     raw = os.environ.get(KNOWLEDGE_DISABLE_ENV, "").strip().lower()
     return raw not in {"1", "true", "yes", "on"}
+
+
+#: 跳过「调度 LLM」直接跑确定性工具的环境变量。
+#:
+#: 为什么要有这条快路径：一次 ``/assess`` 原本至少两段串行 LLM —— 先让调度角色
+#: 决定调哪些工具（还要多一轮把工具结果回灌、再问一次"还要不要调"），再让建议角色
+#: 写建议。而输入里已经有读数/图片时，**该调哪个工具是确定的**（见
+#: :meth:`AquacultureAgent._required_tools`），问模型等于花 10–20 秒换一个和
+#: 护栏一样的结果。实测 qwen-plus 单轮约 8–15 秒，砍掉调度这一两轮，
+#: ``/assess`` 从 40–60 秒降到 20 秒上下。
+#:
+#: 取值：``auto``（默认，真实 LLM 才走快路径，Mock 保持原样以便单测覆盖调度循环）、
+#: ``1``/``on``（强制）、``0``/``off``（关闭）。
+DIRECT_TOOLS_ENV = "FISHERIES_AGENT_DIRECT_TOOLS"
+
+#: 单次 ``run()`` 的总时间预算（秒，``0`` = 不限）。
+#:
+#: 前端对 ``/assess`` 的等待是有限的，与其让用户看到一个"请求超时"，不如在
+#: 预算用完时**主动降级**——跳过建议 LLM、改用规则模板（等级与告警本来就由
+#: 融合层确定性生成，模型只影响措辞）。
+BUDGET_ENV = "FISHERIES_AGENT_BUDGET_SECONDS"
+
+#: 给建议 LLM 预留的时间（秒）。剩余时间少于它就不再发起调用。
+ADVISOR_RESERVE_ENV = "FISHERIES_AGENT_ADVISOR_RESERVE_SECONDS"
+
+
+def _env_seconds(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else 0.0
+
+
+def direct_tools_enabled(scheduler: Any = None) -> bool:
+    """是否跳过调度 LLM，直接执行由输入决定的确定性工具。
+
+    ``auto``（默认）只在**接了真实模型**（:class:`OpenAICompatibleClient`）时启用：
+    单测里的 :class:`MockLLMClient` 与各种脚本化替身都要走完整调度循环，
+    才能覆盖"模型选工具 / 护栏补调 / 参数坏掉"这些路径。
+    """
+    raw = os.environ.get(DIRECT_TOOLS_ENV, "auto").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return isinstance(scheduler, OpenAICompatibleClient)
+
 
 
 # --------------------------------------------------------------------------- #
@@ -267,6 +319,12 @@ class AquacultureAgent:
         # 建议角色默认复用调度客户端，避免没配置时静默跑到 Mock 上
         self.advisor: ChatClient = advisor_client or self.scheduler
 
+        # 输入已带读数/图片时，该调哪个工具是确定的：直接执行，省掉调度 LLM 的一两轮。
+        self.direct_tools: bool = direct_tools_enabled(self.scheduler)
+        #: 单次 run() 的总时间预算（秒，0 = 不限）与留给建议 LLM 的余量。
+        self.budget_seconds: float = _env_seconds(BUDGET_ENV, 0.0)
+        self.advisor_reserve_seconds: float = _env_seconds(ADVISOR_RESERVE_ENV, 25.0)
+
         self.use_knowledge = (
             knowledge_enabled_by_default() if use_knowledge is None else use_knowledge
         )
@@ -372,6 +430,37 @@ class AquacultureAgent:
         return required
 
     # ---------------- ① 调度循环 ----------------
+
+    def _direct_dispatch(self, inp: AgentInput) -> dict[str, dict[str, Any]]:
+        """不问模型，直接按输入跑确定性工具。
+
+        参数与 :meth:`_apply_guardrail` 的补调完全一致——同一条路径，两种触发方式：
+        一种是"模型漏调了"，一种是"根本不用问模型"。前者会被记成降级，
+        后者是正常快路径，不该出现在 ``degraded_reasons`` 里。
+        """
+        results: dict[str, dict[str, Any]] = {}
+        names = sorted(self._required_tools(inp))
+        # kind 用 tool_call：TraceStep.kind 是封闭 Literal，前端按这几个值渲染；
+        # 快路径本身就是"确定性地调工具"，不需要新增一种步骤类型。
+        self._log("tool_call", f"输入已带齐数据，跳过调度 LLM，直接执行 {len(names)} 个工具",
+                  f"工具：{'、'.join(names)}（省掉 1–2 轮模型决策）")
+        if "water_risk_predict" in names:
+            results["water_risk_predict"] = self._execute_tool("water_risk_predict", {
+                "readings": inp.water_readings,
+                "pond_id": inp.pond_id,
+                "species": inp.species,
+            })
+        if "fish_disease_detect" in names:
+            results["fish_disease_detect"] = self._execute_tool("fish_disease_detect", {
+                "image_path": inp.image_path,
+                "mock_source": inp.mock_source,
+            })
+        for name in names:
+            payload = results.get(name, {})
+            self._log("tool_result", f"{name}（直连）返回 status={payload.get('status')}",
+                      str(payload.get("error_message") or payload.get("degradation_summary")
+                          or payload.get("disease_type") or "")[:200])
+        return results
 
     def _scheduling_loop(self, inp: AgentInput) -> dict[str, dict[str, Any]]:
         """跑 LLM 工具调用循环，返回 {工具名: 工具结果}。"""
@@ -596,7 +685,8 @@ class AquacultureAgent:
     def _generate_advisories(self, fusion: FusionResult,
                              water: dict[str, Any] | None,
                              vision: dict[str, Any] | None,
-                             knowledge: Any | None = None) -> AdvisorReport:
+                             knowledge: Any | None = None,
+                             elapsed: float = 0.0) -> AdvisorReport:
         """让建议角色写养殖建议；LLM 不可用时退回规则模板。
 
         无论走哪条路径，返回值都经过 :meth:`_report_from_parsed` 或
@@ -612,6 +702,19 @@ class AquacultureAgent:
         confidence_facts = build_confidence_facts(water, vision, fusion, knowledge)
         self._confidence_facts = confidence_facts
         self._confidence_note_default = render_confidence_note(confidence_facts, LANG_ZH)
+
+        # 时间预算不够了就先降级：宁可给一份规则模板写成的建议（等级与告警本来就是
+        # 融合层确定性算出来的，模型只影响措辞），也不要让前端等到超时。
+        if self.budget_seconds and (elapsed + self.advisor_reserve_seconds
+                                    > self.budget_seconds):
+            self._log("advisor", "时间预算不足，跳过建议 LLM 改用规则模板",
+                      f"已用 {elapsed:.1f} 秒 / 预算 {self.budget_seconds:.0f} 秒，"
+                      f"给建议留 {self.advisor_reserve_seconds:.0f} 秒")
+            self.degraded_reasons.append(
+                f"响应时间预算不足（已用 {elapsed:.0f} 秒），养殖建议由规则模板生成"
+            )
+            return self._fallback_advisories(fusion, water, vision,
+                                            confidence_note=self._confidence_note_default)
 
         # 没有配置真实建议 LLM 时，直接走规则模板。
         # 不要先去"调用" Mock 再判定它输出非法——那会把"本就没配 LLM"
@@ -995,8 +1098,11 @@ class AquacultureAgent:
 
         self._log("llm", "启动 Agent 调度", inp.summary())
 
-        # ① LLM 决策 + 工具执行
-        results = self._scheduling_loop(inp)
+        # ① 工具执行：输入已带齐数据就走确定性直连，否则让模型决定调什么
+        if self.direct_tools and self._required_tools(inp):
+            results = self._direct_dispatch(inp)
+        else:
+            results = self._scheduling_loop(inp)
         # ② 护栏补调
         self._apply_guardrail(inp, results)
 
@@ -1013,7 +1119,10 @@ class AquacultureAgent:
         ctx = self._retrieve_knowledge(water, vision, fusion, inp.use_knowledge)
 
         # ⑤ 建议生成
-        report: AdvisorReport = self._generate_advisories(fusion, water, vision, ctx)
+        report: AdvisorReport = self._generate_advisories(
+            fusion, water, vision, ctx,
+            elapsed=time.perf_counter() - started,
+        )
 
         # 报告里的等级与告警一定等于融合层的结论（见 _report_from_parsed 的护栏），
         # 下面这行是断言而非赋值，若哪天真不一致，我们宁可当场炸掉也不要静默发错告警。

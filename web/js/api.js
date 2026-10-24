@@ -109,9 +109,20 @@
 
   /* ---------------- 底层请求 ---------------- */
 
+  // 超时按"这条请求最慢能有多慢"分层设：/assess 要串两次真实大模型调用
+  // （工具决策 + 建议生成），qwen-plus 实测 20–40 秒，留到 150 秒；
+  // /chat 只有一次调用但也可能输出上千字，给 90 秒；其余接口是本地计算，30 秒足够。
+  // 阈值必须大于服务端的时间预算（FISHERIES_AGENT_BUDGET_SECONDS，部署默认 70），
+  // 否则用户看到的是"前端先超时"，而服务端其实已经准备好降级结果了。
+  function defaultTimeoutMs(path) {
+    if (path.indexOf("/assess") !== -1) return 150000;
+    if (path.indexOf("/chat") !== -1) return 90000;
+    return 30000;
+  }
+
   async function request(method, path, options) {
     options = options || {};
-    const timeoutMs = options.timeoutMs != null ? options.timeoutMs : (path.includes("/assess") ? 60000 : 30000);
+    const timeoutMs = options.timeoutMs != null ? options.timeoutMs : defaultTimeoutMs(path);
     const url = state.baseURL + path;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);

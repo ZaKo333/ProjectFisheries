@@ -195,6 +195,8 @@ class TestAccessTokenOverride:
         text = _text()
         assert "[^\\x20-\\x7E]" in text
         assert "must be printable ASCII" in text
+
+
 class TestPublicPortGuard:
     """公网入口是路由器 11438 -> 内网 8000，服务监听别的端口会「箱内全通、外面全死」。"""
 
@@ -203,3 +205,15 @@ class TestPublicPortGuard:
         assert "if ($Port -ne 8000)" in text, "缺少非 8000 端口的提醒"
         assert "is not 8000" in text
         assert "README 12.12" in text, "提醒里要指向 README 12.12"
+
+class TestAgentBudget:
+    """评估过慢：一次 /assess 最多两次模型往返，必须有个上限兜住。"""
+
+    def test_budget_parameter_has_a_default(self) -> None:
+        text = _text()
+        assert "[int]$AgentBudgetSeconds = 70" in text, "部署脚本缺少 -AgentBudgetSeconds"
+
+    def test_budget_reaches_the_service(self) -> None:
+        text = _text()
+        assert 'set "FISHERIES_AGENT_BUDGET_SECONDS=$AgentBudgetSeconds"' in text,             "预算没写进 run-server.bat，服务侧读不到"
+        assert "time budget" in text, "部署结束没有回显预算"

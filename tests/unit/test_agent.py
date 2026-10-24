@@ -28,6 +28,7 @@ from fisheries.agent.fusion import (
 )
 from fisheries.agent.llm import (
     ChatResponse,
+    LLMConfig,
     LLMUnavailableError,
     MockLLMClient,
     OpenAICompatibleClient,
@@ -35,10 +36,14 @@ from fisheries.agent.llm import (
     load_llm_config,
 )
 from fisheries.agent.orchestrator import (
+    ADVISOR_RESERVE_ENV,
+    BUDGET_ENV,
+    DIRECT_TOOLS_ENV,
     KNOWLEDGE_DISABLE_ENV,
     MAX_ROUNDS,
     AgentInput,
     AquacultureAgent,
+    direct_tools_enabled,
 )
 from fisheries.agent.prompts import (
     ADVISOR_SYSTEM_PROMPT,
@@ -1337,3 +1342,117 @@ class TestAdvisorReportGuardrail:
         assert "养殖户" in system
 
 
+
+
+
+# --------------------------------------------------------------------------- #
+# 八·五、慢的根因：一次 /assess 串了两段 LLM —— 快路径与时间预算
+# --------------------------------------------------------------------------- #
+
+class CountingClient:
+    """数被问了几次：快路径生效时它应该一次都没被调用。"""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def chat(self, messages, tools=None):
+        self.calls += 1
+        return ChatResponse(content="（不该被问到）", finish_reason="stop")
+
+
+class CountingAdvisor:
+    """数建议角色被调用了几次。
+
+    故意返回非 JSON：这样每次调用都会落到规则模板，用例只关心「调没调」，
+    不必为了计数再造一份完整合法输出。
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def chat(self, messages, tools=None):
+        self.calls += 1
+        return ChatResponse(content="不是 JSON", finish_reason="stop")
+
+
+def _real_client() -> OpenAICompatibleClient:
+    """真实客户端的替身证书：只需要通过 isinstance 判定，不会真的发请求。"""
+    return OpenAICompatibleClient(
+        LLMConfig(provider="openai", model="gpt-4o-mini",
+                  base_url="http://127.0.0.1:9/v1", api_key="k")
+    )
+
+
+class TestDirectDispatch:
+    """输入里已有读数/图片时，调哪个工具是确定的，不必再问模型。"""
+
+    def test_env_flag_forces_the_fast_path(self, monkeypatch):
+        monkeypatch.setenv(DIRECT_TOOLS_ENV, "1")
+        counter = CountingClient()
+        agent = AquacultureAgent(scheduler_client=counter, advisor_client=MockLLMClient(),
+                                 use_knowledge=False)
+        result = agent.run(AgentInput(pond_id="P1", water_readings=GOOD_READINGS))
+        assert counter.calls == 0, "有读数时不该再问模型要调哪个工具"
+        assert result.water and result.water.get("status") != "error"
+        assert any("跳过调度 LLM" in step.title for step in result.trace)
+        # 快路径是正常路径，不是「模型漏调」，不该污染降级说明
+        assert not [s for s in result.degraded_reasons if "漏调" in s]
+
+    def test_disabled_by_env_keeps_the_llm_loop(self, monkeypatch):
+        monkeypatch.setenv(DIRECT_TOOLS_ENV, "0")
+        counter = CountingClient()
+        agent = AquacultureAgent(scheduler_client=counter, advisor_client=MockLLMClient(),
+                                 use_knowledge=False)
+        agent.run(AgentInput(pond_id="P1", water_readings=GOOD_READINGS))
+        assert counter.calls >= 1
+
+    def test_empty_required_tools_keeps_the_model_in_the_loop(self, monkeypatch):
+        # AgentInput 要求至少一个模态，所以"没有需要直连的工具"只能用替身造出来；
+        # 这条守的是分支条件：能直连才直连，不是无条件绕开模型。
+        monkeypatch.setenv(DIRECT_TOOLS_ENV, "1")
+        counter = CountingClient()
+        agent = AquacultureAgent(scheduler_client=counter, advisor_client=MockLLMClient(),
+                                 use_knowledge=False)
+        monkeypatch.setattr(agent, "_required_tools", lambda _inp: set())
+        agent.run(AgentInput(pond_id="P1", water_readings=GOOD_READINGS))
+        assert counter.calls >= 1, "没有可直连的工具时，仍然需要模型决定"
+
+    def test_auto_only_turns_on_for_the_real_client(self, monkeypatch):
+        monkeypatch.delenv(DIRECT_TOOLS_ENV, raising=False)
+        assert direct_tools_enabled() is False
+        assert direct_tools_enabled(MockLLMClient()) is False
+        # 测试里的脚本化替身也不算真实客户端，否则调度循环就没人测了
+        assert direct_tools_enabled(CountingClient()) is False
+        assert direct_tools_enabled(_real_client()) is True
+
+    def test_explicit_flag_beats_the_auto_detection(self, monkeypatch):
+        monkeypatch.setenv(DIRECT_TOOLS_ENV, "0")
+        assert direct_tools_enabled(_real_client()) is False
+
+
+class TestTimeBudget:
+    """预算不够就降级，而不是让前端等到超时。"""
+
+    def test_advisor_is_skipped_when_the_budget_is_gone(self, monkeypatch):
+        monkeypatch.setenv(DIRECT_TOOLS_ENV, "1")
+        monkeypatch.setenv(BUDGET_ENV, "10")
+        monkeypatch.setenv(ADVISOR_RESERVE_ENV, "25")
+        advisor = CountingAdvisor()
+        agent = AquacultureAgent(scheduler_client=SilentClient(),
+                                 advisor_client=advisor,
+                                 use_knowledge=False)
+        result = agent.run(AgentInput(pond_id="P1", water_readings=GOOD_READINGS))
+        assert advisor.calls == 0, "预算已不够，不该再发起建议 LLM 调用"
+        assert result.advisories, "降级也要给出建议（规则模板）"
+        assert result.risk_level in ("正常", "预警", "高危")
+        assert [s for s in result.degraded_reasons if "预算" in s]
+
+    def test_no_budget_keeps_the_advisor_call(self, monkeypatch):
+        monkeypatch.setenv(DIRECT_TOOLS_ENV, "1")
+        monkeypatch.delenv(BUDGET_ENV, raising=False)
+        advisor = CountingAdvisor()
+        agent = AquacultureAgent(scheduler_client=SilentClient(),
+                                 advisor_client=advisor,
+                                 use_knowledge=False)
+        agent.run(AgentInput(pond_id="P1", water_readings=GOOD_READINGS))
+        assert advisor.calls == 1

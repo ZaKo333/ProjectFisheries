@@ -825,7 +825,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1372 项
+python -m pytest -m "not integration"        # 单元测试：1381 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -838,13 +838,13 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1372 项）
+### 11.1 单元测试（1381 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
 | `test_tools.py` | 95 | 阈值端点、红线、非离子氨换算（Emerson 公式 vs 表A1/A2）、缺失权重重归一化、NaN 拒绝、混合基线四条约束、图像确定性 |
 | `test_fish_species.py` | 42 | 品种别名映射、可用性探测（缺权重 / 缺 ultralytics / 可用）、无权重时不猜、错误码、不在 `TOOL_HANDLERS` 里 |
-| `test_agent.py` | 122 | 单模态权重归一化、协同规则、护栏补调、等级下限不被稀释、输出契约、坏 JSON 参数不打死整轮调度 |
+| `test_agent.py` | 129 | 单模态权重归一化、协同规则、护栏补调、等级下限不被稀释、输出契约、坏 JSON 参数不打死整轮调度 |
 | `test_translate.py` | 144 | 语言判定、词表回译、逐字段回译、降级路径、端到端 |
 | `test_evaluation.py` | 181 | 评测代码自身的正确性（阈值分档、κ、Spearman、滑窗、量纲归一顺序） |
 | `test_rag.py` | 105 | front-matter、分块、RRF 融合、清单一致性守卫 |
@@ -861,7 +861,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_deploy_script.py` | 28 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、`-Token` 改口令会落盘且拒绝非 ASCII、脚本保持纯 ASCII |
+| `test_deploy_script.py` | 30 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、`-Token` 改口令会落盘且拒绝非 ASCII、脚本保持纯 ASCII |
 | `test_build_kb_script.py` | 3 | `build_knowledge_base.py --rebuild`：参数真的存在、会删旧库、`--check` 下不删 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
@@ -1194,6 +1194,32 @@ netsh advfirewall firewall show rule name=all | findstr /i "8000"   # 防火墙�
 ```
 
 四条都正常、公网仍然不通 ⇒ 问题在路由器/云平台的端口映射，不在服务器，也不在代码。
+
+---
+
+## 12.13 一次评估要等多久，超时了怎么办
+
+2026-10-25 线上实测：`/chat` 单次 **21.9 秒**（接 qwen-plus，带 5 条参考资料），而当时前端
+`/assess` 的超时只有 60 秒。一次 `/assess` 至少要两次模型往返——先决定调哪个工具，再写养殖
+建议——叠加起来经常摸到 60 秒，用户看到的就是
+「评估失败：请求超时（超过 60 秒无响应）」。服务端其实还在跑，只是没人等了。
+
+三条措施，都已在代码里：
+
+1. **该调哪个工具不用再问模型。** 输入带读数就必然要算水质风险，带图片就必然要认病，这是
+   确定性判断。`orchestrator._direct_dispatch()` 直接执行，省掉 1–2 轮模型决策，`trace` 里能
+   看到「输入已带齐数据，跳过调度 LLM」。开关 `FISHERIES_AGENT_DIRECT_TOOLS`：默认 `auto`
+   只在真实模型客户端上启用（`MockLLM` 与测试替身仍走完整调度循环），`1`/`0` 强制开关。
+2. **到点就降级，别让用户干等。** `FISHERIES_AGENT_BUDGET_SECONDS`（部署脚本的
+   `-AgentBudgetSeconds`，默认 **70**）是单次评估的总预算，
+   `FISHERIES_AGENT_ADVISOR_RESERVE_SECONDS`（默认 25）是留给最后一次模型调用的余量。预算
+   不够就跳过建议 LLM、改用规则模板，并在 `degraded_reasons` 里写明「响应时间预算不足
+   （已用 N 秒），养殖建议由规则模板生成」。
+3. **前端超时要大于服务端预算。** `web/js/api.js` 的 `defaultTimeoutMs()`：`/assess` 150 秒、
+   `/chat` 90 秒、其余 30 秒。服务端 70 秒预算加兜底余量，正好落在 150 秒里面。
+
+还想更快就只有换模型：`-LlmModel qwen-flash` 一类小模型首字延迟明显更低，代价是建议质量；
+把 `llm.py` 里默认的 `max_tokens=1024` 调小也能压一截，但输出会被截断。
 
 ---
 
