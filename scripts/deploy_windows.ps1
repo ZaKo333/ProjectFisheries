@@ -99,6 +99,15 @@ Start-Transcript -Path $DeployLog -Append | Out-Null
 
 Step "host: $env:COMPUTERNAME / user: $env:USERNAME / port: $Port"
 
+# The public entry on this box is a router/NAT mapping whose *target* port is 8000
+# (public 11438 -> 192.168.31.38:8000). Listening on anything else keeps the whole
+# box perfectly healthy from the inside while the internet sees nothing - measured
+# on 2026-10-24: -Port 11438 gave 0.0.0.0 LISTENING, LAN curl 200, firewall allow,
+# and public 11438 dead until the port went back to 8000. See README 12.12.
+if ($Port -ne 8000) {
+    Warn "port $Port is not 8000: if the router/NAT mapping targets 8000, outside access will break (README 12.12)"
+}
+
 # --- 1. project sources --------------------------------------------------
 # -CodeSha pulls the archive of that exact commit from a CN mirror and copies it
 # over the previous tree. A commit archive is immutable, so the mirror cache can
@@ -471,8 +480,15 @@ if ($llm["provider"]) {
 }
 $ptCount = @(Get-ChildItem (Join-Path $App "models") -Filter *.pt -File -ErrorAction SilentlyContinue).Count
 Write-Host ("VISION     {0} weight file(s) in {1}" -f $ptCount, (Join-Path $App "models"))
-if ($ptCount -gt 0 -and -not $Vision) {
-    Write-Host "           (files present but ultralytics may be missing: re-run with -Vision)"
+if ($ptCount -gt 0) {
+    # Weights without the runtime are the classic "model not ready" 503: probe the
+    # import instead of guessing, so a healthy box does not print a scary hint.
+    $null = & $VenvPy -c "import ultralytics" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "           (weights present but ultralytics is missing: re-run with -Vision)"
+    } else {
+        Write-Host "           (runtime ok: image recognition is live)"
+    }
 }
 try { Stop-Transcript | Out-Null } catch { }
 exit 0

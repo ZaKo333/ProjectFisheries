@@ -825,7 +825,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1371 项
+python -m pytest -m "not integration"        # 单元测试：1372 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -838,7 +838,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1371 项）
+### 11.1 单元测试（1372 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -861,7 +861,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_deploy_script.py` | 27 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、`-Token` 改口令会落盘且拒绝非 ASCII、脚本保持纯 ASCII |
+| `test_deploy_script.py` | 28 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、`-Token` 改口令会落盘且拒绝非 ASCII、脚本保持纯 ASCII |
 | `test_build_kb_script.py` | 3 | `build_knowledge_base.py --rebuild`：参数真的存在、会删旧库、`--check` 下不删 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
@@ -1162,6 +1162,38 @@ tar.exe -xf C:\fisheries\src.zip -C C:\fisheries\app --strip-components 1
 ② 命令用 `;` 连起来时，`curl` 的失败**不会**阻止后面的 `tar`，务必看 `curl` 的返回码或
 直接把两条写成 `if ($LASTEXITCODE -eq 0) { … }`。之后 `-CodeSha` 分支用 `robocopy /E`
 覆盖代码（**不用 `/MIR`**，否则 `app\models` 与 `app\data` 会被顺手删掉）。
+
+### 12.12 公网入口是「路由器 11438 → 内网 8000」，所以服务必须监听 8000
+
+对外那个 11438 端口**不是服务自己在听的**，它来自路由器/云平台的一条端口映射：
+
+```
+183.146.215.84:11438  →  192.168.31.38:8000
+```
+
+这是 2026-10-24 现场量出来的：为了"端口一致"把服务改成 `-Port 11438` 之后，服务器上
+`0.0.0.0:11438` 监听正常、本机与局域网 `curl http://192.168.31.38:11438/api/v1/health`
+都是 200、防火墙两条 11438 规则都是"允许"，但**公网 11438 完全不通**；改回默认的
+`-Port 8000` 立刻恢复。结论是公网这一跳把 11438 送到了内网的 **8000**，服务监听别处就等于
+把入口切断。
+
+所以要记住三条：
+
+* 服务器上**一直用默认的 `-Port 8000`**，不要为了"对外对外都是 11438"去改它；
+* **不要**给 11438 加 `netsh interface portproxy` 转发——多余，加回来还会占掉端口；
+* 换服务器、换路由器之后，先确认映射的**目标端口**，再决定 `-Port`（脚本对非 8000 会打一条
+  `WARN` 提醒）。
+
+外部访问不通时，按"从里到外"的顺序排查，前四步都在服务器上：
+
+```powershell
+netstat -ano | findstr :8000                          # 在听吗？地址是不是 0.0.0.0
+curl.exe -s http://127.0.0.1:8000/api/v1/health        # 本机通吗
+curl.exe -s http://192.168.31.38:8000/api/v1/health    # 走网卡通吗
+netsh advfirewall firewall show rule name=all | findstr /i "8000"   # 防火墙放行吗
+```
+
+四条都正常、公网仍然不通 ⇒ 问题在路由器/云平台的端口映射，不在服务器，也不在代码。
 
 ---
 

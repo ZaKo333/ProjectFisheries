@@ -195,3 +195,11 @@ class TestAccessTokenOverride:
         text = _text()
         assert "[^\\x20-\\x7E]" in text
         assert "must be printable ASCII" in text
+class TestPublicPortGuard:
+    """公网入口是路由器 11438 -> 内网 8000，服务监听别的端口会「箱内全通、外面全死」。"""
+
+    def test_non_default_port_is_warned(self) -> None:
+        text = _text()
+        assert "if ($Port -ne 8000)" in text, "缺少非 8000 端口的提醒"
+        assert "is not 8000" in text
+        assert "README 12.12" in text, "提醒里要指向 README 12.12"
