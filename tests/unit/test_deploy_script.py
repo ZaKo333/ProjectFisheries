@@ -217,3 +217,20 @@ class TestAgentBudget:
         text = _text()
         assert 'set "FISHERIES_AGENT_BUDGET_SECONDS=$AgentBudgetSeconds"' in text,             "预算没写进 run-server.bat，服务侧读不到"
         assert "time budget" in text, "部署结束没有回显预算"
+
+class TestWatchdog:
+    """服务被杀之后没人拉起（2026-10-21、11-03 两次断站）：要有自愈任务。"""
+
+    def test_watchdog_can_be_skipped(self) -> None:
+        assert "[switch]$NoWatchdog" in _text(), "部署脚本缺少 -NoWatchdog 开关"
+
+    def test_watchdog_runs_every_five_minutes(self) -> None:
+        text = _text()
+        assert '"/TN", "FisheriesWatchdog"' in text or 'FisheriesWatchdog"' in text
+        assert "/SC MINUTE /MO 5" in text, "看门狗不是每 5 分钟一次"
+
+    def test_watchdog_only_starts_a_dead_service(self) -> None:
+        text = _text()
+        assert "api/v1/health" in text, "看门狗没靠健康接口判断"
+        assert "if (-not $alive)" in text, "健康时不判断就重启，会把活着的服务打断"
+        assert 'schtasks /Run /TN "FisheriesAPI"' in text

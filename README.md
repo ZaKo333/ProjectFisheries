@@ -825,7 +825,7 @@ fish_disease_detect(image_path: str, conf_threshold: float = 0.25,
 两层分开跑、分开统计。
 
 ```bash
-python -m pytest -m "not integration"        # 单元测试：1381 项
+python -m pytest -m "not integration"        # 单元测试：1384 项
 python -m pytest tests/integration           # 集成测试：13 项，10 秒内跑完
 python -m pytest                             # 两层都跑
 python -m pytest tests/unit/test_agent.py -v
@@ -838,7 +838,7 @@ python -m pytest tests/unit/test_agent.py -v
 > 的结果重写 README / 使用说明 / 技术方案设计 / 前端对接说明四份文档，`--check` 只比对不落盘
 > （`scripts/selftest.py` 第 4 步会调它，数字过期时自检直接报红）。
 
-### 11.1 单元测试（1381 项）
+### 11.1 单元测试（1384 项）
 
 | 测试文件 | 项数 | 覆盖重点 |
 |---|---|---|
@@ -861,7 +861,7 @@ python -m pytest tests/unit/test_agent.py -v
 | `test_fish_lesion.py` | 15 | 病灶检测解析、面积占比、门控默认关、下游把「没鱼」当无证据 |
 | `test_groundtruth.py` | 13 | 人工真值集：分层抽样可复现、清单往返、非法标注被拒、不足条数只显示待标注 |
 | `test_dataset_mirror.py` | 19 | 镜像打包字节可复现、kaggle 失败自动切镜像、sha256 不符拒绝、zip 目录穿越 |
-| `test_deploy_script.py` | 30 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、`-Token` 改口令会落盘且拒绝非 ASCII、脚本保持纯 ASCII |
+| `test_deploy_script.py` | 33 | 服务器部署脚本的静态守卫：大模型参数还在、启动脚本仍写四行 LLM 环境变量、`llm.txt` 重跑复用、`-Token` 改口令会落盘且拒绝非 ASCII、脚本保持纯 ASCII |
 | `test_build_kb_script.py` | 3 | `build_knowledge_base.py --rebuild`：参数真的存在、会删旧库、`--check` 下不删 |
 | `test_test_layers.py` | 2 | 分层守卫：`integration` marker 已注册、每个集成模块都带 marker、`conftest.py` 在位 |
 | `test_doc_counts.py` | 14 | 文档里的测试数量 == `pytest --collect-only` 的结果、明细合计 == 标题、不再出现会随环境变的「通过/跳过」口径 |
@@ -1224,6 +1224,38 @@ netsh advfirewall firewall show rule name=all | findstr /i "8000"   # 防火墙�
 
 还想更快就只有换模型：`-LlmModel qwen-flash` 一类小模型首字延迟明显更低，代价是建议质量；
 把 `llm.py` 里默认的 `max_tokens=1024` 调小也能压一截，但输出会被截断。
+
+---
+
+## 12.14 服务被杀了不会自己活过来：装个看门狗
+
+`FisheriesAPI` 这个计划任务是**开机启动**用的（`/SC ONSTART`），它管不了运行期间被杀。
+2026-10-21 和 2026-11-03 各断站一次，都是同一个模式：有人在前台跑 `run-server.bat`
+之后按了 Ctrl-C，或者用 `schtasks /End` 停掉任务，进程没了、任务不会再跑，外面就一直超时。
+查任务状态能看见这个指纹：
+
+```powershell
+schtasks /Query /TN FisheriesAPI /V /FO LIST | Select-String "上次运行时间|上次结果"
+# 上次结果: 267014    ← 0x41306 = 任务被终止，不是崩溃
+```
+
+部署脚本现在会顺手注册第二个任务 `FisheriesWatchdog`，**每 5 分钟**摸一次
+`http://127.0.0.1:8000/api/v1/health`：
+
+* 答 200 → 什么都不做（活着绝不动手，免得自己把服务重启掉）；
+* 连不上 → `schtasks /Run /TN FisheriesAPI` 把它拉起来，并在
+  `C:\fisheries\logs\watchdog.log` 记一行。
+
+看当前情况：
+
+```powershell
+schtasks /Query /TN FisheriesWatchdog /V /FO LIST | Select-String "状态|下次运行时间|上次结果"
+Get-Content C:\fisheries\logs\watchdog.log -Tail 20 -Encoding UTF8
+```
+
+不想要它就重跑部署时加 `-NoWatchdog`。注意它只保证「5 分钟内拉起来」，**不是**高可用：
+进程如果在启动时就崩（配置写错、端口被占），看门狗会反复试但每次还是起不来，
+这时候要去看 `C:\fisheries\logs\api.log` 而不是看门狗日志。
 
 ---
 
